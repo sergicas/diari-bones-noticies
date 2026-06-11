@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 720" fill="none">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#175f52"/>
+      <stop offset="1" stop-color="#f4d082"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="450" fill="url(#sky)"/>
+  <circle cx="960" cy="170" r="80" fill="#fff8eb" opacity=".88"/>
+  <path d="M0 450 Q300 360 600 410 T1200 380 V720 H0 Z" fill="#d9a85b"/>
+  <path d="M0 510 Q200 440 400 470 T800 460 T1200 440 V720 H0 Z" fill="#b66b3e"/>
+  <g fill="#175f52">
+    <rect x="150" y="430" width="6" height="80"/>
+    <rect x="300" y="420" width="6" height="90"/>
+    <rect x="500" y="430" width="6" height="80"/>
+    <rect x="700" y="425" width="6" height="85"/>
+    <rect x="900" y="420" width="6" height="90"/>
+  </g>
+  <g stroke="#175f52" stroke-width="3" fill="none" opacity=".5">
+    <path d="M150 510 Q170 480 200 510 Q230 540 260 510"/>
+    <path d="M500 510 Q520 480 550 510 Q580 540 610 510"/>
+    <path d="M900 510 Q920 480 950 510 Q980 540 1010 510"/>
+  </g>
+  <g transform="translate(120 600)" fill="#fff8eb">
+    <rect width="260" height="80" rx="40" opacity=".95"/>
+    <text x="32" y="52" font-family="Georgia, serif" font-size="30" font-weight="700" fill="#175f52">Trampes de sorra</text>
+  </g>
+</svg>

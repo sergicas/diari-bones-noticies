@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 720" fill="none">
+  <defs>
+    <linearGradient id="sbg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff8eb"/>
+      <stop offset="1" stop-color="#f4d082"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="720" fill="url(#sbg)"/>
+  <g transform="translate(600 360)" stroke="#175f52" stroke-width="14" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M-280 0 L-160 0 L-110 -60 L-60 80 L-10 -100 L40 60 L90 0 L280 0"/>
+  </g>
+  <g transform="translate(200 200)">
+    <path d="M0 100 C-60 100 -100 60 -100 20 C-100 -20 -70 -50 -30 -50 C-10 -50 0 -40 0 -30 C0 -40 10 -50 30 -50 C70 -50 100 -20 100 20 C100 60 60 100 0 100 Z" fill="#b66b3e" stroke="#175f52" stroke-width="4"/>
+  </g>
+  <g transform="translate(120 600)" fill="#fff8eb">
+    <rect width="180" height="68" rx="34" opacity=".95"/>
+    <text x="32" y="44" font-family="Georgia, serif" font-size="28" font-weight="700" fill="#175f52">Salut</text>
+  </g>
+</svg>

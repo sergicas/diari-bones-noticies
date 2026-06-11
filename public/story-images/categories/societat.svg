@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 720" fill="none">
+  <rect width="1200" height="720" fill="#f3e7ca"/>
+  <rect y="500" width="1200" height="220" fill="#d9a85b" opacity=".4"/>
+  <g transform="translate(600 380)">
+    <g fill="#175f52">
+      <circle cx="-220" cy="-60" r="42"/>
+      <path d="M-280 0 q60 -40 120 0 v120 h-120 z"/>
+    </g>
+    <g fill="#b66b3e">
+      <circle cx="-80" cy="-100" r="50"/>
+      <path d="M-150 -30 q70 -50 140 0 v140 h-140 z"/>
+    </g>
+    <g fill="#175f52">
+      <circle cx="80" cy="-100" r="50"/>
+      <path d="M10 -30 q70 -50 140 0 v140 h-140 z"/>
+    </g>
+    <g fill="#b66b3e">
+      <circle cx="220" cy="-60" r="42"/>
+      <path d="M160 0 q60 -40 120 0 v120 h-120 z"/>
+    </g>
+  </g>
+  <g transform="translate(120 600)" fill="#fff8eb">
+    <rect width="220" height="68" rx="34" opacity=".95"/>
+    <text x="32" y="44" font-family="Georgia, serif" font-size="28" font-weight="700" fill="#175f52">Societat</text>
+  </g>
+</svg>

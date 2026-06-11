@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 720" fill="none">
+  <defs>
+    <linearGradient id="clbg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#175f52"/>
+      <stop offset="0.65" stop-color="#d9a85b"/>
+      <stop offset="1" stop-color="#f4d082"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="720" fill="url(#clbg)"/>
+  <g transform="translate(820 280)">
+    <circle r="120" fill="#fff8eb" opacity=".95"/>
+    <g stroke="#fff8eb" stroke-width="8" stroke-linecap="round">
+      <line x1="0" y1="-180" x2="0" y2="-150"/>
+      <line x1="0" y1="150" x2="0" y2="180"/>
+      <line x1="-180" y1="0" x2="-150" y2="0"/>
+      <line x1="150" y1="0" x2="180" y2="0"/>
+      <line x1="-130" y1="-130" x2="-110" y2="-110"/>
+      <line x1="110" y1="-110" x2="130" y2="-130"/>
+      <line x1="-130" y1="130" x2="-110" y2="110"/>
+      <line x1="110" y1="110" x2="130" y2="130"/>
+    </g>
+  </g>
+  <g stroke="#fff8eb" stroke-width="6" stroke-linecap="round" fill="none" opacity=".6">
+    <path d="M100 460 Q300 440 500 460"/>
+    <path d="M150 520 Q350 500 550 520"/>
+    <path d="M200 580 Q400 560 600 580"/>
+  </g>
+  <g transform="translate(120 620)" fill="#fff8eb">
+    <rect width="180" height="68" rx="34" opacity=".95"/>
+    <text x="32" y="44" font-family="Georgia, serif" font-size="28" font-weight="700" fill="#175f52">Clima</text>
+  </g>
+</svg>

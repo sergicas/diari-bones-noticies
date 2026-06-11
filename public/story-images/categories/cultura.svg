@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 720" fill="none">
+  <defs>
+    <linearGradient id="cbg" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#d9a85b"/>
+      <stop offset="1" stop-color="#b66b3e"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="720" fill="url(#cbg)"/>
+  <g transform="translate(600 360)">
+    <path d="M-260 -180 Q-260 -210 -230 -210 L-30 -210 Q0 -210 0 -180 Q0 -210 30 -210 L230 -210 Q260 -210 260 -180 L260 180 Q260 210 230 210 L30 210 Q0 210 0 180 Q0 210 -30 210 L-230 210 Q-260 210 -260 180 Z" fill="#fff8eb" stroke="#175f52" stroke-width="6"/>
+    <path d="M0 -210 V210" stroke="#175f52" stroke-width="4"/>
+    <g stroke="#175f52" stroke-width="4" stroke-linecap="round" fill="none">
+      <path d="M-200 -140 H-60"/>
+      <path d="M-200 -100 H-80"/>
+      <path d="M-200 -60 H-90"/>
+      <path d="M-200 -20 H-70"/>
+      <path d="M60 -140 H200"/>
+      <path d="M80 -100 H200"/>
+      <path d="M70 -60 H200"/>
+      <path d="M90 -20 H190"/>
+    </g>
+    <g transform="translate(0 100)" fill="#d9a85b" stroke="#175f52" stroke-width="3">
+      <polygon points="0,-30 8,-10 30,-10 12,4 18,26 0,12 -18,26 -12,4 -30,-10 -8,-10"/>
+    </g>
+  </g>
+  <g transform="translate(120 600)" fill="#fff8eb">
+    <rect width="200" height="68" rx="34" opacity=".95"/>
+    <text x="32" y="44" font-family="Georgia, serif" font-size="28" font-weight="700" fill="#175f52">Cultura</text>
+  </g>
+</svg>

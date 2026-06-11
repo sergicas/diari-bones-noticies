@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-labelledby="title desc">
+  <title id="title">Logo d'El Bon Diari</title>
+  <desc id="desc">Una pàgina de diari amb un sol que apunta a l'horitzó.</desc>
+  <defs>
+    <linearGradient id="sun" x1="48" y1="6" x2="48" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFE08A" />
+      <stop offset="1" stop-color="#E0A044" />
+    </linearGradient>
+    <linearGradient id="paper" x1="20" y1="32" x2="76" y2="84" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFDF6" />
+      <stop offset="1" stop-color="#F4E6C9" />
+    </linearGradient>
+    <filter id="soft-shadow" x="6" y="40" width="84" height="56" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="4" flood-color="#143A31" flood-opacity=".18" stdDeviation="3" />
+    </filter>
+  </defs>
+
+  <circle cx="48" cy="32" r="20" fill="url(#sun)" />
+  <path d="M22 60h52" stroke="#146356" stroke-linecap="round" stroke-width="2.4" opacity=".4" />
+
+  <g filter="url(#soft-shadow)">
+    <path d="M20 56h56l-4 30c-.5 3.4-3.4 6-6.8 6H30.8c-3.4 0-6.3-2.6-6.8-6L20 56Z"
+          fill="url(#paper)" stroke="#146356" stroke-linejoin="round" stroke-width="3" />
+    <path d="M28 68h40" stroke="#146356" stroke-linecap="round" stroke-width="3" />
+    <path d="M28 76h30" stroke="#146356" stroke-linecap="round" stroke-width="2.4" opacity=".75" />
+    <path d="M28 83h22" stroke="#146356" stroke-linecap="round" stroke-width="2.4" opacity=".55" />
+  </g>
+</svg>

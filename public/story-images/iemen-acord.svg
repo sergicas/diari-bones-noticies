@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 720" fill="none">
+  <defs>
+    <linearGradient id="iebg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#124e44"/>
+      <stop offset="1" stop-color="#175f52"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="720" fill="url(#iebg)"/>
+  <g transform="translate(600 360)">
+    <circle r="220" fill="#fff8eb" opacity=".06"/>
+    <circle r="160" fill="#fff8eb" opacity=".1"/>
+    <circle r="100" fill="#fff8eb" opacity=".18"/>
+    <g transform="translate(-160 0)" stroke="#f4d082" stroke-width="6" fill="none" stroke-linecap="round">
+      <path d="M0 0 L60 -10 L100 -20"/>
+      <path d="M0 0 L70 30 L140 30"/>
+    </g>
+    <g transform="translate(160 0) scale(-1 1)" stroke="#f4d082" stroke-width="6" fill="none" stroke-linecap="round">
+      <path d="M0 0 L60 -10 L100 -20"/>
+      <path d="M0 0 L70 30 L140 30"/>
+    </g>
+    <g fill="#f4d082" stroke="#175f52" stroke-width="3">
+      <circle cx="-160" cy="0" r="22"/>
+      <circle cx="160" cy="0" r="22"/>
+    </g>
+    <g transform="translate(-30 -20)" fill="none" stroke="#f4d082" stroke-width="5" stroke-linecap="round">
+      <path d="M0 0 Q30 -30 60 0"/>
+      <path d="M-10 10 L70 10"/>
+    </g>
+  </g>
+  <g transform="translate(160 600)" fill="#fff8eb">
+    <rect width="260" height="80" rx="40" opacity=".92"/>
+    <text x="32" y="52" font-family="Georgia, serif" font-size="30" font-weight="700" fill="#175f52">Acord humanitari</text>
+  </g>
+</svg>

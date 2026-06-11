@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 720" fill="none">
+  <defs>
+    <linearGradient id="solbg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#b66b3e"/>
+      <stop offset="1" stop-color="#d9a85b"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="720" fill="url(#solbg)"/>
+  <g transform="translate(600 360)">
+    <path d="M0 180 C-180 180 -300 80 -300 -40 C-300 -150 -210 -220 -120 -220 C-60 -220 -20 -180 0 -130 C20 -180 60 -220 120 -220 C210 -220 300 -150 300 -40 C300 80 180 180 0 180 Z" fill="#fff8eb" stroke="#175f52" stroke-width="6"/>
+    <g stroke="#175f52" stroke-width="6" stroke-linecap="round" fill="none">
+      <path d="M-120 -40 L-50 30 L60 -40 L130 30" stroke-width="8"/>
+    </g>
+  </g>
+  <g transform="translate(120 600)" fill="#fff8eb">
+    <rect width="240" height="68" rx="34" opacity=".95"/>
+    <text x="32" y="44" font-family="Georgia, serif" font-size="28" font-weight="700" fill="#175f52">Solidaritat</text>
+  </g>
+</svg>

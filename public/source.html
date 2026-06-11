@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="ca">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>El Bon Diari | Fitxa de font</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --paper: #fff9ef;
+        --ink: #1d211c;
+        --muted: #6b655c;
+        --accent: #146356;
+        --secondary: #b66638;
+        --line: rgba(58, 46, 31, 0.12);
+        --shadow: 0 28px 60px rgba(28, 25, 20, 0.14);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Manrope", system-ui, sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at top left, rgba(229, 193, 119, 0.24), transparent 28%),
+          linear-gradient(180deg, #fff8ec 0%, #f7edd7 100%);
+      }
+
+      .shell {
+        width: min(860px, calc(100% - 32px));
+        margin: 32px auto;
+        padding: 28px;
+        border: 1px solid var(--line);
+        border-radius: 28px;
+        background: rgba(255, 249, 239, 0.96);
+        box-shadow: var(--shadow);
+      }
+
+      .eyebrow,
+      .meta-label {
+        font-size: 0.78rem;
+        font-weight: 800;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+      }
+
+      .eyebrow {
+        color: var(--accent);
+      }
+
+      h1 {
+        margin: 12px 0 10px;
+        font-family: "Cormorant Garamond", Georgia, serif;
+        font-size: clamp(2.6rem, 7vw, 4.3rem);
+        line-height: 0.95;
+        letter-spacing: -0.04em;
+      }
+
+      .lead,
+      .body p,
+      .card p {
+        color: var(--muted);
+        line-height: 1.75;
+      }
+
+      .meta-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+        margin-top: 24px;
+      }
+
+      .card {
+        padding: 18px;
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        background: rgba(255, 255, 255, 0.7);
+      }
+
+      .meta-label {
+        color: var(--secondary);
+      }
+
+      .card strong {
+        display: block;
+        margin-top: 8px;
+        line-height: 1.45;
+      }
+
+      .body {
+        display: grid;
+        gap: 16px;
+        margin-top: 24px;
+      }
+
+      .back-link {
+        display: inline-flex;
+        margin-top: 24px;
+        color: var(--accent);
+        font-weight: 700;
+        text-decoration: none;
+      }
+
+      @media (max-width: 640px) {
+        .shell {
+          width: min(100%, calc(100% - 24px));
+          margin: 12px auto;
+          padding: 20px;
+        }
+
+        .meta-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell" id="app"></main>
+    <script>
+      const stories = {
+        'solar-girona': {
+          title: 'Una cooperativa converteix 14 terrasses en una xarxa solar compartida',
+          category: 'Clima',
+          location: 'Girona',
+          source: 'Xarxa Solar Gironina',
+          publishedAt: '12 abril 2026',
+          summary:
+            'Fitxa de font vinculada a la peça sobre una cooperativa energètica que comparteix producció solar entre llars, comerços i una escola pública.',
+          impact:
+            '420 llars i 19 negocis redueixen la despesa energètica aquest trimestre.',
+          paragraphs: [
+            "Aquesta pàgina actua com a font de referència vinculada a la notícia d'El Bon Diari. Recull la informació clau que sosté la peça editorial i garanteix que el destí de l'enllaç quedi lligat a aquest article concret.",
+            'La iniciativa descriu una xarxa local d’autoconsum compartit, amb governança cooperativa, manteniment coordinat i repartiment de l’energia entre els participants.',
+          ],
+        },
+        'biblioteca-tarragona': {
+          title: 'La biblioteca del port obre a les 7 del matí i ja acompanya 300 estudiants',
+          category: 'Educació',
+          location: 'Tarragona',
+          source: 'Xarxa de Biblioteques Obertes',
+          publishedAt: '11 abril 2026',
+          summary:
+            'Fitxa de font de la peça sobre l’obertura anticipada d’una biblioteca i el reforç lector gratuït abans de classe.',
+          impact:
+            '1.100 hores de mentoria i ocupació gairebé completa dels espais.',
+          paragraphs: [
+            'El focus de la notícia és la millora concreta d’un servei públic: més temps d’estudi, acompanyament lector i menys fricció logística per a l’alumnat.',
+            "La font resumeix els elements essencials que després es transformen en la versió periodística d'El Bon Diari.",
+          ],
+        },
+        'musica-lleida': {
+          title: 'Un programa de música en directe redueix l’ansietat a la planta pediàtrica',
+          category: 'Salut',
+          location: 'Lleida',
+          source: 'Hospital Arnau i Xarxa Cultura Viva',
+          publishedAt: '10 abril 2026',
+          summary:
+            'Fitxa de font de la notícia sobre microconcerts a pediatria i la seva relació amb una experiència assistencial més calmada.',
+          impact:
+            'Set de cada deu famílies declaren menys estrès durant l’ingrés.',
+          paragraphs: [
+            'La notícia destaca una pràctica coordinada entre personal sanitari i agents culturals, integrada en la rutina de la planta i no com una activitat aïllada.',
+            'Aquesta fitxa reforça la correspondència entre el link i la peça llegida a la portada.',
+          ],
+        },
+        'aiguamoll-ebre': {
+          title: 'Torna l’aigua a un antic aiguamoll i amb ella 27 espècies d’ocells',
+          category: 'Clima',
+          location: 'Delta de l’Ebre',
+          source: 'Observatori del Delta',
+          publishedAt: '9 abril 2026',
+          summary:
+            'Fitxa de font vinculada a la restauració ecològica d’un aiguamoll i al retorn d’espècies nidificants.',
+          impact:
+            '64 hectàrees regenerades i primera nidificació estable en sis anys.',
+          paragraphs: [
+            'La peça posa el focus en resultats observables: més aigua, menys salinització i tornada de biodiversitat.',
+            'El link de font queda així relacionat de forma directa amb aquesta història i no amb una cerca genèrica.',
+          ],
+        },
+        'nevera-sabadell': {
+          title: 'Una nevera comunitària evita que dues tones d’aliments acabin al contenidor',
+          category: 'Solidaritat',
+          location: 'Sabadell',
+          source: 'Taula Comunitària de Sabadell',
+          publishedAt: '8 abril 2026',
+          summary:
+            'Fitxa de font sobre la xarxa de redistribució d’excedents alimentaris en menys de 24 hores.',
+          impact:
+            '1.800 àpats aprofitats en només dos mesos.',
+          paragraphs: [
+            'L’article periodístic resumeix una cadena logística simple però efectiva: recollida, revisió i redistribució ràpida.',
+            'La fitxa de font serveix com a destí específic associat a aquesta notícia.',
+          ],
+        },
+        'lab-barcelona': {
+          title: 'Un laboratori gratuït de dades obre noves feines tecnològiques per a dones',
+          category: 'Ciència',
+          location: 'Barcelona',
+          source: 'Fundació Codi Obert',
+          publishedAt: '7 abril 2026',
+          summary:
+            'Fitxa de font de la notícia sobre formació en dades i IA aplicada amb sortides laborals concretes.',
+          impact:
+            '42 participants, 31 entrevistes programades i 12 contractes en marxa.',
+          paragraphs: [
+            'La peça combina oportunitat professional, formació pràctica i acompanyament real en el salt cap al mercat laboral.',
+            'Aquesta fitxa manté la coherència entre la notícia que l’usuari obre i el seu destí de referència.',
+          ],
+        },
+        'teatre-mallorca': {
+          title: 'Un festival de teatre incorpora llengua de signes a totes les funcions',
+          category: 'Cultura',
+          location: 'Mallorca',
+          source: 'Festival Escena Oberta',
+          publishedAt: '6 abril 2026',
+          summary:
+            'Fitxa de font sobre un festival dissenyat perquè l’experiència sigui compartida entre públic signant i no signant.',
+          impact:
+            '1.900 espectadors i 240 assistents signants a la primera edició.',
+          paragraphs: [
+            'La notícia destaca una accessibilitat incorporada des de la creació escènica, no afegida a última hora.',
+            'El link de font apunta a aquesta fitxa específica per evitar destins desconnectats de la peça.',
+          ],
+        },
+      }
+
+      const params = new URLSearchParams(window.location.search)
+      const storyId = params.get('story')
+      const story = storyId ? stories[storyId] : null
+      const app = document.getElementById('app')
+
+      if (!story) {
+        document.title = 'El Bon Diari | Font no trobada'
+        app.innerHTML = `
+          <p class="eyebrow">Font no trobada</p>
+          <h1>Aquesta fitxa no existeix.</h1>
+          <p class="lead">Comprova el paràmetre <code>story</code> o torna a la portada.</p>
+          <a class="back-link" href="/">Tornar a la portada d'El Bon Diari</a>
+        `
+      } else {
+        document.title = `El Bon Diari | ${story.title}`
+        app.innerHTML = `
+          <p class="eyebrow">Fitxa de font vinculada</p>
+          <h1>${story.title}</h1>
+          <p class="lead">${story.summary}</p>
+
+          <section class="meta-grid">
+            <article class="card">
+              <span class="meta-label">Categoria</span>
+              <strong>${story.category}</strong>
+            </article>
+            <article class="card">
+              <span class="meta-label">Lloc</span>
+              <strong>${story.location}</strong>
+            </article>
+            <article class="card">
+              <span class="meta-label">Font</span>
+              <strong>${story.source}</strong>
+            </article>
+            <article class="card">
+              <span class="meta-label">Publicada</span>
+              <strong>${story.publishedAt}</strong>
+            </article>
+            <article class="card" style="grid-column: 1 / -1;">
+              <span class="meta-label">Impacte</span>
+              <strong>${story.impact}</strong>
+            </article>
+          </section>
+
+          <section class="body">
+            ${story.paragraphs.map((paragraph) => `<p>${paragraph}</p>`).join('')}
+          </section>
+
+          <a class="back-link" href="/">Tornar a la portada d'El Bon Diari</a>
+        `
+      }
+    </script>
+  </body>
+</html>

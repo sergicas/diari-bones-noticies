@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 720" fill="none">
+  <defs>
+    <linearGradient id="mbg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#175f52"/>
+      <stop offset="1" stop-color="#0f4438"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="720" fill="url(#mbg)"/>
+  <g transform="translate(600 420)">
+    <ellipse cx="0" cy="80" rx="340" ry="32" fill="#0a3329"/>
+    <rect x="-20" y="-100" width="40" height="180" fill="#5b3a23"/>
+    <g fill="#2d9f69">
+      <circle cx="0" cy="-180" r="120"/>
+      <circle cx="-100" cy="-120" r="90"/>
+      <circle cx="100" cy="-120" r="90"/>
+      <circle cx="-50" cy="-220" r="80"/>
+      <circle cx="50" cy="-220" r="80"/>
+    </g>
+    <g fill="#3fb37a">
+      <circle cx="-30" cy="-200" r="40"/>
+      <circle cx="40" cy="-160" r="50"/>
+    </g>
+  </g>
+  <g transform="translate(120 600)" fill="#fff8eb">
+    <rect width="240" height="68" rx="34" opacity=".95"/>
+    <text x="32" y="44" font-family="Georgia, serif" font-size="28" font-weight="700" fill="#175f52">Medi ambient</text>
+  </g>
+</svg>

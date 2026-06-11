@@ -1,0 +1,9 @@
+RewriteEngine On
+
+# Serve existing files and directories normally.
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# Let the SPA handle app routes like /noticia/... or /manifest.
+RewriteRule ^ index.html [L]

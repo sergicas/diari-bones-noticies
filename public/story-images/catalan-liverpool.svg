@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 720" fill="none">
+  <rect width="1200" height="720" fill="#f3e7ca"/>
+  <rect y="500" width="1200" height="220" fill="#d9a85b" opacity=".55"/>
+  <g transform="translate(200 130)">
+    <rect width="820" height="440" rx="20" fill="#fff8eb" stroke="#175f52" stroke-width="6"/>
+    <path d="M410 0 v440" stroke="#175f52" stroke-width="3" opacity=".4"/>
+    <g transform="translate(50 70)" fill="#175f52">
+      <rect width="320" height="22" rx="11" opacity=".85"/>
+      <rect y="48" width="280" height="14" rx="7" opacity=".5"/>
+      <rect y="78" width="300" height="14" rx="7" opacity=".5"/>
+      <rect y="108" width="220" height="14" rx="7" opacity=".5"/>
+    </g>
+    <g transform="translate(460 70)" fill="#175f52">
+      <rect width="280" height="22" rx="11" opacity=".85"/>
+      <rect y="48" width="280" height="14" rx="7" opacity=".5"/>
+      <rect y="78" width="240" height="14" rx="7" opacity=".5"/>
+      <rect y="108" width="220" height="14" rx="7" opacity=".5"/>
+    </g>
+    <g transform="translate(50 250)" fill="#b66b3e">
+      <text font-family="Georgia, serif" font-size="120" font-weight="700">100</text>
+      <text x="0" y="150" font-family="Georgia, serif" font-size="32" fill="#175f52">anys d’estudis catalans</text>
+    </g>
+    <g transform="translate(560 280)">
+      <rect width="200" height="120" rx="12" fill="#f1c96f"/>
+      <rect y="20" width="200" height="20" fill="#d9a85b"/>
+      <rect y="60" width="200" height="20" fill="#d9a85b"/>
+      <rect y="100" width="200" height="20" fill="#d9a85b"/>
+    </g>
+  </g>
+</svg>

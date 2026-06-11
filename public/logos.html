@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="ca">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>Propostes de logo · El Bon Diari</title>
+    <style>
+      :root { color-scheme: light; }
+      body {
+        font-family: 'Helvetica Neue', system-ui, -apple-system, sans-serif;
+        margin: 0;
+        padding: 40px 24px 80px;
+        background: #FAF7EF;
+        color: #1A2E2B;
+      }
+      h1 { font-size: 28px; margin: 0 0 8px; }
+      p.lead { margin: 0 0 32px; color: #455B58; max-width: 640px; }
+      .grid {
+        display: grid;
+        gap: 24px;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        max-width: 1100px;
+      }
+      .card {
+        background: #fff;
+        border-radius: 18px;
+        padding: 28px 24px 24px;
+        box-shadow: 0 1px 0 rgba(20,99,86,.08), 0 18px 40px -24px rgba(20,99,86,.18);
+      }
+      .card.current { background: #F1ECDD; }
+      .preview {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 180px;
+        background: linear-gradient(180deg,#FFFCF2,#F1ECDD);
+        border-radius: 14px;
+        margin-bottom: 20px;
+      }
+      .preview img { width: 120px; height: 120px; }
+      .label {
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: #146356;
+        font-weight: 700;
+        margin: 0 0 4px;
+      }
+      h2 { font-size: 18px; margin: 0 0 10px; }
+      .card p { font-size: 14px; line-height: 1.5; margin: 0; color: #2B3F3C; }
+      .sizes {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        margin-top: 16px;
+        padding-top: 16px;
+        border-top: 1px dashed rgba(20,99,86,.18);
+      }
+      .sizes img { display: block; }
+      .sizes span {
+        font-size: 11px;
+        color: #5C6F6C;
+      }
+      footer {
+        margin-top: 48px;
+        font-size: 13px;
+        color: #5C6F6C;
+        max-width: 640px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Propostes de logo</h1>
+    <p class="lead">L'actual (paper + sol) a l'esquerra. Les tres propostes alternatives a la dreta. Els teus comentaris em diran cap a quina anem.</p>
+
+    <div class="grid">
+      <div class="card current">
+        <div class="preview"><img src="/logo.svg" alt="Logo actual" /></div>
+        <p class="label">Actual</p>
+        <h2>Paper amb sol</h2>
+        <p>El que tens vigent. Sol gradient daurat sobre una pàgina amb línies verdes.</p>
+        <div class="sizes">
+          <img src="/logo.svg" alt="" width="48" height="48" />
+          <img src="/logo.svg" alt="" width="24" height="24" />
+          <span>48 · 24 px</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="preview"><img src="/logo-a-horitzo.svg" alt="Proposta A" /></div>
+        <p class="label">Proposta A</p>
+        <h2>Horitzó</h2>
+        <p>Sol daurat sobre tres línies d'horitzó (gruix decreixent). Cercle cremós discret de fons. Sobri, sense la metàfora del «diari».</p>
+        <div class="sizes">
+          <img src="/logo-a-horitzo.svg" alt="" width="48" height="48" />
+          <img src="/logo-a-horitzo.svg" alt="" width="24" height="24" />
+          <span>48 · 24 px</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="preview"><img src="/logo-b-tipografic.svg" alt="Proposta B" /></div>
+        <p class="label">Proposta B</p>
+        <h2>Tipogràfica</h2>
+        <p>Una «B» serif editorial verda sobre crema, amb un sol petit com a accent. Editorial primer, bona notícia com a accent. Funciona com a favicon.</p>
+        <div class="sizes">
+          <img src="/logo-b-tipografic.svg" alt="" width="48" height="48" />
+          <img src="/logo-b-tipografic.svg" alt="" width="24" height="24" />
+          <span>48 · 24 px</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="preview"><img src="/logo-c-arc-sol.svg" alt="Proposta C" /></div>
+        <p class="label">Proposta C</p>
+        <h2>Arc i sol</h2>
+        <p>Sol amb cinc raigs i un arc verd que s'eleva. Més emotiu i amb moviment, sense literalitat de «diari». Pot quedar densa en mides petites.</p>
+        <div class="sizes">
+          <img src="/logo-c-arc-sol.svg" alt="" width="48" height="48" />
+          <img src="/logo-c-arc-sol.svg" alt="" width="24" height="24" />
+          <span>48 · 24 px</span>
+        </div>
+      </div>
+
+      <div class="card" style="background:#fff;outline:2px solid #0A0A0A;outline-offset:-2px;">
+        <div class="preview" style="background:#FFFFFF;"><img src="/logo-d-colibri.svg" alt="Proposta D" /></div>
+        <p class="label" style="color:#0A0A0A;">Proposta D</p>
+        <h2 style="color:#0A0A0A;">Colibrí (Graphis)</h2>
+        <p>Colibrí origami geomètric en negre sobre blanc. Estil suís estricte: forma de precisió, sense ornament. Per al masthead anirà acompanyat de la capçalera tipogràfica EL BON DIARI.</p>
+        <div class="sizes">
+          <img src="/logo-d-colibri.svg" alt="" width="48" height="48" />
+          <img src="/logo-d-colibri.svg" alt="" width="24" height="24" />
+          <span>48 · 24 px</span>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      Pàgina temporal de comparació. Quan ens decidim, es retira aquest fitxer. <code>noindex</code> habilitat.
+    </footer>
+  </body>
+</html>

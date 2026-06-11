@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /estadistiques
+
+Sitemap: https://bondiari.com/sitemap.xml

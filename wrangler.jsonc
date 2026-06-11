@@ -1,0 +1,28 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "bondiari",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-06-08",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "html_handling": "drop-trailing-slash",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "observability": {
+    "enabled": true
+  },
+  "kv_namespaces": [
+    { "binding": "LIVE_NEWS_KV", "id": "8dccac0ffa434f75b13ba6a7890646af" },
+    { "binding": "STATS_KV", "id": "08a529af25eb41eca09d26276cba77d2" }
+  ],
+  "triggers": {
+    // 0 */4 * * * → cada 4h (02, 06, 10, 14, 18, 22 hora de Catalunya)
+    // 0 6 * * * → cada dia a les 08:00 hora de Catalunya, perquè el primer
+    //            lot del matí agafi les actualitzacions de l'edició diària
+    //            de les redaccions catalanes i espanyoles.
+    "crons": ["0 */4 * * *", "0 6 * * *"]
+  }
+}

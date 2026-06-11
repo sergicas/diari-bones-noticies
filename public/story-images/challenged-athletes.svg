@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 720" fill="none">
+  <rect width="1200" height="720" fill="#175f52"/>
+  <circle cx="940" cy="180" r="110" fill="#f4d082" opacity=".75"/>
+  <g transform="translate(280 480)" stroke="#fff8eb" stroke-width="14" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="120" cy="-220" r="36"/>
+    <path d="M120 -184 L120 -120"/>
+    <path d="M120 -160 L60 -100"/>
+    <path d="M120 -160 L180 -100"/>
+    <path d="M120 -120 L70 -40"/>
+    <circle cx="60" cy="0" r="36" fill="#175f52"/>
+    <circle cx="60" cy="0" r="20" fill="#fff8eb"/>
+  </g>
+  <g transform="translate(620 360)">
+    <text font-family="Georgia, serif" font-size="160" font-weight="700" fill="#fff8eb">7M</text>
+    <text y="60" font-family="Georgia, serif" font-size="36" fill="#f4d082">a 4.033 atletes</text>
+    <text y="110" font-family="Georgia, serif" font-size="28" fill="#fff8eb" opacity=".75">de 50 estats i 36 països</text>
+  </g>
+</svg>

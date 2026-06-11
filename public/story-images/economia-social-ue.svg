@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 720" fill="none">
+  <defs>
+    <linearGradient id="esbg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#175f52"/>
+      <stop offset="1" stop-color="#0c3a64"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="720" fill="url(#esbg)"/>
+  <g transform="translate(600 360)">
+    <circle r="220" fill="#0c3a64" stroke="#f4d082" stroke-width="6"/>
+    <g fill="#f4d082">
+      <circle cx="0" cy="-180" r="14"/>
+      <circle cx="106" cy="-145" r="14"/>
+      <circle cx="170" cy="-55" r="14"/>
+      <circle cx="170" cy="55" r="14"/>
+      <circle cx="106" cy="145" r="14"/>
+      <circle cx="0" cy="180" r="14"/>
+      <circle cx="-106" cy="145" r="14"/>
+      <circle cx="-170" cy="55" r="14"/>
+      <circle cx="-170" cy="-55" r="14"/>
+      <circle cx="-106" cy="-145" r="14"/>
+    </g>
+    <g transform="translate(0 -10)" stroke="#f4d082" stroke-width="4" fill="none" stroke-linecap="round">
+      <circle r="60" stroke-dasharray="2 8"/>
+      <path d="M-44 30 Q-44 -10 0 -30 Q44 -10 44 30 Z" fill="#f4d082" opacity=".85"/>
+      <circle cx="-22" cy="-6" r="8" fill="#175f52"/>
+      <circle cx="22" cy="-6" r="8" fill="#175f52"/>
+    </g>
+  </g>
+  <g transform="translate(120 580)" fill="#fff8eb">
+    <rect width="280" height="80" rx="40" opacity=".95"/>
+    <text x="32" y="52" font-family="Georgia, serif" font-size="30" font-weight="700" fill="#175f52">Economia compartida</text>
+  </g>
+</svg>
