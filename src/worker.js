@@ -5,7 +5,7 @@
 //   rutes client-side com /noticia/:id, /manifest, /hemeroteca, /sobre).
 // - El handler scheduled() refresca el radar cada 4h via cron trigger.
 
-import { getLiveNewsPayload } from './server/liveNews.js'
+import { getLiveNewsPayload, readEditorialStats } from './server/liveNews.js'
 import { handleStats, handleTrackVisit } from './server/stats.js'
 import {
   handleSubscribe,
@@ -71,6 +71,15 @@ export default {
     if (path === '/api/live-news') return handleLiveNews(request, env)
     if (path === '/api/refresh-news') return handleRefreshNews(request, env)
     if (path === '/api/stats') return handleStats(request, env)
+    if (path === '/api/editorial-stats') {
+      const stats = await readEditorialStats(env.LIVE_NEWS_KV)
+      return new Response(JSON.stringify(stats), {
+        headers: {
+          'content-type': 'application/json; charset=utf-8',
+          'cache-control': 'public, max-age=600, stale-while-revalidate=3600',
+        },
+      })
+    }
     if (path === '/api/track-visit') return handleTrackVisit(request, env)
     if (path === '/api/newsletter/subscribe') return handleSubscribe(request, env)
     if (path === '/api/newsletter/unsubscribe') return handleUnsubscribe(request, env)

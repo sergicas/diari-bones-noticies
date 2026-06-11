@@ -2041,6 +2041,14 @@
   box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.12);
 }
 
+/* Pastilla amb el codi d'idioma — només es mostra quan la peça no és en català */
+.paper-chip--lang {
+  background: #1E50A0 !important;
+  border-color: #000 !important;
+  color: #FFFFFF !important;
+  letter-spacing: 0.12em;
+}
+
 /* Caixa d'impacte dins l'article: vora dura + accent */
 .story-impact,
 .impact-box {
@@ -2113,6 +2121,177 @@
   background: var(--section-color, #000) !important;
   border-color: var(--section-color, #000) !important;
   color: var(--section-ink, #FFFFFF) !important;
+}
+
+/* ===========================================================
+   TEASER DEL MANIFEST EDITORIAL A LA PORTADA
+   =========================================================== */
+
+.manifest-teaser {
+  margin: 40px 0 8px;
+  padding: 28px 24px;
+  border: 2px solid #000;
+  background: #FFFFFF;
+  display: grid;
+  gap: 18px;
+}
+.manifest-teaser__kicker {
+  margin: 0 0 4px;
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--accent, #146356);
+}
+.manifest-teaser__title {
+  margin: 0 0 8px;
+  font-family: var(--display-font, Georgia, serif);
+  font-size: clamp(1.4rem, 2.6vw, 1.9rem);
+  letter-spacing: -0.02em;
+  color: #000;
+}
+.manifest-teaser__lead {
+  margin: 0;
+  font-size: 0.98rem;
+  line-height: 1.5;
+  color: #222;
+  max-width: 60ch;
+}
+.manifest-teaser__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 10px;
+}
+.manifest-teaser__item {
+  padding: 12px 14px;
+  border-left: 4px solid #FFE000;
+  background: #FFF9D9;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: #000;
+}
+.manifest-teaser__item strong {
+  font-weight: 800;
+}
+.manifest-teaser__link {
+  justify-self: start;
+  border: 2px solid #000;
+  background: #000;
+  color: #FFFFFF;
+  padding: 10px 16px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-size: 0.82rem;
+  text-decoration: none;
+}
+.manifest-teaser__link:hover {
+  background: #E72A30;
+  border-color: #E72A30;
+}
+
+/* ===========================================================
+   TOOLBAR DE CERCA DE LA HEMEROTECA
+   =========================================================== */
+
+.archive-toolbar {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr 1fr auto;
+  gap: 12px;
+  align-items: end;
+  margin: 0 0 12px;
+  padding: 18px;
+  border: 2px solid #000;
+  background: #FFFFFF;
+}
+.archive-toolbar__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.archive-toolbar__field > span {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #000;
+}
+.archive-toolbar input,
+.archive-toolbar select {
+  border: 2px solid #000 !important;
+  background: #FFFFFF !important;
+  color: #000 !important;
+  padding: 9px 12px !important;
+  font-size: 0.96rem !important;
+  border-radius: 0 !important;
+  font-family: inherit;
+}
+.archive-toolbar__reset {
+  border: 2px solid #000 !important;
+  background: #FFE000 !important;
+  color: #000 !important;
+  padding: 9px 14px !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-size: 0.78rem;
+  cursor: pointer;
+  border-radius: 0 !important;
+}
+.archive-toolbar__reset:hover {
+  background: #E72A30 !important;
+  color: #FFFFFF !important;
+  border-color: #E72A30 !important;
+}
+.archive-toolbar__count {
+  margin: 4px 0 18px;
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: var(--muted, #666);
+  letter-spacing: 0.04em;
+}
+@media (max-width: 720px) {
+  .archive-toolbar {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ===========================================================
+   COMPTADOR EDITORIAL HONEST
+   =========================================================== */
+
+.editorial-counter {
+  margin: 36px 0;
+  padding: 22px 24px;
+  border: 2px solid #000;
+  background: #1E50A0;
+  color: #FFFFFF;
+}
+.editorial-counter__kicker {
+  margin: 0 0 8px;
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #FFE000;
+}
+.editorial-counter__line {
+  margin: 0 0 10px;
+  font-family: var(--display-font, Georgia, serif);
+  font-size: clamp(1.1rem, 2.2vw, 1.5rem);
+  line-height: 1.35;
+}
+.editorial-counter__line strong {
+  font-weight: 800;
+  color: #FFE000;
+}
+.editorial-counter__note {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.5;
+  opacity: 0.88;
 }
 
 /* ===========================================================

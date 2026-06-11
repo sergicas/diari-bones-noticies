@@ -510,19 +510,21 @@ async function collectSectionStories(section) {
         'user-agent': 'El Bon Diari/1.0 (+https://bondiari.com)',
       },
     })
-    if (!response.ok) return []
+    if (!response.ok) return { stories: [], candidates: 0 }
 
     const html = await response.text()
     const nextData = extractNextData(html)
     const pageProps = nextData?.props?.pageProps
-    if (!pageProps) return []
+    if (!pageProps) return { stories: [], candidates: 0 }
 
-    return collectThemeItems(pageProps)
+    const items = collectThemeItems(pageProps)
+    const stories = items
       .map((item) => normalizeThreeCatStory(item, section))
       .filter(Boolean)
+    return { stories, candidates: items.length }
   } catch (error) {
     console.warn(`[radar] 3cat ${section.category} ha fallat`, error)
-    return []
+    return { stories: [], candidates: 0 }
   }
 }
 
@@ -644,21 +646,23 @@ async function collectFeedStories(feed) {
         'user-agent': 'El Bon Diari/1.0 (+https://bondiari.com)',
       },
     })
-    if (!response.ok) return []
+    if (!response.ok) return { stories: [], candidates: 0 }
     const xml = await response.text()
-    if (!/<rss[\s>]|<feed[\s>]/i.test(xml)) return []
+    if (!/<rss[\s>]|<feed[\s>]/i.test(xml)) return { stories: [], candidates: 0 }
 
     const itemRegex = /<(item|entry)\b[^>]*>([\s\S]*?)<\/\1>/gi
     const stories = []
+    let candidates = 0
     let match
     while ((match = itemRegex.exec(xml)) !== null) {
+      candidates += 1
       const story = normalizeFeedItem(match[2], feed)
       if (story) stories.push(story)
     }
-    return stories
+    return { stories, candidates }
   } catch (error) {
     console.warn(`[radar] Ha fallat el feed ${feed.name}`, error)
-    return []
+    return { stories: [], candidates: 0 }
   }
 }
 
@@ -671,8 +675,15 @@ export async function collectLivePositiveNews() {
   ])
 
   const stories = []
-  for (const list of sectionResults) stories.push(...list)
-  for (const list of feedResults) stories.push(...list)
+  let reviewedCount = 0
+  for (const result of sectionResults) {
+    stories.push(...result.stories)
+    reviewedCount += result.candidates
+  }
+  for (const result of feedResults) {
+    stories.push(...result.stories)
+    reviewedCount += result.candidates
+  }
 
   const uniqueStories = new Map()
   for (const story of stories) {
@@ -681,7 +692,7 @@ export async function collectLivePositiveNews() {
     }
   }
 
-  return [...uniqueStories.values()]
+  const filtered = [...uniqueStories.values()]
     .filter(
       (story) =>
         Date.now() - new Date(story.publishedAt).getTime() <= maxLiveStoryAgeMs,
@@ -698,6 +709,8 @@ export async function collectLivePositiveNews() {
       return publicStory
     })
     .slice(0, collectionPoolSize)
+
+  return { stories: filtered, reviewed: reviewedCount, accepted: filtered.length }
 }
 
 async function getCachedPayload(kv) {
@@ -741,6 +754,45 @@ async function saveSeenEntries(kv, entries) {
   }
 }
 
+// Comptador editorial mensual: cada passada del cron acumula quantes
+// notícies ha revisat (= candidates abans del filtre) i quantes han
+// arribat al lot final. Es persisteix per mes natural.
+
+function editorialStatsKeyFor(date = new Date()) {
+  const isoMonth = date.toISOString().slice(0, 7) // YYYY-MM
+  return `editorial-stats:${isoMonth}`
+}
+
+async function updateEditorialStats(kv, { reviewed, published }) {
+  const key = editorialStatsKeyFor()
+  try {
+    const current = (await kv.get(key, 'json')) || { reviewed: 0, published: 0 }
+    const next = {
+      reviewed: (current.reviewed || 0) + (reviewed || 0),
+      published: (current.published || 0) + (published || 0),
+      lastUpdatedAt: new Date().toISOString(),
+    }
+    await kv.put(key, JSON.stringify(next))
+  } catch (error) {
+    console.warn('No s’ha pogut actualitzar el comptador editorial', error)
+  }
+}
+
+export async function readEditorialStats(kv) {
+  const key = editorialStatsKeyFor()
+  try {
+    const current = await kv.get(key, 'json')
+    return {
+      month: key.slice('editorial-stats:'.length),
+      reviewed: current?.reviewed || 0,
+      published: current?.published || 0,
+      lastUpdatedAt: current?.lastUpdatedAt || null,
+    }
+  } catch (error) {
+    return { month: key.slice('editorial-stats:'.length), reviewed: 0, published: 0, lastUpdatedAt: null }
+  }
+}
+
 export async function getLiveNewsPayload(kv, { force = false } = {}) {
   let cached = null
   try {
@@ -757,7 +809,7 @@ export async function getLiveNewsPayload(kv, { force = false } = {}) {
     }
   }
 
-  const allStories = await collectLivePositiveNews()
+  const { stories: allStories, reviewed: reviewedThisPass } = await collectLivePositiveNews()
   const seenEntries = await loadSeenEntries(kv)
   const seenSet = new Set(seenEntries.map((entry) => entry.url))
   const freshStories = allStories
@@ -806,6 +858,10 @@ export async function getLiveNewsPayload(kv, { force = false } = {}) {
 
   try {
     const payload = await setCachedPayload(kv, finalStories)
+    await updateEditorialStats(kv, {
+      reviewed: reviewedThisPass,
+      published: finalStories.length,
+    })
     const cacheLabel =
       freshStories.length >= minFreshStoriesForFullRefresh
         ? 'refresh-fresh'
@@ -817,6 +873,7 @@ export async function getLiveNewsPayload(kv, { force = false } = {}) {
       cache: cacheLabel,
       freshCount: freshStories.length,
       totalCandidates: allStories.length,
+      reviewedThisPass,
     }
   } catch (error) {
     console.warn('No s’ha pogut escriure la memòria de notícies', error)

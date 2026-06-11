@@ -3,6 +3,7 @@ import './App.css'
 import { editorialValues, seedArticles } from './data/articles'
 import { fetchLivePositiveNewsPayload } from './api/rssFeed'
 import NewsletterForm from './components/NewsletterForm.jsx'
+import EditorialCounter from './components/EditorialCounter.jsx'
 import {
   DEFAULT_STORY_IMAGE,
   classifyImage,
@@ -689,6 +690,20 @@ function getOriginBadge(origin) {
   return ''
 }
 
+const LANGUAGE_LABELS = {
+  ca: 'Català',
+  es: 'Castellà',
+  en: 'Anglès',
+  fr: 'Francès',
+  de: 'Alemany',
+  it: 'Italià',
+  pt: 'Portuguès',
+}
+
+function getLanguageLabel(code) {
+  return LANGUAGE_LABELS[code] || code?.toUpperCase() || ''
+}
+
 function handleImageError(event) {
   event.currentTarget.onerror = null
   event.currentTarget.src = defaultStoryImage
@@ -980,6 +995,14 @@ function StoryCard({ story, onNavigate }) {
           <span className="paper-chip paper-chip--subtle">
             {distanceBand.label}
           </span>
+          {story.language && story.language !== 'ca' ? (
+            <span
+              className="paper-chip paper-chip--lang"
+              title={getLanguageLabel(story.language)}
+            >
+              {story.language.toUpperCase()}
+            </span>
+          ) : null}
           {story.isFresh ? (
             <span
               className="paper-chip paper-chip--fresh"
@@ -1026,6 +1049,43 @@ function ManifestSection() {
         ))}
       </div>
     </section>
+  )
+}
+
+function PortadaManifestTeaser({ onNavigate }) {
+  const teaserValues = editorialValues.slice(0, 3)
+  return (
+    <aside className="manifest-teaser" aria-label="Resum del manifest editorial">
+      <div className="manifest-teaser__intro">
+        <p className="manifest-teaser__kicker">Manifest editorial</p>
+        <h2 className="manifest-teaser__title">
+          Per què aquesta peça és aquí
+        </h2>
+        <p className="manifest-teaser__lead">
+          El Bon Diari no és un agregador. Cada peça que arriba a portada passa
+          per un criteri editorial humà i un filtre automàtic en quatre llengües.
+          Aquests són els tres principis que ens guien:
+        </p>
+      </div>
+      <ul className="manifest-teaser__list">
+        {teaserValues.map((value) => (
+          <li key={value.title} className="manifest-teaser__item">
+            <strong>{value.title}.</strong> {value.description}
+          </li>
+        ))}
+      </ul>
+      <a
+        className="manifest-teaser__link"
+        href="/manifest"
+        onClick={(event) => {
+          if (!canInterceptNavigation(event)) return
+          event.preventDefault()
+          onNavigate('/manifest')
+        }}
+      >
+        Llegir el manifest sencer →
+      </a>
+    </aside>
   )
 }
 
@@ -1866,6 +1926,30 @@ function StoryPage({ story, sourceLink, imageLink, relatedStories, onNavigate })
 }
 
 function ArchivePage({ archiveStories, lastRefreshLabel, onNavigate }) {
+  const [searchTerm, setSearchTerm] = useState('')
+  const [sourceFilter, setSourceFilter] = useState('all')
+  const [langFilter, setLangFilter] = useState('all')
+
+  const availableSources = [...new Set(archiveStories.map((s) => s.source).filter(Boolean))].sort()
+  const availableLanguages = [...new Set(archiveStories.map((s) => s.language).filter(Boolean))].sort()
+
+  const normalizedQuery = searchTerm.trim().toLowerCase()
+  const filtered = archiveStories.filter((story) => {
+    if (sourceFilter !== 'all' && story.source !== sourceFilter) return false
+    if (langFilter !== 'all' && story.language !== langFilter) return false
+    if (!normalizedQuery) return true
+    const haystack = `${story.title || ''} ${story.summary || ''} ${story.impact || ''} ${story.source || ''} ${story.location || ''}`.toLowerCase()
+    return haystack.includes(normalizedQuery)
+  })
+
+  const hasFilters = normalizedQuery !== '' || sourceFilter !== 'all' || langFilter !== 'all'
+
+  const resetFilters = () => {
+    setSearchTerm('')
+    setSourceFilter('all')
+    setLangFilter('all')
+  }
+
   return (
     <>
       <PageHero
@@ -1904,15 +1988,61 @@ function ArchivePage({ archiveStories, lastRefreshLabel, onNavigate }) {
         </div>
 
         {archiveStories.length > 0 ? (
-          <div className="news-grid">
-            {archiveStories.map((story) => (
-              <StoryCard
-                key={story.id}
-                story={story}
-                onNavigate={onNavigate}
-              />
-            ))}
-          </div>
+          <>
+            <div className="archive-toolbar" role="search" aria-label="Cerca a la hemeroteca">
+              <label className="archive-toolbar__field archive-toolbar__field--search">
+                <span>Cercar per paraula</span>
+                <input
+                  type="search"
+                  placeholder="Títol, font, lloc..."
+                  value={searchTerm}
+                  onChange={(event) => setSearchTerm(event.target.value)}
+                />
+              </label>
+              <label className="archive-toolbar__field">
+                <span>Font</span>
+                <select value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value)}>
+                  <option value="all">Totes les fonts</option>
+                  {availableSources.map((source) => (
+                    <option key={source} value={source}>{source}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="archive-toolbar__field">
+                <span>Idioma</span>
+                <select value={langFilter} onChange={(event) => setLangFilter(event.target.value)}>
+                  <option value="all">Tots els idiomes</option>
+                  {availableLanguages.map((code) => (
+                    <option key={code} value={code}>{getLanguageLabel(code)}</option>
+                  ))}
+                </select>
+              </label>
+              {hasFilters ? (
+                <button type="button" className="archive-toolbar__reset" onClick={resetFilters}>
+                  Esborrar filtres
+                </button>
+              ) : null}
+            </div>
+            <p className="archive-toolbar__count">
+              {hasFilters ? `${filtered.length} de ${archiveStories.length} peces` : `${archiveStories.length} peces`}
+            </p>
+            {filtered.length > 0 ? (
+              <div className="news-grid">
+                {filtered.map((story) => (
+                  <StoryCard
+                    key={story.id}
+                    story={story}
+                    onNavigate={onNavigate}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="empty-state">
+                <h3>Cap peça coincideix amb la cerca.</h3>
+                <p>Prova amb una paraula més senzilla o esborra els filtres.</p>
+              </div>
+            )}
+          </>
         ) : (
           <div className="empty-state">
             <h3>La Hemeroteca encara és buida.</h3>
@@ -2517,6 +2647,8 @@ function App() {
 
             </section>
 
+            <PortadaManifestTeaser onNavigate={navigate} />
+
             <section className="section-block">
               <div className="section-heading">
                 <div>
@@ -2683,6 +2815,7 @@ function App() {
                 </div>
               )}
             </section>
+            <EditorialCounter />
             <NewsletterForm />
           </>
         ) : null}
