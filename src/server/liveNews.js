@@ -6,8 +6,10 @@ export const refreshIntervalMs = 4 * 60 * 60 * 1000
 
 const cacheKey = 'latest'
 const maxLiveStoryAgeMs = 60 * 24 * 60 * 60 * 1000
-const liveEditorialVersion = 12
+const liveEditorialVersion = 13
 const targetStoryLimit = 30
+const maxStoriesPerSource = 5
+const collectionPoolSize = 80
 
 const sections = [
   { url: 'https://www.3cat.cat/3catinfo/politica/', category: 'Política' },
@@ -318,13 +320,39 @@ function looksLikeAdvertorial({ url, title, summary }) {
     return true
   }
   const titleText = String(title || '')
+  const summaryText = String(summary || '')
   const combinedText = `${title || ''} ${summary || ''}`
   return advertorialPhrasePatterns.some((re) => {
-    // Patrons ancorats a fi de cadena ($) s'apliquen només al títol;
-    // la resta es comproven sobre títol+summary.
-    if (re.source.includes('$')) return re.test(titleText)
+    // Patrons ancorats a fi de cadena ($) s'apliquen al títol i al summary
+    // per separat, perquè un "..., per X Y" pot estar només al subtítol.
+    if (re.source.includes('$')) {
+      return re.test(titleText) || re.test(summaryText)
+    }
     return re.test(combinedText)
   })
+}
+
+// Sostre per font: cap diari pot dominar més de N peces del lot final.
+// Mantenim l'ordre original i fem servir el sobrant com a omplerta si la
+// primera passada no arriba al volum desitjat.
+function applyDiversityCap(stories, maxPerSource, targetTotal) {
+  const counts = new Map()
+  const primary = []
+  const overflow = []
+  for (const story of stories) {
+    const source = story.source || '—'
+    const count = counts.get(source) || 0
+    if (count < maxPerSource) {
+      primary.push(story)
+      counts.set(source, count + 1)
+    } else {
+      overflow.push(story)
+    }
+  }
+  if (primary.length >= targetTotal) {
+    return primary.slice(0, targetTotal)
+  }
+  return [...primary, ...overflow].slice(0, targetTotal)
 }
 
 // --- Utilitats compartides -------------------------------------------------
@@ -669,7 +697,7 @@ export async function collectLivePositiveNews() {
       delete publicStory.editorialScore
       return publicStory
     })
-    .slice(0, targetStoryLimit)
+    .slice(0, collectionPoolSize)
 }
 
 async function getCachedPayload(kv) {
@@ -752,26 +780,29 @@ export async function getLiveNewsPayload(kv, { force = false } = {}) {
     await saveSeenEntries(kv, updatedSeen)
   }
 
-  // Construïm el lot final.
-  let finalStories
+  // Construïm el lot final i li apliquem el sostre per font (diversitat).
+  let preDiversity
   if (freshStories.length >= minFreshStoriesForFullRefresh) {
     // Hi ha prou novetat — el lot és íntegrament nou.
-    finalStories = freshStories
+    preDiversity = freshStories
   } else if (cached?.stories?.length) {
     // Poques noves: encapçalem amb les noves i completem amb les del cache anterior
-    // (excloent duplicats), fins arribar al límit. Així cada visita té novetat sense
-    // quedar-se mai amb una portada curta. Les del cache antic perden l'etiqueta
-    // isFresh perquè ja s'havien mostrat a passades anteriors.
+    // (excloent duplicats). Així cada visita té novetat sense quedar-se mai amb
+    // una portada curta. Les del cache antic perden l'etiqueta isFresh perquè ja
+    // s'havien mostrat a passades anteriors.
     const carryover = cached.stories
       .filter((s) => !freshUrlSet.has(s.url))
       .map(({ isFresh: _isFresh, ...rest }) => rest)
-    finalStories = [...freshStories, ...carryover].slice(0, targetStoryLimit)
+    preDiversity = [...freshStories, ...carryover]
   } else {
     // Primer cop o sense cache: el que hi hagi, marcat com a fresh (tot és nou).
-    finalStories = allStories
-      .slice(0, targetStoryLimit)
-      .map((story) => ({ ...story, isFresh: true }))
+    preDiversity = allStories.map((story) => ({ ...story, isFresh: true }))
   }
+  const finalStories = applyDiversityCap(
+    preDiversity,
+    maxStoriesPerSource,
+    targetStoryLimit,
+  )
 
   try {
     const payload = await setCachedPayload(kv, finalStories)
