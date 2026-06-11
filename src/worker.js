@@ -7,6 +7,11 @@
 
 import { getLiveNewsPayload } from './server/liveNews.js'
 import { handleStats, handleTrackVisit } from './server/stats.js'
+import {
+  handleSubscribe,
+  handleUnsubscribe,
+  sendWeeklyDigest,
+} from './server/newsletter.js'
 
 function jsonResponse(body, init = {}) {
   return new Response(JSON.stringify(body), {
@@ -67,13 +72,24 @@ export default {
     if (path === '/api/refresh-news') return handleRefreshNews(request, env)
     if (path === '/api/stats') return handleStats(request, env)
     if (path === '/api/track-visit') return handleTrackVisit(request, env)
+    if (path === '/api/newsletter/subscribe') return handleSubscribe(request, env)
+    if (path === '/api/newsletter/unsubscribe') return handleUnsubscribe(request, env)
 
     // Per a qualsevol ruta no-API, delega al sistema d'assets estàtics.
     return env.ASSETS.fetch(request)
   },
 
   async scheduled(event, env, ctx) {
-    // Cron trigger: refresca el radar cada 4h sense esperar a una petició.
+    // El cron del butlletí (diumenges 07:00 UTC) envia el digest setmanal.
+    // La resta de crons refresquen el radar de notícies.
+    if (event.cron === '0 7 * * SUN') {
+      ctx.waitUntil(
+        sendWeeklyDigest(env)
+          .then((r) => console.log(`[cron][newsletter] sent=${r.sent} failed=${r.failed} logged=${r.logged}`))
+          .catch((err) => console.error('[cron][newsletter] error', err)),
+      )
+      return
+    }
     ctx.waitUntil(
       getLiveNewsPayload(env.LIVE_NEWS_KV, { force: true })
         .then((p) => console.log(`[cron] radar refrescat: ${p.stories.length} notícies`))

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import './App.css'
 import { editorialValues, seedArticles } from './data/articles'
 import { fetchLivePositiveNewsPayload } from './api/rssFeed'
+import NewsletterForm from './components/NewsletterForm.jsx'
 import {
   DEFAULT_STORY_IMAGE,
   classifyImage,
@@ -2682,6 +2683,7 @@ function App() {
                 </div>
               )}
             </section>
+            <NewsletterForm />
           </>
         ) : null}
 

@@ -19,10 +19,10 @@
     { "binding": "STATS_KV", "id": "08a529af25eb41eca09d26276cba77d2" }
   ],
   "triggers": {
-    // 0 */4 * * * → cada 4h (02, 06, 10, 14, 18, 22 hora de Catalunya)
-    // 0 6 * * * → cada dia a les 08:00 hora de Catalunya, perquè el primer
-    //            lot del matí agafi les actualitzacions de l'edició diària
-    //            de les redaccions catalanes i espanyoles.
-    "crons": ["0 */4 * * *", "0 6 * * *"]
+    // 0 */4 * * * → refresc del radar cada 4h (02, 06, 10, 14, 18, 22 CEST)
+    // 0 6 * * *   → refresc matinal extra (08:00 CEST), per agafar les
+    //              actualitzacions de l'edició diària de redaccions catalanes.
+    // 0 7 * * 0   → butlletí setmanal, diumenges a les 09:00 CEST.
+    "crons": ["0 */4 * * *", "0 6 * * *", "0 7 * * SUN"]
   }
 }

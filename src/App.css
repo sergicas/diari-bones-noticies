@@ -2114,3 +2114,119 @@
   border-color: var(--section-color, #000) !important;
   color: var(--section-ink, #FFFFFF) !important;
 }
+
+/* ===========================================================
+   BLOC DEL BUTLLETÍ SETMANAL
+   =========================================================== */
+
+.newsletter-block {
+  margin: 56px 0 24px;
+  padding: 0 16px;
+}
+.newsletter-block__inner {
+  max-width: 720px;
+  margin: 0 auto;
+  border: 2px solid #000;
+  background: #FFE000;
+  padding: 32px 28px;
+}
+.newsletter-block__kicker {
+  margin: 0 0 4px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #000;
+}
+.newsletter-block h2 {
+  margin: 0 0 12px;
+  font-family: var(--display-font, Georgia, serif);
+  font-size: clamp(1.6rem, 3vw, 2.1rem);
+  letter-spacing: -0.02em;
+  color: #000;
+}
+.newsletter-block__intro {
+  margin: 0 0 18px;
+  font-size: 0.98rem;
+  line-height: 1.5;
+  color: #000;
+  max-width: 56ch;
+}
+.newsletter-block__form {
+  display: grid;
+  grid-template-columns: 1fr 160px auto;
+  gap: 10px;
+  align-items: end;
+}
+.newsletter-block__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.newsletter-block__label {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #000;
+}
+.newsletter-block__form input,
+.newsletter-block__form select {
+  border: 2px solid #000 !important;
+  background: #FFFFFF !important;
+  color: #000 !important;
+  padding: 10px 12px !important;
+  font-size: 1rem !important;
+  border-radius: 0 !important;
+  font-family: inherit;
+}
+.newsletter-block__submit {
+  border: 2px solid #000 !important;
+  background: #000 !important;
+  color: #FFFFFF !important;
+  padding: 12px 18px !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-size: 0.85rem;
+  cursor: pointer;
+  border-radius: 0 !important;
+}
+.newsletter-block__submit:hover:not(:disabled) {
+  background: #E72A30 !important;
+  border-color: #E72A30 !important;
+}
+.newsletter-block__submit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.newsletter-block__feedback {
+  margin: 14px 0 0;
+  padding: 10px 14px;
+  border: 2px solid #000;
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+.newsletter-block__feedback--ok {
+  background: #FFFFFF;
+  color: #000;
+}
+.newsletter-block__feedback--error {
+  background: #FFFFFF;
+  color: #E72A30;
+  border-color: #E72A30;
+}
+.newsletter-block__note {
+  margin: 14px 0 0;
+  font-size: 0.78rem;
+  color: #000;
+  opacity: 0.78;
+}
+@media (max-width: 640px) {
+  .newsletter-block__form {
+    grid-template-columns: 1fr;
+  }
+  .newsletter-block__inner {
+    padding: 24px 20px;
+  }
+}
