@@ -132,7 +132,7 @@ export async function handleSubscribe(request, env) {
   await env.STATS_KV.put(key, JSON.stringify(record))
 
   // Enviem el correu de confirmació si la API key està configurada.
-  const apiKey = env.MAILERSEND_API_KEY
+  const apiKey = env.RESEND_API_KEY
   let confirmationSent = false
   if (apiKey) {
     const confirmUrl = `https://bondiari.com/api/newsletter/confirm?token=${token}`
@@ -141,7 +141,7 @@ export async function handleSubscribe(request, env) {
     const fromEmail = env.NEWSLETTER_FROM_EMAIL || 'butlleti@bondiari.com'
     const fromName = env.NEWSLETTER_FROM_NAME || 'El Bon Diari'
     const subject = subjectForLanguage(language, 'confirm')
-    const result = await sendWithMailerSend({ apiKey, fromEmail, fromName, to: email, subject, html })
+    const result = await sendWithResend({ apiKey, fromEmail, fromName, to: email, subject, html })
     confirmationSent = result.ok
     if (!result.ok) {
       console.warn(`[newsletter] No s'ha pogut enviar la confirmació a ${email} (${result.status})`)
@@ -370,16 +370,19 @@ export function renderDigestEmail({ language = 'ca', stories, unsubscribeUrl }) 
 </table></body></html>`
 }
 
-async function sendWithMailerSend({ apiKey, fromEmail, fromName, to, subject, html }) {
-  const response = await fetch('https://api.mailersend.com/v1/email', {
+// Resend és el proveïdor d'enviament actual. La key viu a env.RESEND_API_KEY.
+// El "from" va com a una sola cadena "Name <email>" — diferent de MailerSend
+// que ho separava en objecte.
+async function sendWithResend({ apiKey, fromEmail, fromName, to, subject, html }) {
+  const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
       authorization: `Bearer ${apiKey}`,
       'content-type': 'application/json',
     },
     body: JSON.stringify({
-      from: { email: fromEmail, name: fromName },
-      to: [{ email: to }],
+      from: `${fromName} <${fromEmail}>`,
+      to: [to],
       subject,
       html,
     }),
@@ -395,7 +398,7 @@ export async function sendWeeklyDigest(env) {
     return { sent: 0, skipped: true }
   }
 
-  const apiKey = env.MAILERSEND_API_KEY
+  const apiKey = env.RESEND_API_KEY
   const fromEmail = env.NEWSLETTER_FROM_EMAIL || 'butlleti@bondiari.com'
   const fromName = env.NEWSLETTER_FROM_NAME || 'El Bon Diari'
 
@@ -427,11 +430,11 @@ export async function sendWeeklyDigest(env) {
       const subject = subjectForLanguage(data.language || 'ca', 'digest')
 
       if (!apiKey) {
-        console.log(`[newsletter] (sense MAILERSEND_API_KEY) hauria enviat a ${data.email}`)
+        console.log(`[newsletter] (sense RESEND_API_KEY) hauria enviat a ${data.email}`)
         logged += 1
         continue
       }
-      const result = await sendWithMailerSend({ apiKey, fromEmail, fromName, to: data.email, subject, html })
+      const result = await sendWithResend({ apiKey, fromEmail, fromName, to: data.email, subject, html })
       if (result.ok) sent += 1
       else {
         failed += 1
