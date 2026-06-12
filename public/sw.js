@@ -4,7 +4,10 @@
 // - Bypass total per a /api/* perquè el radar mai serveixi notícies velles.
 // - Esborra caches antigues quan canviem la versió.
 
-const CACHE_VERSION = 'bondiari-shell-v1'
+// __BUILD_HASH__ es substitueix pel plugin de Vite (vite.config.js) durant
+// el build amb el hash dels assets. Així cada deploy canvia el nom del
+// cache i les versions antigues s'esborren al següent activate.
+const CACHE_VERSION = 'bondiari-shell-__BUILD_HASH__'
 const APP_SHELL = ['/', '/manifest.webmanifest', '/logo-colibri.png?v=4', '/favicon.svg']
 
 self.addEventListener('install', (event) => {

@@ -10,6 +10,7 @@ import { handleStats, handleTrackVisit } from './server/stats.js'
 import {
   handleSubscribe,
   handleUnsubscribe,
+  handleConfirm,
   sendWeeklyDigest,
 } from './server/newsletter.js'
 
@@ -82,6 +83,7 @@ export default {
     }
     if (path === '/api/track-visit') return handleTrackVisit(request, env)
     if (path === '/api/newsletter/subscribe') return handleSubscribe(request, env)
+    if (path === '/api/newsletter/confirm') return handleConfirm(request, env)
     if (path === '/api/newsletter/unsubscribe') return handleUnsubscribe(request, env)
 
     // Per a qualsevol ruta no-API, delega al sistema d'assets estàtics.

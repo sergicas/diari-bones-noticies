@@ -22,6 +22,8 @@ export default function NewsletterForm({ defaultLanguage = 'ca' }) {
         setStatus('error')
         if (data.error === 'invalid-email') {
           setErrorMsg("L'adreça no té un format vàlid.")
+        } else if (data.error === 'rate-limited') {
+          setErrorMsg('Hem rebut massa subscripcions des d\'aquesta xarxa per hora. Torna-ho a provar més tard.')
         } else {
           setErrorMsg('No hem pogut completar la subscripció. Torna-ho a provar.')
         }
@@ -78,12 +80,12 @@ export default function NewsletterForm({ defaultLanguage = 'ca' }) {
         </form>
         {status === 'ok' ? (
           <p className="newsletter-block__feedback newsletter-block__feedback--ok" role="status">
-            Subscrit. Diumenge a primera hora et trobaràs el primer correu.
+            Falta un sol pas: t'hem enviat un correu de confirmació. Obre'l i toca el botó per acabar la subscripció.
           </p>
         ) : null}
         {status === 'already' ? (
           <p className="newsletter-block__feedback newsletter-block__feedback--ok" role="status">
-            Aquesta adreça ja estava subscrita. No cal fer res més.
+            Aquesta adreça ja està confirmada. No cal fer res més.
           </p>
         ) : null}
         {status === 'error' ? (

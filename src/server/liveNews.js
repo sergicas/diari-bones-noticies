@@ -243,7 +243,7 @@ function getDictionary(language) {
   return editorialDictionaries[language] || editorialDictionaries.ca
 }
 
-function passesEditorialFilter(text, language) {
+export function passesEditorialFilter(text, language) {
   const normalized = text.toLowerCase()
   const dict = getDictionary(language)
   const isNegative = dict.negative.some((word) => normalized.includes(word))
@@ -299,12 +299,13 @@ const advertorialPhrasePatterns = [
   /\bmost\s+recommended\b/i, /\bhighly\s+recommended\b/i,
   /\bmust[\s-]?(have|see|try)\b/i, /\bimprescindible\b/i,
   /\bindispensable[s]?\b/i, /\bincontournable[s]?\b/i,
-  // "Presenta el nou / Llança al mercat..."
-  /\b(presenta|llan[çc]a|estrena|launches|unveils|d[ée]voile|pr[eé]sente)\s+(su|el|la|its|le|la|son|sa)\s+(nuevo|nueva|new|nouveau|nouvelle|nou|nova)/i,
-  /\b(llega|arriba|arrive|hits|comes)\s+(al\s+mercado|al\s+mercat|to\s+market|sur\s+le\s+march[eé])/i,
+  // "Presenta el nou / Llança el nou..."
+  /\b(presenta|llan[çc]a|lanza|estrena|launches|unveils|d[ée]voile|pr[eé]sente)\s+(su|el|la|its|le|la|son|sa)\s+(nuevo|nueva|new|nouveau|nouvelle|nou|nova)/i,
+  /\b(llega|arriba|arrive|hits|comes|lanza|llan[çc]a|presenta)\s+(al\s+mercado|al\s+mercat|to\s+market|sur\s+le\s+march[eé])/i,
   /\bnow\s+(in\s+stock|available)\b/i,
   // Bloomberg-style podcast titles "X on Y" o "X On Y Alpha"
   /\bon\s+(strategy|growth|geopolitics|tech|the\s+economy|alpha|markets|the\s+brink|trade)\b/i,
+  /\bon\s+\w+\s+alpha\b/i,
   /\bbloomberg\s+(surveillance|opinion|tech)\b/i,
   // Black Friday / Cyber Monday / Prime Day
   /\b(black\s+friday|cyber\s+monday|prime\s+day|amazon\s+prime\s+day)\b/i,
@@ -314,7 +315,7 @@ const advertorialPhrasePatterns = [
   /\b(el|la|los|las|els|les)\s+(restaurante?s?|restaurants?|hoteles?|hotels?)\s+(que\s+no\s+(?:te\s+)?pued|que\s+debes\s+visitar|imprescindibl|imperdibl|secret)/i,
 ]
 
-function looksLikeAdvertorial({ url, title, summary }) {
+export function looksLikeAdvertorial({ url, title, summary }) {
   const lowerUrl = String(url || '').toLowerCase()
   if (advertorialUrlPatterns.some((pattern) => lowerUrl.includes(pattern))) {
     return true
@@ -335,7 +336,7 @@ function looksLikeAdvertorial({ url, title, summary }) {
 // Sostre per font: cap diari pot dominar més de N peces del lot final.
 // Mantenim l'ordre original i fem servir el sobrant com a omplerta si la
 // primera passada no arriba al volum desitjat.
-function applyDiversityCap(stories, maxPerSource, targetTotal) {
+export function applyDiversityCap(stories, maxPerSource, targetTotal) {
   const counts = new Map()
   const primary = []
   const overflow = []
