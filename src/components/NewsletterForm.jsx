@@ -1,10 +1,30 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+
+function formatCount(value) {
+  if (typeof value !== 'number') return ''
+  return new Intl.NumberFormat('ca-ES').format(value)
+}
 
 export default function NewsletterForm({ defaultLanguage = 'ca' }) {
   const [email, setEmail] = useState('')
   const [language, setLanguage] = useState(defaultLanguage)
   const [status, setStatus] = useState('idle') // idle | sending | ok | already | error
   const [errorMsg, setErrorMsg] = useState('')
+  const [subscriberCount, setSubscriberCount] = useState(null)
+
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/newsletter/stats')
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => {
+        if (cancelled || !data) return
+        if (typeof data.confirmed === 'number') setSubscriberCount(data.confirmed)
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const handleSubmit = async (event) => {
     event.preventDefault()
@@ -47,6 +67,13 @@ export default function NewsletterForm({ defaultLanguage = 'ca' }) {
           T'arriba al correu cada diumenge a primera hora. Et pots donar de baixa en qualsevol moment
           amb un sol clic.
         </p>
+        {typeof subscriberCount === 'number' && subscriberCount > 0 ? (
+          <p className="newsletter-block__count" aria-live="polite">
+            {subscriberCount === 1
+              ? "Ja hi som una persona. Vols ser la segona?"
+              : `Ja hi som ${formatCount(subscriberCount)} lectors.`}
+          </p>
+        ) : null}
         <form className="newsletter-block__form" onSubmit={handleSubmit} noValidate>
           <label className="newsletter-block__field">
             <span className="newsletter-block__label">El teu correu</span>

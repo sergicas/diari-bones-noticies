@@ -11,6 +11,7 @@ import {
   handleSubscribe,
   handleUnsubscribe,
   handleConfirm,
+  handleNewsletterStats,
   sendWeeklyDigest,
 } from './server/newsletter.js'
 
@@ -85,6 +86,7 @@ export default {
     if (path === '/api/newsletter/subscribe') return handleSubscribe(request, env)
     if (path === '/api/newsletter/confirm') return handleConfirm(request, env)
     if (path === '/api/newsletter/unsubscribe') return handleUnsubscribe(request, env)
+    if (path === '/api/newsletter/stats') return handleNewsletterStats(request, env)
 
     // Per a qualsevol ruta no-API, delega al sistema d'assets estàtics.
     return env.ASSETS.fetch(request)

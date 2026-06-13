@@ -2331,6 +2331,17 @@
   color: #000;
   max-width: 56ch;
 }
+.newsletter-block__count {
+  margin: -8px 0 18px;
+  font-size: 0.92rem;
+  font-weight: 800;
+  color: #000;
+  background: #000;
+  color: #FFE000;
+  display: inline-block;
+  padding: 4px 10px;
+  letter-spacing: 0.04em;
+}
 .newsletter-block__form {
   display: grid;
   grid-template-columns: 1fr 160px auto;

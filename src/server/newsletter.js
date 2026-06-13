@@ -218,6 +218,33 @@ export async function handleConfirm(request, env) {
   )
 }
 
+// --- Stats públiques del butlletí (per al formulari) ---------------------
+
+export async function handleNewsletterStats(request, env) {
+  let cursor
+  let confirmed = 0
+  let pending = 0
+  do {
+    const list = await env.STATS_KV.list({ prefix: subscriberPrefix, cursor })
+    for (const key of list.keys) {
+      const data = await env.STATS_KV.get(key.name, 'json')
+      if (!data?.email) continue
+      // Els legacy (sense camp status) compten com a confirmats — vam crear-los
+      // amb el sistema antic sense double opt-in.
+      if (data.status === 'confirmed' || data.status === undefined) {
+        confirmed += 1
+      } else if (data.status === 'pending') {
+        pending += 1
+      }
+    }
+    cursor = list.list_complete ? null : list.cursor
+  } while (cursor)
+  return jsonResponse(
+    { confirmed, pending },
+    { headers: { 'cache-control': 'public, max-age=300, stale-while-revalidate=3600' } },
+  )
+}
+
 // --- Unsubscribe -----------------------------------------------------------
 
 export async function handleUnsubscribe(request, env) {
