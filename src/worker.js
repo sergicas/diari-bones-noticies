@@ -25,6 +25,46 @@ function jsonResponse(body, init = {}) {
   })
 }
 
+// Capçaleres de seguretat aplicades a totes les respostes.
+// CSP prudent: script propi només ('self'), imatges de qualsevol https
+// (les fotos venen de molts mitjans: 3cat, ara, beteve, ...), estils inline
+// permesos (React n'injecta algun), i res d'iframes de tercers.
+const CONTENT_SECURITY_POLICY = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' https: data:",
+  "font-src 'self' data:",
+  "connect-src 'self'",
+  "manifest-src 'self'",
+  "worker-src 'self'",
+  "frame-ancestors 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  'upgrade-insecure-requests',
+].join('; ')
+
+const SECURITY_HEADERS = {
+  'content-security-policy': CONTENT_SECURITY_POLICY,
+  'x-content-type-options': 'nosniff',
+  'referrer-policy': 'strict-origin-when-cross-origin',
+  'x-frame-options': 'DENY',
+  'strict-transport-security': 'max-age=31536000; includeSubDomains',
+  'permissions-policy': 'geolocation=(), microphone=(), camera=(), browsing-topics=()',
+}
+
+function withSecurityHeaders(response) {
+  const headers = new Headers(response.headers)
+  for (const [key, value] of Object.entries(SECURITY_HEADERS)) {
+    headers.set(key, value)
+  }
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  })
+}
+
 async function handleLiveNews(request, env) {
   try {
     const url = new URL(request.url)
@@ -65,31 +105,36 @@ async function handleRefreshNews(request, env) {
   }
 }
 
+async function route(request, env) {
+  const url = new URL(request.url)
+  const path = url.pathname
+
+  if (path === '/api/live-news') return handleLiveNews(request, env)
+  if (path === '/api/refresh-news') return handleRefreshNews(request, env)
+  if (path === '/api/stats') return handleStats(request, env)
+  if (path === '/api/editorial-stats') {
+    const stats = await readEditorialStats(env.LIVE_NEWS_KV)
+    return new Response(JSON.stringify(stats), {
+      headers: {
+        'content-type': 'application/json; charset=utf-8',
+        'cache-control': 'public, max-age=600, stale-while-revalidate=3600',
+      },
+    })
+  }
+  if (path === '/api/track-visit') return handleTrackVisit(request, env)
+  if (path === '/api/newsletter/subscribe') return handleSubscribe(request, env)
+  if (path === '/api/newsletter/confirm') return handleConfirm(request, env)
+  if (path === '/api/newsletter/unsubscribe') return handleUnsubscribe(request, env)
+  if (path === '/api/newsletter/stats') return handleNewsletterStats(request, env)
+
+  // Per a qualsevol ruta no-API, delega al sistema d'assets estàtics.
+  return env.ASSETS.fetch(request)
+}
+
 export default {
-  async fetch(request, env, ctx) {
-    const url = new URL(request.url)
-    const path = url.pathname
-
-    if (path === '/api/live-news') return handleLiveNews(request, env)
-    if (path === '/api/refresh-news') return handleRefreshNews(request, env)
-    if (path === '/api/stats') return handleStats(request, env)
-    if (path === '/api/editorial-stats') {
-      const stats = await readEditorialStats(env.LIVE_NEWS_KV)
-      return new Response(JSON.stringify(stats), {
-        headers: {
-          'content-type': 'application/json; charset=utf-8',
-          'cache-control': 'public, max-age=600, stale-while-revalidate=3600',
-        },
-      })
-    }
-    if (path === '/api/track-visit') return handleTrackVisit(request, env)
-    if (path === '/api/newsletter/subscribe') return handleSubscribe(request, env)
-    if (path === '/api/newsletter/confirm') return handleConfirm(request, env)
-    if (path === '/api/newsletter/unsubscribe') return handleUnsubscribe(request, env)
-    if (path === '/api/newsletter/stats') return handleNewsletterStats(request, env)
-
-    // Per a qualsevol ruta no-API, delega al sistema d'assets estàtics.
-    return env.ASSETS.fetch(request)
+  async fetch(request, env) {
+    const response = await route(request, env)
+    return withSecurityHeaders(response)
   },
 
   async scheduled(event, env, ctx) {

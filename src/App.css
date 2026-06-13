@@ -2259,6 +2259,63 @@
 }
 
 /* ===========================================================
+   MANIFEST DE FONTS
+   =========================================================== */
+
+.sources-manifest__lead {
+  margin: 0 0 24px;
+  font-size: 1rem;
+  line-height: 1.6;
+  max-width: 70ch;
+  color: var(--ink, #000);
+}
+.sources-manifest__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.sources-manifest__group {
+  border: 2px solid #000;
+  padding: 16px 18px;
+  background: #FFFFFF;
+}
+.sources-manifest__group h3 {
+  margin: 0 0 4px;
+  font-family: var(--display-font, Georgia, serif);
+  font-size: 1.3rem;
+}
+.sources-manifest__desc {
+  margin: 0 0 12px;
+  font-size: 0.85rem;
+  color: var(--muted, #666);
+}
+.sources-manifest__group ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.sources-manifest__group li {
+  font-size: 0.8rem;
+  font-weight: 700;
+  border: 1px solid #000;
+  padding: 3px 8px;
+  background: #F4F1EA;
+}
+.sources-manifest__note {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--muted, #666);
+  max-width: 70ch;
+  border-left: 4px solid #FFE000;
+  padding-left: 14px;
+}
+
+/* ===========================================================
    COMPTADOR EDITORIAL HONEST
    =========================================================== */
 

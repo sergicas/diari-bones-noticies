@@ -7,6 +7,7 @@ import NewsletterForm from './components/NewsletterForm.jsx'
 import EditorialCounter from './components/EditorialCounter.jsx'
 import PageHero from './components/PageHero.jsx'
 import ManifestSection from './components/ManifestSection.jsx'
+import SourcesManifest from './components/SourcesManifest.jsx'
 import PortadaManifestTeaser from './components/PortadaManifestTeaser.jsx'
 import NotFoundPage from './components/NotFoundPage.jsx'
 import ShareRow from './components/ShareRow.jsx'
@@ -2631,6 +2632,7 @@ function App() {
               description="Aquest és el marc amb què El Bon Diari decideix què entra a portada, com s’explica i quin valor ha de tenir per a qui ho llegeix."
             />
             <ManifestSection />
+            <SourcesManifest />
           </>
         ) : null}
 

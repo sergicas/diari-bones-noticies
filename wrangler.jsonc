@@ -9,7 +9,10 @@
     "binding": "ASSETS",
     "html_handling": "drop-trailing-slash",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*"]
+    // El Worker s'executa primer per a TOTES les peticions perquè el wrapper
+    // withSecurityHeaders pugui afegir CSP i la resta de capçaleres de
+    // seguretat també a les respostes HTML/estàtiques (no només a /api/*).
+    "run_worker_first": true
   },
   "observability": {
     "enabled": true

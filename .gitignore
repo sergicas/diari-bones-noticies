@@ -36,6 +36,9 @@ dist-ssr
 # Còpies de seguretat locals
 .backups/
 
+# Còpies del KV (contenen adreces de subscriptors: dades personals, fora de git)
+kv-backups/
+
 # Secrets i variables d'entorn locals
 .env
 .env.local
