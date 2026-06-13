@@ -23,7 +23,7 @@ const baseUrl = 'https://bondiari.com'
 const siteName = 'El Bon Diari'
 const defaultDescription =
   'Diari constructiu en català amb bones notícies verificables, organitzades per proximitat i secció.'
-const defaultImage = `${baseUrl}/og-image.svg`
+const defaultImage = `${baseUrl}/og-image.png`
 
 const staticPages = [
   {
