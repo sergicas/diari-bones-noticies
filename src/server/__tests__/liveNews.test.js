@@ -11,6 +11,8 @@ import {
   applyDiversityCap,
 } from '../liveNews.js'
 import { normalizeCategory, canonicalizeCategory } from '../../lib/category.js'
+import { feedStoryId } from '../../lib/story-id.js'
+import { injectStoryMeta } from '../storyMeta.js'
 
 describe('passesEditorialFilter — català', () => {
   it('deixa passar una notícia clarament positiva', () => {
@@ -326,5 +328,56 @@ describe('normalizeCategory — mapatge a categories canòniques', () => {
   it('canonicalizeCategory retorna null per a coses no reconegudes', () => {
     expect(canonicalizeCategory('Barclays')).toBeNull()
     expect(canonicalizeCategory('Reino Unido')).toBe('Món')
+  })
+})
+
+describe('feedStoryId — id estable derivat de la URL', () => {
+  it('és determinista: la mateixa URL dona sempre el mateix id', () => {
+    const url = 'https://www.3cat.cat/noticia/12345/'
+    expect(feedStoryId(url)).toBe(feedStoryId(url))
+  })
+
+  it('dona ids diferents per a URLs diferents', () => {
+    expect(feedStoryId('https://a.com/1')).not.toBe(feedStoryId('https://a.com/2'))
+  })
+
+  it('sempre comença per "feed-"', () => {
+    expect(feedStoryId('https://x.com/y')).toMatch(/^feed-/)
+  })
+})
+
+describe('injectStoryMeta — meta socials per notícia', () => {
+  const baseHtml = `<!doctype html><html><head>
+<title>El Bon Diari | Bones notícies</title>
+<meta property="og:title" content="El Bon Diari | Bones notícies" />
+<meta property="og:description" content="generic" />
+<meta property="og:image" content="https://bondiari.com/og-image.png" />
+<meta name="twitter:image" content="https://bondiari.com/og-image.png" />
+</head><body></body></html>`
+
+  const story = {
+    title: 'Inauguren una biblioteca al barri',
+    summary: 'Amb fons de 5.000 títols donats per veïns.',
+    imageUrl: 'https://img.beteve.cat/foto.jpg',
+  }
+
+  it('posa el títol de la notícia a og:title i <title>', () => {
+    const out = injectStoryMeta(baseHtml, story, 'https://bondiari.com/noticia/x')
+    expect(out).toContain('<meta property="og:title" content="Inauguren una biblioteca al barri · El Bon Diari" />')
+    expect(out).toContain('<title>Inauguren una biblioteca al barri · El Bon Diari</title>')
+  })
+
+  it('posa la imatge de la notícia a og:image i twitter:image', () => {
+    const out = injectStoryMeta(baseHtml, story, 'https://bondiari.com/noticia/x')
+    expect(out).toContain('<meta property="og:image" content="https://img.beteve.cat/foto.jpg" />')
+    expect(out).toContain('<meta name="twitter:image" content="https://img.beteve.cat/foto.jpg" />')
+  })
+
+  it('escapa cometes i símbols del títol per no trencar l\'atribut', () => {
+    const tricky = { title: 'L\'"èxit" <gran> & clar', summary: 'x', imageUrl: 'https://i/x.jpg' }
+    const out = injectStoryMeta(baseHtml, tricky, 'https://bondiari.com/noticia/x')
+    expect(out).toContain('&quot;')
+    expect(out).toContain('&lt;gran&gt;')
+    expect(out).toContain('&amp;')
   })
 })

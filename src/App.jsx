@@ -3,6 +3,7 @@ import './App.css'
 import { editorialValues, seedArticles } from './data/articles'
 import { fetchLivePositiveNewsPayload } from './api/rssFeed'
 import { LIVE_EDITORIAL_VERSION } from './lib/editorial-version.js'
+import { feedStoryId } from './lib/story-id.js'
 import NewsletterForm from './components/NewsletterForm.jsx'
 import EditorialCounter from './components/EditorialCounter.jsx'
 import PageHero from './components/PageHero.jsx'
@@ -714,20 +715,6 @@ function getLanguageLabel(code) {
 function handleImageError(event) {
   event.currentTarget.onerror = null
   event.currentTarget.src = defaultStoryImage
-}
-
-// Id estable derivat de la URL de la peça. Abans es feia servir
-// `Date.now()+random`, que col·lisionava quan dues peces es creaven al mateix
-// mil·lisegon (React es queixava de claus duplicades i podia ometre o duplicar
-// targetes). La URL és única i estable, així que la mateixa notícia té sempre
-// el mateix id.
-function feedStoryId(url) {
-  const source = String(url || '')
-  let hash = 0
-  for (let i = 0; i < source.length; i += 1) {
-    hash = (hash * 31 + source.charCodeAt(i)) | 0
-  }
-  return `feed-${(hash >>> 0).toString(36)}`
 }
 
 function createFeedStory(story) {

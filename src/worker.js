@@ -14,6 +14,7 @@ import {
   handleNewsletterStats,
   sendWeeklyDigest,
 } from './server/newsletter.js'
+import { renderStoryPage } from './server/storyMeta.js'
 
 function jsonResponse(body, init = {}) {
   return new Response(JSON.stringify(body), {
@@ -126,6 +127,13 @@ async function route(request, env) {
   if (path === '/api/newsletter/confirm') return handleConfirm(request, env)
   if (path === '/api/newsletter/unsubscribe') return handleUnsubscribe(request, env)
   if (path === '/api/newsletter/stats') return handleNewsletterStats(request, env)
+
+  // Pàgina de notícia: servim l'HTML amb meta socials propis (títol, imatge)
+  // perquè quan algú la comparteix surti la targeta de la peça, no la genèrica.
+  if (path.startsWith('/noticia/')) {
+    const storyPage = await renderStoryPage(request, env)
+    if (storyPage) return storyPage
+  }
 
   // Per a qualsevol ruta no-API, delega al sistema d'assets estàtics.
   return env.ASSETS.fetch(request)
