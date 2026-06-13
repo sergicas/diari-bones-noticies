@@ -17,7 +17,6 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@netlify/blobs": "^10.7.9",
     "react": "^19.2.4",
     "react-dom": "^19.2.4"
   },

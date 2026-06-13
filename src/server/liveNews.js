@@ -2,11 +2,13 @@
 // de RSS catalans, espanyols, anglosaxons i europeus, aplica filtres
 // editorials per idioma i guarda el resultat a Workers KV (env.LIVE_NEWS_KV).
 
+import { LIVE_EDITORIAL_VERSION } from '../lib/editorial-version.js'
+
 export const refreshIntervalMs = 4 * 60 * 60 * 1000
 
 const cacheKey = 'latest'
 const maxLiveStoryAgeMs = 60 * 24 * 60 * 60 * 1000
-const liveEditorialVersion = 13
+const liveEditorialVersion = LIVE_EDITORIAL_VERSION
 const targetStoryLimit = 30
 const maxStoriesPerSource = 5
 const collectionPoolSize = 80

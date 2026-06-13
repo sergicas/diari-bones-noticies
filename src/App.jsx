@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import './App.css'
 import { editorialValues, seedArticles } from './data/articles'
 import { fetchLivePositiveNewsPayload } from './api/rssFeed'
+import { LIVE_EDITORIAL_VERSION } from './lib/editorial-version.js'
 import NewsletterForm from './components/NewsletterForm.jsx'
 import EditorialCounter from './components/EditorialCounter.jsx'
 import {
@@ -17,7 +18,7 @@ const defaultDescription =
 const refreshStorageKey = 'bon-diari-last-refresh-at-v4'
 const nextRefreshStorageKey = 'bon-diari-next-refresh-at-v4'
 const defaultStoryImage = DEFAULT_STORY_IMAGE
-const currentLiveEditorialVersion = 4
+const currentLiveEditorialVersion = LIVE_EDITORIAL_VERSION
 const autoRefreshIntervalMs = 1 * 60 * 60 * 1000
 const activeEditionLimit = 40
 const maxStoredFeedStories = 40
