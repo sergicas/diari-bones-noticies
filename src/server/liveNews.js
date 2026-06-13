@@ -3,6 +3,7 @@
 // editorials per idioma i guarda el resultat a Workers KV (env.LIVE_NEWS_KV).
 
 import { LIVE_EDITORIAL_VERSION } from '../lib/editorial-version.js'
+import { normalizeCategory } from '../lib/category.js'
 
 export const refreshIntervalMs = 4 * 60 * 60 * 1000
 
@@ -593,9 +594,9 @@ function extractPrimaryCategory(block, fallback) {
   let match
   while ((match = re.exec(block)) !== null) {
     const value = match[1].replace(/^<!\[CDATA\[/, '').replace(/\]\]>$/, '').trim()
-    if (value) return value.charAt(0).toUpperCase() + value.slice(1)
+    if (value) return normalizeCategory(value, fallback)
   }
-  return fallback
+  return normalizeCategory(null, fallback)
 }
 
 function normalizeFeedItem(block, feed) {

@@ -10,6 +10,7 @@ import {
   looksLikeAdvertorial,
   applyDiversityCap,
 } from '../liveNews.js'
+import { normalizeCategory, canonicalizeCategory } from '../../lib/category.js'
 
 describe('passesEditorialFilter — català', () => {
   it('deixa passar una notícia clarament positiva', () => {
@@ -286,5 +287,44 @@ describe('applyDiversityCap — sostre per font', () => {
 
   it('gestiona el cas buit sense petar', () => {
     expect(applyDiversityCap([], 5, 30)).toEqual([])
+  })
+})
+
+describe('normalizeCategory — mapatge a categories canòniques', () => {
+  it('normalitza variants ortogràfiques i d\'idioma a la mateixa categoria', () => {
+    expect(normalizeCategory('POLíTICA', 'Actualitat')).toBe('Política')
+    expect(normalizeCategory('Politics', 'Actualitat')).toBe('Política')
+    expect(normalizeCategory('Politique', 'Actualitat')).toBe('Política')
+    expect(normalizeCategory('cultura', 'Actualitat')).toBe('Cultura')
+    expect(normalizeCategory('Arts', 'Actualitat')).toBe('Cultura')
+  })
+
+  it('parteix categories compostes i agafa la primera reconeguda', () => {
+    expect(normalizeCategory('ECONOMIA - POLíTICA', 'Actualitat')).toBe('Economia')
+    expect(normalizeCategory('Sports/Football', 'Actualitat')).toBe('Esports')
+  })
+
+  it('redirigeix països cap a Món o Europa segons toqui', () => {
+    expect(normalizeCategory('Reino Unido', 'Actualitat')).toBe('Món')
+    expect(normalizeCategory('UE', 'Actualitat')).toBe('Europa')
+    expect(normalizeCategory('China', 'Actualitat')).toBe('Món')
+  })
+
+  it('etiqueta clarament les peces d\'opinió', () => {
+    expect(normalizeCategory('Editorial', 'Actualitat')).toBe('Opinió')
+    expect(normalizeCategory('Mail Obert', 'Actualitat')).toBe('Opinió')
+    expect(normalizeCategory('Opinion', 'Actualitat')).toBe('Opinió')
+  })
+
+  it('cau al fallback quan no troba res', () => {
+    expect(normalizeCategory('Barclays', 'Economia')).toBe('Economia')
+    expect(normalizeCategory('XYZ inventat', 'Món')).toBe('Món')
+    expect(normalizeCategory('', 'Actualitat')).toBe('Actualitat')
+    expect(normalizeCategory(null, undefined)).toBe('Actualitat')
+  })
+
+  it('canonicalizeCategory retorna null per a coses no reconegudes', () => {
+    expect(canonicalizeCategory('Barclays')).toBeNull()
+    expect(canonicalizeCategory('Reino Unido')).toBe('Món')
   })
 })
