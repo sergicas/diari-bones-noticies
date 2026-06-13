@@ -13,6 +13,7 @@ import {
 import { normalizeCategory, canonicalizeCategory } from '../../lib/category.js'
 import { feedStoryId } from '../../lib/story-id.js'
 import { injectStoryMeta } from '../storyMeta.js'
+import { composePostText, storyLink } from '../social.js'
 
 describe('passesEditorialFilter — català', () => {
   it('deixa passar una notícia clarament positiva', () => {
@@ -379,5 +380,33 @@ describe('injectStoryMeta — meta socials per notícia', () => {
     expect(out).toContain('&quot;')
     expect(out).toContain('&lt;gran&gt;')
     expect(out).toContain('&amp;')
+  })
+})
+
+describe('social — composició del post', () => {
+  const story = {
+    title: 'Inauguren una biblioteca al barri',
+    summary: 'Amb fons de 5.000 títols.',
+    source: 'Betevé',
+    url: 'https://beteve.cat/noticia/123',
+  }
+
+  it('storyLink apunta a bondiari.com/noticia/:id, no a la font', () => {
+    const link = storyLink(story)
+    expect(link).toMatch(/^https:\/\/bondiari\.com\/noticia\/feed-/)
+    expect(link).not.toContain('beteve.cat')
+  })
+
+  it('el text inclou el títol i el crèdit de la font', () => {
+    const text = composePostText(story, 240)
+    expect(text).toContain('Inauguren una biblioteca al barri')
+    expect(text).toContain('(via Betevé)')
+  })
+
+  it('trunca el títol llarg per no passar-se del límit', () => {
+    const longStory = { ...story, title: 'A'.repeat(300), source: 'X' }
+    const text = composePostText(longStory, 240)
+    expect(text.length).toBeLessThanOrEqual(240)
+    expect(text.endsWith('(via X)')).toBe(true)
   })
 })

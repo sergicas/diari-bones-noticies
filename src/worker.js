@@ -15,6 +15,7 @@ import {
   sendWeeklyDigest,
 } from './server/newsletter.js'
 import { renderStoryPage } from './server/storyMeta.js'
+import { announceFreshStories } from './server/social.js'
 
 function jsonResponse(body, init = {}) {
   return new Response(JSON.stringify(body), {
@@ -158,7 +159,12 @@ export default {
     }
     ctx.waitUntil(
       getLiveNewsPayload(env.LIVE_NEWS_KV, { force: true })
-        .then((p) => console.log(`[cron] radar refrescat: ${p.stories.length} notícies`))
+        .then(async (p) => {
+          console.log(`[cron] radar refrescat: ${p.stories.length} notícies`)
+          // Publiquem les peces noves a Bluesky/Mastodon (si hi ha credencials).
+          const social = await announceFreshStories(env, p.stories)
+          console.log('[cron][social]', JSON.stringify(social))
+        })
         .catch((err) => console.error('[cron] error refrescant radar', err)),
     )
   },
