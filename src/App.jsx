@@ -5,6 +5,11 @@ import { fetchLivePositiveNewsPayload } from './api/rssFeed'
 import { LIVE_EDITORIAL_VERSION } from './lib/editorial-version.js'
 import NewsletterForm from './components/NewsletterForm.jsx'
 import EditorialCounter from './components/EditorialCounter.jsx'
+import PageHero from './components/PageHero.jsx'
+import ManifestSection from './components/ManifestSection.jsx'
+import PortadaManifestTeaser from './components/PortadaManifestTeaser.jsx'
+import NotFoundPage from './components/NotFoundPage.jsx'
+import ShareRow from './components/ShareRow.jsx'
 import {
   DEFAULT_STORY_IMAGE,
   classifyImage,
@@ -710,11 +715,26 @@ function handleImageError(event) {
   event.currentTarget.src = defaultStoryImage
 }
 
+// Id estable derivat de la URL de la peça. Abans es feia servir
+// `Date.now()+random`, que col·lisionava quan dues peces es creaven al mateix
+// mil·lisegon (React es queixava de claus duplicades i podia ometre o duplicar
+// targetes). La URL és única i estable, així que la mateixa notícia té sempre
+// el mateix id.
+function feedStoryId(url) {
+  const source = String(url || '')
+  let hash = 0
+  for (let i = 0; i < source.length; i += 1) {
+    hash = (hash * 31 + source.charCodeAt(i)) | 0
+  }
+  return `feed-${(hash >>> 0).toString(36)}`
+}
+
 function createFeedStory(story) {
   const now = new Date()
   const safeSummary = (story.summary || '').trim()
   const safeImpact = (story.impact || '').trim()
   const safeImageUrl = (story.imageUrl || '').trim()
+  const safeUrl = (story.url || '').trim()
 
   if (!hasOriginalPhoto({ imageUrl: safeImageUrl })) {
     return null
@@ -722,7 +742,7 @@ function createFeedStory(story) {
 
   return normalizeStory({
     ...story,
-    id: `feed-${now.getTime()}-${Math.floor(Math.random() * 1000)}`,
+    id: safeUrl ? feedStoryId(safeUrl) : `feed-${now.getTime()}-${Math.floor(Math.random() * 1000)}`,
     source: (story.source || '').trim(),
     url: (story.url || '').trim(),
     imageUrl: safeImageUrl,
@@ -1027,66 +1047,6 @@ function StoryCard({ story, onNavigate }) {
 
       {originBadge ? <span className="origin-badge">{originBadge}</span> : null}
     </a>
-  )
-}
-
-function ManifestSection() {
-  return (
-    <section className="section-block">
-      <div className="section-heading">
-        <div>
-          <p className="section-tag">Manifest</p>
-          <h2>Com publiquem sense caure en l’optimisme buit</h2>
-        </div>
-      </div>
-
-      <div className="values-grid">
-        {editorialValues.map((value) => (
-          <article key={value.title} className="value-card">
-            <span className="paper-chip paper-chip--accent">{value.tag}</span>
-            <h3>{value.title}</h3>
-            <p>{value.description}</p>
-          </article>
-        ))}
-      </div>
-    </section>
-  )
-}
-
-function PortadaManifestTeaser({ onNavigate }) {
-  const teaserValues = editorialValues.slice(0, 3)
-  return (
-    <aside className="manifest-teaser" aria-label="Resum del manifest editorial">
-      <div className="manifest-teaser__intro">
-        <p className="manifest-teaser__kicker">Manifest editorial</p>
-        <h2 className="manifest-teaser__title">
-          Per què aquesta peça és aquí
-        </h2>
-        <p className="manifest-teaser__lead">
-          El Bon Diari no és un agregador. Cada peça que arriba a portada passa
-          per un criteri editorial humà i un filtre automàtic en quatre llengües.
-          Aquests són els tres principis que ens guien:
-        </p>
-      </div>
-      <ul className="manifest-teaser__list">
-        {teaserValues.map((value) => (
-          <li key={value.title} className="manifest-teaser__item">
-            <strong>{value.title}.</strong> {value.description}
-          </li>
-        ))}
-      </ul>
-      <a
-        className="manifest-teaser__link"
-        href="/manifest"
-        onClick={(event) => {
-          if (!canInterceptNavigation(event)) return
-          event.preventDefault()
-          onNavigate('/manifest')
-        }}
-      >
-        Llegir el manifest sencer →
-      </a>
-    </aside>
   )
 }
 
@@ -1534,137 +1494,6 @@ function StatsPage({ allStories }) {
   )
 }
 
-function PageHero({ tag, title, description, actions, headingLevel = 'h1' }) {
-  const Heading = headingLevel === 'h2' ? 'h2' : 'h1'
-
-  return (
-    <section className="section-block page-hero">
-      <div className="page-hero__content">
-        <p className="section-tag">{tag}</p>
-        <Heading>{title}</Heading>
-        <p className="page-hero__lead">{description}</p>
-      </div>
-
-      {actions ? <div className="page-hero__actions">{actions}</div> : null}
-    </section>
-  )
-}
-
-function ShareRow({ story }) {
-  const [copied, setCopied] = useState(false)
-  const [instaCopied, setInstaCopied] = useState(false)
-  const storyPath = `/noticia/${encodeURIComponent(story.id)}`
-  const url = `${siteUrl}${storyPath}`
-  const text = `${story.title} — El Bon Diari`
-  const enc = encodeURIComponent
-
-  const targets = [
-    {
-      key: 'whatsapp',
-      label: 'WhatsApp',
-      href: `https://api.whatsapp.com/send?text=${enc(`${text}\n${url}`)}`,
-    },
-    {
-      key: 'telegram',
-      label: 'Telegram',
-      href: `https://t.me/share/url?url=${enc(url)}&text=${enc(text)}`,
-    },
-    {
-      key: 'x',
-      label: 'X',
-      href: `https://twitter.com/intent/tweet?text=${enc(text)}&url=${enc(url)}`,
-    },
-    {
-      key: 'facebook',
-      label: 'Facebook',
-      href: `https://www.facebook.com/sharer/sharer.php?u=${enc(url)}`,
-    },
-    {
-      key: 'linkedin',
-      label: 'LinkedIn',
-      href: `https://www.linkedin.com/sharing/share-offsite/?url=${enc(url)}`,
-    },
-    {
-      key: 'bluesky',
-      label: 'Bluesky',
-      href: `https://bsky.app/intent/compose?text=${enc(`${text} ${url}`)}`,
-    },
-    {
-      key: 'mastodon',
-      label: 'Mastodont.cat',
-      href: `https://mastodont.cat/share?text=${enc(`${text} ${url}`)}`,
-    },
-  ]
-
-  function copyLink(event) {
-    event.preventDefault()
-    if (typeof navigator === 'undefined' || !navigator.clipboard) return
-    navigator.clipboard
-      .writeText(url)
-      .then(() => {
-        setCopied(true)
-        setTimeout(() => setCopied(false), 2000)
-      })
-      .catch(() => {})
-  }
-
-  // Instagram no permet compartir enllaços directament des de web. En
-  // mòbil intentem el menú nadiu (share() de Web Share API); en desktop
-  // copiem l'enllaç i avisem perquè l'enganxin a la bio o als Stories.
-  async function shareInstagram(event) {
-    event.preventDefault()
-    if (typeof navigator !== 'undefined' && navigator.share) {
-      try {
-        await navigator.share({ title: text, text, url })
-        return
-      } catch {
-        // Si l'usuari cancel·la o el navegador no admet share, caiem al fallback.
-      }
-    }
-    if (typeof navigator !== 'undefined' && navigator.clipboard) {
-      try {
-        await navigator.clipboard.writeText(url)
-        setInstaCopied(true)
-        setTimeout(() => setInstaCopied(false), 3500)
-      } catch {
-        // ignored
-      }
-    }
-  }
-
-  return (
-    <div className="share-row" aria-label="Compartir aquesta notícia">
-      <span className="share-row__label">Comparteix:</span>
-      {targets.map((target) => (
-        <a
-          key={target.key}
-          className={`share-row__chip share-row__chip--${target.key}`}
-          href={target.href}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          {target.label}
-        </a>
-      ))}
-      <button
-        type="button"
-        className="share-row__chip share-row__chip--instagram"
-        onClick={shareInstagram}
-        aria-label="Compartir a Instagram (obre el menú nadiu o copia l'enllaç)"
-      >
-        {instaCopied ? 'Enllaç copiat per a Instagram ✓' : 'Instagram'}
-      </button>
-      <button
-        type="button"
-        className="share-row__chip share-row__chip--copy"
-        onClick={copyLink}
-      >
-        {copied ? 'Enllaç copiat ✓' : 'Copia enllaç'}
-      </button>
-    </div>
-  )
-}
-
 function MostReadSection({ allStories, onNavigate }) {
   const [topStories, setTopStories] = useState(null)
   const [status, setStatus] = useState('loading')
@@ -2055,33 +1884,6 @@ function ArchivePage({ archiveStories, lastRefreshLabel, onNavigate }) {
         )}
       </section>
     </>
-  )
-}
-
-function NotFoundPage({ onNavigate }) {
-  return (
-    <section className="section-block not-found">
-      <p className="section-tag">404 editorial</p>
-      <h2>Aquesta pàgina no existeix dins del diari.</h2>
-      <p>
-        Potser l’enllaç ha caducat, o bé la notícia encara no forma part
-        d’aquesta edició.
-      </p>
-      <a
-        className="button button--primary"
-        href="/"
-        onClick={(event) => {
-          if (!canInterceptNavigation(event)) {
-            return
-          }
-
-          event.preventDefault()
-          onNavigate('/')
-        }}
-      >
-        Tornar a la portada
-      </a>
-    </section>
   )
 }
 
