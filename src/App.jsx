@@ -234,8 +234,18 @@ const editorialSections = [
     label: 'Món digital',
     description:
       'Tecnologia, ciència aplicada i eines digitals que poden fer la vida més fàcil.',
-    categories: ['Món digital', 'Ciència'],
-    keywords: ['tecnologia', 'digital', 'ia', 'intel·ligència artificial', 'app'],
+    categories: ['Tecnologia', 'Món digital', 'Ciència'],
+    keywords: [
+      'intel·ligència artificial',
+      'tecnologia',
+      'tecnològic',
+      'ciberseguretat',
+      'programari',
+      'robòtica',
+      'algoritme',
+      'videojoc',
+      'xarxes socials',
+    ],
   },
   {
     id: 'salut',
@@ -274,8 +284,8 @@ const editorialSections = [
     label: 'Internacional',
     description:
       'Acords, processos i bones notícies de fora que també ens afecten.',
-    categories: ['Internacional'],
-    keywords: ['onu', 'unió europea', 'acord', 'pau', 'internacional', 'global'],
+    categories: ['Internacional', 'Món', 'Europa'],
+    keywords: ['onu', 'unió europea', 'internacional'],
   },
 ]
 
@@ -596,6 +606,18 @@ function normalizeSectionText(value) {
     .toLowerCase()
 }
 
+// Comprova que la paraula clau aparegui com a PARAULA SENCERA, no com a
+// fragment. Abans es feia `text.includes('ia')`, i "ia" sortia dins de
+// "notícia", "família", "Iran"... i embrutava les seccions. Els límits són
+// qualsevol caràcter que no sigui lletra (\p{L}, amb accents inclosos).
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+function matchesWholeWord(text, keyword) {
+  const re = new RegExp(`(^|[^\\p{L}])${escapeRegExp(keyword)}([^\\p{L}]|$)`, 'iu')
+  return re.test(text)
+}
+
 function getStorySection(story) {
   const category = normalizeSectionText(story.category)
   const text = [
@@ -617,7 +639,7 @@ function getStorySection(story) {
       ),
     ) ??
     editorialSections.find((section) =>
-      section.keywords.some((keyword) => text.includes(keyword)),
+      section.keywords.some((keyword) => matchesWholeWord(text, keyword)),
     ) ??
     fallbackSection
   )
