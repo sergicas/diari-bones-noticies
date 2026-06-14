@@ -253,7 +253,10 @@ const editorialSections = [
     description:
       'Prevenció, cures i recerca mèdica explicades des del seu benefici social.',
     categories: ['Salut'],
-    keywords: ['salut', 'hospital', 'recerca', 'prevenció', 'cura'],
+    // 'cura' es va treure: en castellà vol dir "capellà" i filava notícies de
+    // successos cap a Salut (cas "disfrazados de monja y cura"). El substituïm
+    // per termes mèdics inequívocs.
+    keywords: ['salut', 'hospital', 'sanitat', 'metge', 'vacuna', 'pacient', 'prevenció'],
   },
   {
     id: 'medi-ambient',

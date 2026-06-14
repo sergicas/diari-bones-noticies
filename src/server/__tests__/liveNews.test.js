@@ -78,6 +78,15 @@ describe('passesEditorialFilter — castellà', () => {
     expect(passesEditorialFilter("Dirigentes del PSOE piden que se querelle", 'es').passes).toBe(false)
   })
 
+  it('descarta successos de delinqüència (regression "banda del Vaticano")', () => {
+    const text =
+      'Dios no estuvo de su lado: la banda del Vaticano cae tras un mes ' +
+      'frenético de atracos y disfraces. La carrera delictiva de un grupo que ' +
+      'asaltaba joyerías en Madrid acaba con dos de ellos disfrazados de monja ' +
+      'y cura. Tenían antecedentes por hurtos y avanzaron en su escalada criminal'
+    expect(passesEditorialFilter(text, 'es').passes).toBe(false)
+  })
+
   it('descarta el mateix terme en majúscules i minúscules', () => {
     expect(passesEditorialFilter("LOGRA EL ÉXITO HISTÓRICO", 'es').passes).toBe(true)
     expect(passesEditorialFilter("ASESINATO EN PLENA CALLE TRAS LOGRO HISTÓRICO", 'es').passes).toBe(false)

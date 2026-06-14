@@ -96,6 +96,9 @@ const editorialDictionaries = {
       'prohibeix', 'rebuig', 'residual', 'residu', 'pesta', 'presó',
       'robatori', 'sospitos', 'tremol', 'vampir', 'víctima', 'vaga',
       'violència', 'odi', 'atemptat', 'terrorisme', 'terrorista',
+      // Successos i delinqüència (paral·lel al castellà).
+      'atracament', 'atracaments', 'furt', 'furts', 'delicte', 'delictiu',
+      'lladre', 'lladres', 'criminal', 'estafa',
       // Verbs de mort i agressió (els substantius ja hi eren)
       'matar', 'mata ', 'maten ', 'matada', 'matades', 'matat', 'matats',
       'assassina ', 'assassinen', 'apunyala', 'apunyalen', 'apunyalat',
@@ -146,6 +149,10 @@ const editorialDictionaries = {
       'huelga', 'violencia', 'odio', 'atentado', 'terror', 'terrorista',
       'narcotráfico', 'narco', 'mafia', 'cartel', 'asalto', 'tiroteo',
       'masacre', 'genocidio', 'matar', 'mata ', 'matan', 'mató',
+      // Successos i delinqüència (faltaven variants: cas "banda del Vaticano").
+      // Evitem 'atraca/atracar' perquè també vol dir amarrar un vaixell.
+      'atraco', 'atracos', 'atracaron', 'delito', 'delitos', 'delictiv',
+      'hurto', 'hurtos', 'criminal', 'ladrón', 'ladrones', 'estafa', 'robaron',
       // Mercat esportiu (fichajes), publicitat i contingut patrocinat
       'fichaje', 'fichajes', 'ficha por', 'fichar por', 'fichado por',
       'millones por', 'millones de euros por', 'traspaso de',
@@ -192,6 +199,8 @@ const editorialDictionaries = {
       'hate', 'hateful', 'narco', 'mafia', 'cartel', 'overdose',
       'riot', 'riots', 'unrest', 'clash', 'clashes', 'hijack', 'shot dead',
       'shooting', 'shootings', 'stab', 'stabbing', 'invasion', 'invaded',
+      'heist', 'burglary', 'burglar', 'theft', 'thief', 'thieves',
+      'mugging', 'looting',
       'troops', 'crashes', 'crashed', 'tragedy', 'tragic', 'famine',
       'starvation', 'epidemic', 'pandemic', 'outbreak',
       // Sports transfers, advertising, sponsored podcast content
@@ -229,6 +238,7 @@ const editorialDictionaries = {
       'incendie', 'urgence', 'drame', 'dramatique', 'ravage', 'séisme',
       'grève', 'haine', 'raid', 'meurtre', 'fusillade', 'explosion',
       'catastrophe', 'tragique', 'tragédie', 'invasion', 'famine',
+      'braquage', 'cambriolage', 'voleur', 'escroquerie', 'délit', 'criminel',
       // Verbes de mort, violence, fin brutale
       'tue ', 'tué', 'tués', 'tuent', 'achève', 'achevé', 'liquide',
       'poignardé', 'poignardée', 'agresse', 'agressé', 'agression',
