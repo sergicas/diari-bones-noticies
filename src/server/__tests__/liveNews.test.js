@@ -93,6 +93,25 @@ describe('passesEditorialFilter — castellà', () => {
   })
 })
 
+describe('passesEditorialFilter — actualitat tensa (no és "bona notícia")', () => {
+  it('descarta trucades d\'emergència filtrades (cas Andic al 112)', () => {
+    const text = 'Filtren la trucada de Jonathan Andic al 112: Necessito ajuda, el meu ' +
+      'pare ha caigut. El pèrit diu que la conversa demostra la desesperació del fill'
+    expect(passesEditorialFilter(text, 'ca').passes).toBe(false)
+  })
+
+  it('descarta política d\'exclusió i odi (extrema dreta, fonamentalisme)', () => {
+    const text = "El PP català copia l'extrema dreta en immigració: defensa l'expulsió " +
+      "d'immigrants irregulars que delinqueixin i alerta del fonamentalisme islàmic"
+    expect(passesEditorialFilter(text, 'ca').passes).toBe(false)
+    expect(passesEditorialFilter("La extrema derecha gana terreno con su discurso xenófobo", 'es').passes).toBe(false)
+  })
+
+  it('descarta atacs polítics i difamació (smear/marred)', () => {
+    expect(passesEditorialFilter("UFC fights at White House marred by smear aimed at the former first lady", 'en').passes).toBe(false)
+  })
+})
+
 describe('passesEditorialFilter — anglès', () => {
   it('deixa passar peça positiva en anglès', () => {
     expect(passesEditorialFilter("Scientists achieve a breakthrough in cancer research", 'en').passes).toBe(true)

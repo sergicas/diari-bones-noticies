@@ -99,6 +99,10 @@ const editorialDictionaries = {
       // Successos i delinqüència (paral·lel al castellà).
       'atracament', 'atracaments', 'furt', 'furts', 'delicte', 'delictiu',
       'lladre', 'lladres', 'criminal', 'estafa',
+      // Actualitat tensa que no és "bona notícia": trucades d'emergència
+      // filtrades i política d'exclusió/odi (casos colats el 15/06/2026).
+      'al 112', 'desesperació', 'extrema dreta', 'fonamentalisme',
+      'delinqu', 'xenof', 'xenòf',
       // Verbs de mort i agressió (els substantius ja hi eren)
       'matar', 'mata ', 'maten ', 'matada', 'matades', 'matat', 'matats',
       'assassina ', 'assassinen', 'apunyala', 'apunyalen', 'apunyalat',
@@ -153,6 +157,9 @@ const editorialDictionaries = {
       // Evitem 'atraca/atracar' perquè també vol dir amarrar un vaixell.
       'atraco', 'atracos', 'atracaron', 'delito', 'delitos', 'delictiv',
       'hurto', 'hurtos', 'criminal', 'ladrón', 'ladrones', 'estafa', 'robaron',
+      // Actualitat tensa: emergències filtrades i política d'exclusió/odi.
+      'extrema derecha', 'fundamentalismo', 'delincu', 'delinqu', 'xenófob',
+      'xenofob', 'desesperación',
       // Mercat esportiu (fichajes), publicitat i contingut patrocinat
       'fichaje', 'fichajes', 'ficha por', 'fichar por', 'fichado por',
       'millones por', 'millones de euros por', 'traspaso de',
@@ -201,6 +208,8 @@ const editorialDictionaries = {
       'shooting', 'shootings', 'stab', 'stabbing', 'invasion', 'invaded',
       'heist', 'burglary', 'burglar', 'theft', 'thief', 'thieves',
       'mugging', 'looting',
+      // Tense politics / smears that aren't constructive news.
+      'smear', 'smears', 'marred', 'slur', 'slurs', 'far-right',
       'troops', 'crashes', 'crashed', 'tragedy', 'tragic', 'famine',
       'starvation', 'epidemic', 'pandemic', 'outbreak',
       // Sports transfers, advertising, sponsored podcast content
@@ -239,6 +248,7 @@ const editorialDictionaries = {
       'grève', 'haine', 'raid', 'meurtre', 'fusillade', 'explosion',
       'catastrophe', 'tragique', 'tragédie', 'invasion', 'famine',
       'braquage', 'cambriolage', 'voleur', 'escroquerie', 'délit', 'criminel',
+      'extrême droite', 'délinqu', 'xénophob',
       // Verbes de mort, violence, fin brutale
       'tue ', 'tué', 'tués', 'tuent', 'achève', 'achevé', 'liquide',
       'poignardé', 'poignardée', 'agresse', 'agressé', 'agression',
