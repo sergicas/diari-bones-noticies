@@ -39,6 +39,14 @@ const rssFeeds = [
   { name: 'elDiario', url: 'https://www.eldiario.es/rss/', language: 'es', defaultCategory: 'Espanya' },
   { name: 'RTVE', url: 'https://www.rtve.es/rss/temas_noticias.xml', language: 'es', defaultCategory: 'Espanya' },
 
+  // Feeds PER SECCIÓ per alimentar Cultura/Tecnologia/Ciència (els de 3cat van
+  // quedar trencats el 2026: ara són pàgines HTML, no RSS). Aquests sí que
+  // donen inflow constant a les seccions que abans es quedaven seques.
+  { name: 'El País Cultura', url: 'https://feeds.elpais.com/mrss-s/pages/ep/site/elpais.com/section/cultura/portada', language: 'es', defaultCategory: 'Cultura', forceCategory: true },
+  { name: 'El País Tecnologia', url: 'https://feeds.elpais.com/mrss-s/pages/ep/site/elpais.com/section/tecnologia/portada', language: 'es', defaultCategory: 'Tecnologia', forceCategory: true },
+  { name: 'El País Ciència', url: 'https://feeds.elpais.com/mrss-s/pages/ep/site/elpais.com/section/ciencia/portada', language: 'es', defaultCategory: 'Ciència', forceCategory: true },
+  { name: 'ARA Cultura', url: 'https://www.ara.cat/rss/cultura', language: 'ca', defaultCategory: 'Cultura', forceCategory: true },
+
   // Anglès — diaris internacionals
   { name: 'BBC', url: 'https://feeds.bbci.co.uk/news/world/rss.xml', language: 'en', defaultCategory: 'Món' },
   { name: 'CNN', url: 'http://rss.cnn.com/rss/edition.rss', language: 'en', defaultCategory: 'Món' },
@@ -83,6 +91,11 @@ const editorialDictionaries = {
       'positiu', 'positiva', 'històric', 'històrica',
       'aprova', 'aprovat', 'aprovada', 'aprovació',
       'aporta', 'aporten', 'aposta', 'aposten',
+      // Cultura i ciència (contingut constructiu que sovint no diu "guanya"):
+      'exposició', 'novel·la', 'pel·lícula', 'llibre', 'museu', 'festival',
+      'concert', 'estudi', 'troballa', 'mostra', 'documental', 'biografia',
+      'poemari', 'disc', 'retrospectiva', 'estrena', 'recital',
+      'nobel', 'avenç', 'invent', 'patent', 'vacuna', 'renovable', 'prototip',
     ],
     negative: [
       'abus', 'acusaci', 'assassinat', 'addicci', 'budells', 'càncer',
@@ -142,6 +155,11 @@ const editorialDictionaries = {
       'reviven', 'positivo', 'positiva', 'histórico', 'histórica',
       'aprueba', 'aprobado', 'aprobada', 'aprobación', 'aporta',
       'aportan', 'apuesta', 'apuestan',
+      // Cultura y ciencia (contenido constructivo sin "gana/récord"):
+      'exposición', 'novela', 'película', 'libro', 'museo', 'festival',
+      'concierto', 'estudio', 'hallazgo', 'muestra', 'documental', 'biografía',
+      'poemario', 'disco', 'retrospectiva', 'resucita', 'recital',
+      'nobel', 'avance', 'invento', 'patente', 'vacuna', 'renovable', 'prototipo',
     ],
     negative: [
       'abuso', 'asesinato', 'asesina', 'adicción', 'ataque', 'ataques',
@@ -197,6 +215,10 @@ const editorialDictionaries = {
       'historic', 'approves', 'approved', 'approval', 'contributes',
       'launches', 'launched', 'celebrated', 'partnership', 'partnerships',
       'recovery', 'recovers',
+      // Culture and science (constructive content without "wins/record"):
+      'exhibition', 'novel', 'film', 'book', 'museum', 'festival', 'concert',
+      'study', 'discovery', 'documentary', 'biography', 'retrospective',
+      'nobel', 'patent', 'invention', 'vaccine', 'renewable', 'prototype',
     ],
     negative: [
       'war', 'wars', 'killed', 'kills', 'killing', 'killings', 'death',
@@ -640,7 +662,12 @@ function normalizeFeedItem(block, feed) {
     parseRfc822Date(extractTag(block, 'published')) ||
     parseRfc822Date(extractTag(block, 'updated'))
   const imageUrl = pickImageForItem(block)
-  const category = extractPrimaryCategory(block, feed.defaultCategory)
+  // Per als feeds dedicats a una secció (forceCategory) confiem en la secció
+  // del feed, no en l'etiqueta de l'article (que sovint la desvia a Espanya,
+  // Salut…). Així Cultura/Tecnologia/Ciència s'omplen de debò.
+  const category = feed.forceCategory
+    ? feed.defaultCategory
+    : extractPrimaryCategory(block, feed.defaultCategory)
 
   if (!title || !link || !publishedAt || !imageUrl) return null
 
@@ -826,6 +853,40 @@ export async function readEditorialStats(kv) {
   }
 }
 
+// Seccions editorials de poc volum que abans es quedaven seques perquè les
+// categories grans (Espanya, Societat…) s'enduien totes les places.
+const guaranteedCategories = [
+  'Cultura', 'Tecnologia', 'Ciència', 'Salut', 'Medi ambient', 'Educació',
+]
+
+// Garanteix que cada secció de la llista, si té alguna peça disponible al
+// conjunt, tingui com a mínim una notícia al lot final. Si cal fer lloc, treu
+// l'última peça d'una categoria sobre-representada (mai buida una secció).
+function ensureCategoryCoverage(capped, pool, limit) {
+  const result = [...capped]
+  const present = new Set(result.map((s) => s.category))
+  for (const cat of guaranteedCategories) {
+    if (present.has(cat)) continue
+    const candidate = pool.find(
+      (s) => s.category === cat && !result.some((r) => r.url === s.url),
+    )
+    if (!candidate) continue
+    if (result.length >= limit) {
+      const counts = {}
+      result.forEach((s) => { counts[s.category] = (counts[s.category] || 0) + 1 })
+      let removeIdx = -1
+      for (let i = result.length - 1; i >= 0; i--) {
+        if (counts[result[i].category] > 1) { removeIdx = i; break }
+      }
+      if (removeIdx === -1) continue
+      result.splice(removeIdx, 1)
+    }
+    result.push(candidate)
+    present.add(cat)
+  }
+  return result
+}
+
 export async function getLiveNewsPayload(kv, { force = false } = {}) {
   let cached = null
   try {
@@ -887,9 +948,9 @@ export async function getLiveNewsPayload(kv, { force = false } = {}) {
     // Primer cop o sense cache: el que hi hagi, marcat com a fresh (tot és nou).
     preDiversity = allStories.map((story) => ({ ...story, isFresh: true }))
   }
-  const finalStories = applyDiversityCap(
+  const finalStories = ensureCategoryCoverage(
+    applyDiversityCap(preDiversity, maxStoriesPerSource, targetStoryLimit),
     preDiversity,
-    maxStoriesPerSource,
     targetStoryLimit,
   )
 
