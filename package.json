@@ -12,6 +12,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "refresh": "node scripts/refresh-news.mjs",
+    "seccions": "node scripts/renova-seccions.mjs",
     "backup": "node scripts/backup-kv.mjs",
     "sitemap": "node scripts/generate-sitemap.mjs",
     "test": "vitest run",
