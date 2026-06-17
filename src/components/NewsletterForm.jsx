@@ -61,10 +61,10 @@ export default function NewsletterForm({ defaultLanguage = 'ca' }) {
     <section className="newsletter-block" aria-labelledby="newsletter-heading">
       <div className="newsletter-block__inner">
         <p className="newsletter-block__kicker">El butlletí</p>
-        <h2 id="newsletter-heading">Bones notícies cada diumenge al matí</h2>
+        <h2 id="newsletter-heading">Les bones notícies, cada matí a les 7</h2>
         <p className="newsletter-block__intro">
-          Una selecció breu i curada de les millors peces de la setmana, sense soroll ni publicitat.
-          T'arriba al correu cada diumenge a primera hora. Et pots donar de baixa en qualsevol moment
+          Una selecció breu i curada de les millors notícies del dia, sense soroll ni publicitat.
+          T'arriba al correu cada matí a les 7. Et pots donar de baixa en qualsevol moment
           amb un sol clic.
         </p>
         {typeof subscriberCount === 'number' && subscriberCount > 0 ? (

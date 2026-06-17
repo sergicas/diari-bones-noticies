@@ -110,6 +110,13 @@ describe('passesEditorialFilter — actualitat tensa (no és "bona notícia")', 
   it('descarta atacs polítics i difamació (smear/marred)', () => {
     expect(passesEditorialFilter("UFC fights at White House marred by smear aimed at the former first lady", 'en').passes).toBe(false)
   })
+
+  it('descarta insults polítics, jutjats i sancions (casos del 17/06)', () => {
+    expect(passesEditorialFilter("Feijóo llama cobarde a Sánchez y asegura que no es un demócrata tras el éxito", 'es').passes).toBe(false)
+    expect(passesEditorialFilter("El PSOE considera frau de llei les esmenes que avancen al Parlament", 'ca').passes).toBe(false)
+    expect(passesEditorialFilter("El G-7 acuerda reforzar las sanciones a Rusia pese al acuerdo", 'es').passes).toBe(false)
+    expect(passesEditorialFilter("Zapatero arriba a l'Audiència Nacional per declarar, una fita judicial", 'ca').passes).toBe(false)
+  })
 })
 
 describe('passesEditorialFilter — anglès', () => {

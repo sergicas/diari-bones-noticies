@@ -12,7 +12,7 @@ import {
   handleUnsubscribe,
   handleConfirm,
   handleNewsletterStats,
-  sendWeeklyDigest,
+  sendDailyDigest,
 } from './server/newsletter.js'
 import { renderStoryPage } from './server/storyMeta.js'
 import { announceFreshStories } from './server/social.js'
@@ -147,11 +147,13 @@ export default {
   },
 
   async scheduled(event, env, ctx) {
-    // El cron del butlletí (diumenges 07:00 UTC) envia el digest setmanal.
-    // La resta de crons refresquen el radar de notícies.
-    if (event.cron === '0 7 * * SUN') {
+    // El cron del butlletí (cada dia 05:00 UTC = 07:00 a Madrid) refresca el
+    // radar i envia el digest diari amb les bones notícies del dia.
+    // La resta de crons només refresquen el radar de notícies.
+    if (event.cron === '0 5 * * *') {
       ctx.waitUntil(
-        sendWeeklyDigest(env)
+        getLiveNewsPayload(env.LIVE_NEWS_KV, { force: true })
+          .then(() => sendDailyDigest(env))
           .then((r) => console.log(`[cron][newsletter] sent=${r.sent} failed=${r.failed} logged=${r.logged}`))
           .catch((err) => console.error('[cron][newsletter] error', err)),
       )

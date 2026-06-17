@@ -25,7 +25,8 @@
     // 0 */4 * * * → refresc del radar cada 4h (02, 06, 10, 14, 18, 22 CEST)
     // 0 6 * * *   → refresc matinal extra (08:00 CEST), per agafar les
     //              actualitzacions de l'edició diària de redaccions catalanes.
-    // 0 7 * * 0   → butlletí setmanal, diumenges a les 09:00 CEST.
-    "crons": ["0 */4 * * *", "0 6 * * *", "0 7 * * SUN"]
+    // 0 5 * * *   → butlletí DIARI: cada matí a les 07:00 CEST (refresca el
+    //              radar i envia el correu amb les bones notícies del dia).
+    "crons": ["0 */4 * * *", "0 6 * * *", "0 5 * * *"]
   }
 }

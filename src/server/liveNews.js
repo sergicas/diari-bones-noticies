@@ -103,6 +103,10 @@ const editorialDictionaries = {
       // filtrades i política d'exclusió/odi (casos colats el 15/06/2026).
       'al 112', 'desesperació', 'extrema dreta', 'fonamentalisme',
       'delinqu', 'xenof', 'xenòf',
+      // Política de conflicte/insult, jutjats i sancions (colats el 17/06).
+      'covard', 'no és demòcrata', 'frau de llei', 'audiència nacional',
+      'detindr', 'detencions', 'sancions', 'rússia', 'escalfament',
+      'més càlid', 'cobejada', 'imputaci',
       // Verbs de mort i agressió (els substantius ja hi eren)
       'matar', 'mata ', 'maten ', 'matada', 'matades', 'matat', 'matats',
       'assassina ', 'assassinen', 'apunyala', 'apunyalen', 'apunyalat',
@@ -160,6 +164,9 @@ const editorialDictionaries = {
       // Actualitat tensa: emergències filtrades i política d'exclusió/odi.
       'extrema derecha', 'fundamentalismo', 'delincu', 'delinqu', 'xenófob',
       'xenofob', 'desesperación',
+      // Política de conflicto/insulto, juzgados y sanciones.
+      'cobarde', 'no es un demócrata', 'no es demócrata', 'fraude de ley',
+      'audiencia nacional', 'sanciones', 'rusia', 'calentamiento',
       // Mercat esportiu (fichajes), publicitat i contingut patrocinat
       'fichaje', 'fichajes', 'ficha por', 'fichar por', 'fichado por',
       'millones por', 'millones de euros por', 'traspaso de',
@@ -210,6 +217,8 @@ const editorialDictionaries = {
       'mugging', 'looting',
       // Tense politics / smears that aren't constructive news.
       'smear', 'smears', 'marred', 'slur', 'slurs', 'far-right',
+      'exploit', 'exploits', 'sanctions', 'tax break',
+      'strikes on', 'airstrike', 'air strike', 'lebanon', 'gaza', 'live updates',
       'troops', 'crashes', 'crashed', 'tragedy', 'tragic', 'famine',
       'starvation', 'epidemic', 'pandemic', 'outbreak',
       // Sports transfers, advertising, sponsored podcast content
@@ -868,6 +877,10 @@ export async function getLiveNewsPayload(kv, { force = false } = {}) {
     // s'havien mostrat a passades anteriors.
     const carryover = cached.stories
       .filter((s) => !freshUrlSet.has(s.url))
+      // Revalidem contra el filtre editorial ACTUAL: si l'hem endurit, les
+      // peces velles que ara no passen el tall (p. ex. guerra, política tensa)
+      // cauen aquí en lloc d'arrossegar-se eternament pel cache.
+      .filter((s) => passesEditorialFilter(`${s.title} ${s.summary || ''}`, s.language).passes)
       .map(({ isFresh: _isFresh, ...rest }) => rest)
     preDiversity = [...freshStories, ...carryover]
   } else {

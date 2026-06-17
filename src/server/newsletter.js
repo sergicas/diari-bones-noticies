@@ -1,11 +1,11 @@
-// Butlletí setmanal de bondiari.com.
+// Butlletí DIARI de bondiari.com (cada matí a les 7:00, hora de Madrid).
 // - Double opt-in: la subscripció crea un record `status: 'pending'` i
 //   envia un correu de confirmació. Només els confirmats reben el digest.
 // - Rate-limit: 5 subscripcions/hora per IP i 50/hora globals (a STATS_KV
 //   amb TTL d'una hora). Protegeix contra spammers i atacs distribuïts.
 // - Emmagatzematge: STATS_KV amb prefix `subscriber:<token>`.
-// - Cron setmanal (configurat a wrangler.jsonc) que llegeix els subscriptors
-//   confirmats, composa el digest HTML i l'envia per MailerSend.
+// - Cron diari (configurat a wrangler.jsonc) que llegeix els subscriptors
+//   confirmats, composa el digest HTML i l'envia per Resend.
 
 const subscriberPrefix = 'subscriber:'
 const rateLimitIpPrefix = 'rl:subscribe:ip:'
@@ -200,7 +200,7 @@ export async function handleConfirm(request, env) {
     return htmlResponse(
       confirmationPageHtml({
         title: 'Ja estàs confirmat',
-        body: 'La teva adreça ja era a la llista de confirmats. Diumenge a primera hora rebràs el primer butlletí.',
+        body: 'La teva adreça ja era a la llista de confirmats. Cada matí a les 7 rebràs les bones notícies del dia.',
       }),
     )
   }
@@ -213,7 +213,7 @@ export async function handleConfirm(request, env) {
   return htmlResponse(
     confirmationPageHtml({
       title: 'Confirmat. Benvingut a Bondiari.',
-      body: 'Ja estàs a la llista. Diumenge a les 9 del matí et trobaràs el primer correu amb les bones notícies de la setmana.',
+      body: 'Ja estàs a la llista. Cada matí a les 7 et trobaràs un correu amb les bones notícies del dia.',
     }),
   )
 }
@@ -278,17 +278,17 @@ export async function handleUnsubscribe(request, env) {
 // --- Plantilles HTML d'email -----------------------------------------------
 
 const greetings = {
-  ca: { hello: 'Bon diumenge', intro: 'Una tria de bones notícies de la setmana al diari constructiu.', cta: 'Llegir més a bondiari.com', unsub: 'Baixa del butlletí' },
-  es: { hello: 'Buen domingo', intro: 'Una selección de buenas noticias de la semana en el diario constructivo.', cta: 'Leer más en bondiari.com', unsub: 'Baja del boletín' },
-  en: { hello: 'Sunday roundup', intro: 'A handful of good news from the constructive paper this week.', cta: 'Read more at bondiari.com', unsub: 'Unsubscribe' },
-  fr: { hello: 'Bon dimanche', intro: 'Une sélection de bonnes nouvelles de la semaine au journal constructif.', cta: 'Lire plus sur bondiari.com', unsub: 'Se désinscrire' },
+  ca: { hello: 'Bon dia', intro: "Les bones notícies d'avui al diari constructiu, perquè comencis el dia amb llum.", cta: 'Llegir més a bondiari.com', unsub: 'Baixa del butlletí' },
+  es: { hello: 'Buenos días', intro: 'Las buenas noticias de hoy en el diario constructivo, para empezar el día con luz.', cta: 'Leer más en bondiari.com', unsub: 'Baja del boletín' },
+  en: { hello: 'Good morning', intro: "Today's good news from the constructive paper, to start the day with light.", cta: 'Read more at bondiari.com', unsub: 'Unsubscribe' },
+  fr: { hello: 'Bonjour', intro: "Les bonnes nouvelles d'aujourd'hui au journal constructif, pour bien commencer la journée.", cta: 'Lire plus sur bondiari.com', unsub: 'Se désinscrire' },
 }
 
 const confirmationCopy = {
   ca: {
     subject: 'Confirma la subscripció · El Bon Diari',
     hello: 'Falta un pas: confirma el teu correu',
-    intro: 'Hem rebut una sol·licitud de subscripció al butlletí de Bondiari amb aquesta adreça. Si ets tu, confirma-la amb el botó de sota i començaràs a rebre el digest cada diumenge al matí.',
+    intro: 'Hem rebut una sol·licitud de subscripció al butlletí de Bondiari amb aquesta adreça. Si ets tu, confirma-la amb el botó de sota i començaràs a rebre les bones notícies cada matí a les 7.',
     button: 'Confirmar la subscripció',
     note: 'Si no t\'hi has subscrit tu, no facis res — l\'enllaç caduca i mai t\'arribarà cap més correu.',
     unsub: 'Donar-me de baixa',
@@ -296,7 +296,7 @@ const confirmationCopy = {
   es: {
     subject: 'Confirma la suscripción · El Bon Diari',
     hello: 'Falta un paso: confirma tu correo',
-    intro: 'Hemos recibido una solicitud de suscripción al boletín de Bondiari con esta dirección. Si eres tú, confírmala con el botón de abajo y empezarás a recibir el digest cada domingo por la mañana.',
+    intro: 'Hemos recibido una solicitud de suscripción al boletín de Bondiari con esta dirección. Si eres tú, confírmala con el botón de abajo y empezarás a recibir las buenas noticias cada mañana a las 7.',
     button: 'Confirmar la suscripción',
     note: 'Si no te has suscrito tú, no hagas nada — el enlace caduca y no recibirás ningún correo más.',
     unsub: 'Darme de baja',
@@ -304,7 +304,7 @@ const confirmationCopy = {
   en: {
     subject: 'Confirm your subscription · El Bon Diari',
     hello: 'One last step: confirm your email',
-    intro: 'We received a subscription request to the Bondiari newsletter with this address. If it was you, confirm with the button below and you will start getting the digest every Sunday morning.',
+    intro: 'We received a subscription request to the Bondiari newsletter with this address. If it was you, confirm with the button below and you will start getting the good news every morning at 7.',
     button: 'Confirm subscription',
     note: 'If you did not subscribe, just ignore this — the link expires and you will not get any more emails.',
     unsub: 'Unsubscribe',
@@ -312,7 +312,7 @@ const confirmationCopy = {
   fr: {
     subject: 'Confirmez votre abonnement · El Bon Diari',
     hello: 'Une dernière étape : confirmez votre adresse',
-    intro: 'Nous avons reçu une demande d\'abonnement à la newsletter Bondiari avec cette adresse. Si c\'est vous, confirmez avec le bouton ci-dessous et vous recevrez la sélection chaque dimanche matin.',
+    intro: 'Nous avons reçu une demande d\'abonnement à la newsletter Bondiari avec cette adresse. Si c\'est vous, confirmez avec le bouton ci-dessous et vous recevrez les bonnes nouvelles chaque matin à 7h.',
     button: 'Confirmer l\'abonnement',
     note: 'Si ce n\'est pas vous, ignorez ce message — le lien expire et vous ne recevrez plus rien.',
     unsub: 'Se désinscrire',
@@ -323,10 +323,10 @@ function subjectForLanguage(language, kind) {
   if (kind === 'confirm') {
     return (confirmationCopy[language] || confirmationCopy.ca).subject
   }
-  if (language === 'es') return 'Buenas noticias del domingo · El Bon Diari'
-  if (language === 'en') return "Sunday's good news · El Bon Diari"
-  if (language === 'fr') return 'Les bonnes nouvelles du dimanche · El Bon Diari'
-  return 'Bones notícies del diumenge · El Bon Diari'
+  if (language === 'es') return 'Las buenas noticias de hoy · El Bon Diari'
+  if (language === 'en') return "Today's good news · El Bon Diari"
+  if (language === 'fr') return 'Les bonnes nouvelles du jour · El Bon Diari'
+  return "Les bones notícies d'avui · El Bon Diari"
 }
 
 export function renderConfirmationEmail({ language = 'ca', confirmUrl, unsubscribeUrl }) {
@@ -417,9 +417,9 @@ async function sendWithResend({ apiKey, fromEmail, fromName, to, subject, html }
   return { ok: response.ok, status: response.status }
 }
 
-export async function sendWeeklyDigest(env) {
+export async function sendDailyDigest(env) {
   const cache = await env.LIVE_NEWS_KV.get('latest', 'json')
-  const stories = Array.isArray(cache?.stories) ? cache.stories.slice(0, 7) : []
+  const stories = Array.isArray(cache?.stories) ? cache.stories.slice(0, 6) : []
   if (stories.length === 0) {
     console.warn('[newsletter] No hi ha notícies al cache; saltem el digest.')
     return { sent: 0, skipped: true }
