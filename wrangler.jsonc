@@ -21,6 +21,8 @@
     { "binding": "LIVE_NEWS_KV", "id": "8dccac0ffa434f75b13ba6a7890646af" },
     { "binding": "STATS_KV", "id": "08a529af25eb41eca09d26276cba77d2" }
   ],
+  // Workers AI: segona capa del filtre editorial (jutja les notícies neutres).
+  "ai": { "binding": "AI" },
   "triggers": {
     // 0 */4 * * * → refresc del radar cada 4h (02, 06, 10, 14, 18, 22 CEST)
     // 0 6 * * *   → refresc matinal extra (08:00 CEST), per agafar les

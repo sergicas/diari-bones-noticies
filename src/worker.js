@@ -71,7 +71,7 @@ async function handleLiveNews(request, env) {
   try {
     const url = new URL(request.url)
     const force = url.searchParams.get('force') === '1'
-    const payload = await getLiveNewsPayload(env.LIVE_NEWS_KV, { force })
+    const payload = await getLiveNewsPayload(env.LIVE_NEWS_KV, { force, env })
     return new Response(JSON.stringify(payload), {
       status: 200,
       headers: {
@@ -94,7 +94,7 @@ async function handleLiveNews(request, env) {
 
 async function handleRefreshNews(request, env) {
   try {
-    const payload = await getLiveNewsPayload(env.LIVE_NEWS_KV, { force: true })
+    const payload = await getLiveNewsPayload(env.LIVE_NEWS_KV, { force: true, env })
     return jsonResponse({
       ok: true,
       count: payload.stories.length,
@@ -152,7 +152,7 @@ export default {
     // La resta de crons només refresquen el radar de notícies.
     if (event.cron === '0 5 * * *') {
       ctx.waitUntil(
-        getLiveNewsPayload(env.LIVE_NEWS_KV, { force: true })
+        getLiveNewsPayload(env.LIVE_NEWS_KV, { force: true, env })
           .then(() => sendDailyDigest(env))
           .then((r) => console.log(`[cron][newsletter] sent=${r.sent} failed=${r.failed} logged=${r.logged}`))
           .catch((err) => console.error('[cron][newsletter] error', err)),
@@ -160,7 +160,7 @@ export default {
       return
     }
     ctx.waitUntil(
-      getLiveNewsPayload(env.LIVE_NEWS_KV, { force: true })
+      getLiveNewsPayload(env.LIVE_NEWS_KV, { force: true, env })
         .then(async (p) => {
           console.log(`[cron] radar refrescat: ${p.stories.length} notícies`)
           // Publiquem les peces noves a Bluesky/Mastodon (si hi ha credencials).

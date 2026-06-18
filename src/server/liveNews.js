@@ -14,15 +14,11 @@ const targetStoryLimit = 30
 const maxStoriesPerSource = 5
 const collectionPoolSize = 80
 
-const sections = [
-  { url: 'https://www.3cat.cat/3catinfo/politica/', category: 'Política' },
-  { url: 'https://www.3cat.cat/3catinfo/societat/', category: 'Societat' },
-  { url: 'https://www.3cat.cat/3catinfo/cultura/', category: 'Cultura' },
-  { url: 'https://www.3cat.cat/3catinfo/esports/', category: 'Esports' },
-  { url: 'https://www.3cat.cat/3catinfo/salut/', category: 'Salut' },
-  { url: 'https://www.3cat.cat/3catinfo/medi-ambient/', category: 'Medi ambient' },
-  { url: 'https://www.3cat.cat/3catinfo/ciencia-i-tecnologia/', category: 'Món digital' },
-]
+// Els feeds per secció de 3cat van quedar TRENCATS el 2026 (ara són pàgines
+// HTML, no RSS): donaven 0 notícies i malgastaven una subpetició cadascun. Les
+// seccions s'alimenten ara dels feeds dedicats de rssFeeds (El País Cultura/
+// Tecnologia/Ciència, ARA Cultura, etc.).
+const sections = []
 
 const rssFeeds = [
   // Catalanes
@@ -675,10 +671,10 @@ function normalizeFeedItem(block, feed) {
   const summarySnippet = `${summarySource.slice(0, 180)}${summarySource.length > 180 ? '...' : ''}`
   if (looksLikeAdvertorial({ url: link, title, summary: summarySnippet })) return null
   const fullText = `${title} ${summarySource}`
-  const { passes, isPositive } = passesEditorialFilter(fullText, feed.language)
-  if (!passes) return null
+  const { passes, isPositive, isNegative } = passesEditorialFilter(fullText, feed.language)
+  if (isNegative) return null // clarament negativa (guerra, conflicte…): fora directament
 
-  return {
+  const story = {
     title,
     category,
     location: detectLocation(fullText.toLowerCase()),
@@ -696,6 +692,11 @@ function normalizeFeedItem(block, feed) {
     editorialVersion: liveEditorialVersion,
     publishedAt,
   }
+  // Neutra (cap paraula positiva ni negativa): no la llencem; la marquem perquè
+  // la segona capa d'IA decideixi si té un sentit constructiu (p. ex. un
+  // producte nou amb aplicacions positives). Si la IA no la rescata, no es publica.
+  if (!passes) story._needsAI = true
+  return story
 }
 
 async function collectFeedStories(feed) {
@@ -726,9 +727,97 @@ async function collectFeedStories(feed) {
   }
 }
 
+// --- Segona capa: rescat amb IA (Cloudflare Workers AI) --------------------
+// El filtre de paraules clau és ràpid però cec al sentit: rebutja notícies
+// NEUTRES (sense paraula positiva ni negativa) com l'anunci d'un producte nou,
+// encara que tingui aplicacions positives. Aquí una IA jutja aquests casos
+// ambigus i en rescata els que SÍ són bones notícies. El veredicte es desa a
+// KV per URL perquè no s'hagi de tornar a jutjar a cada refresc.
+
+const AI_MODEL = '@cf/meta/llama-3.2-3b-instruct'
+const aiVerdictsKey = 'ai-verdicts' // un sol registre KV amb TOTS els veredictes
+const aiVerdictTtlMs = 14 * 24 * 60 * 60 * 1000 // 14 dies
+const maxAiPerRun = 12 // crides NOVES per passada (per no petar el límit de subpeticions)
+
+const AI_SYSTEM = [
+  "Ets l'editor d'El Bon Diari, un diari que NOMÉS publica bones notícies:",
+  'històries constructives que reparen el món, ajuden la gent, mostren',
+  "progrés o avenços, o productes/idees amb aplicacions positives per a les",
+  "persones o el planeta. L'anunci d'un producte o tecnologia ÉS bona notícia",
+  "si té una aplicació beneficiosa concreta. NO és bona notícia: política de",
+  'conflicte o insults, successos, guerra, judicis, escàndols, declaracions',
+  "tenses, ni publicitat buida. Respon NOMÉS amb una paraula: SI o NO.",
+].join(' ')
+
+async function aiIsGoodNews(env, story) {
+  const out = await env.AI.run(AI_MODEL, {
+    max_tokens: 4,
+    messages: [
+      { role: 'system', content: AI_SYSTEM },
+      { role: 'user', content: `Títol: ${story.title}\nResum: ${story.summary || ''}\n\nÉs una bona notícia per a El Bon Diari?` },
+    ],
+  })
+  const text = String(out?.response || '').trim().toUpperCase()
+  return (text.startsWith('SI') || text.startsWith('SÍ') || text.startsWith('YES')) && !text.startsWith('NO')
+}
+
+// Rep les notícies neutres i en retorna les que la IA considera bones. Per no
+// petar el límit de subpeticions del Worker, TOTS els veredictes viuen en un sol
+// registre KV (una lectura + una escriptura per passada) i només es fan un màxim
+// de `maxAiPerRun` crides NOVES a la IA cada cop (la resta surten del cau; les
+// que no s'arribin a jutjar avui es jutgen en passades següents).
+async function aiRescueAmbiguous(env, ambiguous) {
+  if (!env?.AI || ambiguous.length === 0) return []
+  const kv = env.LIVE_NEWS_KV
+  let store
+  try {
+    store = (await kv.get(aiVerdictsKey, 'json')) || {}
+  } catch {
+    store = {}
+  }
+  const now = Date.now()
+  const rescued = []
+  let judged = 0
+  let dirty = false
+  // Gastem el sostre de crides noves en les notícies MÉS FRESQUES (les que es
+  // veuran a portada), no en les que ja són velles.
+  const cua = [...ambiguous].sort(
+    (a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime(),
+  )
+  for (const story of cua) {
+    const cached = store[story.url]
+    if (cached && now - cached.at < aiVerdictTtlMs) {
+      if (cached.v) rescued.push(story)
+      continue
+    }
+    if (judged >= maxAiPerRun) continue
+    try {
+      const good = await aiIsGoodNews(env, story)
+      store[story.url] = { v: good, at: now }
+      dirty = true
+      judged += 1
+      if (good) rescued.push(story)
+    } catch (error) {
+      console.warn('[ai] error jutjant', error?.message || error)
+    }
+  }
+  if (dirty) {
+    for (const url of Object.keys(store)) {
+      if (now - store[url].at > aiVerdictTtlMs) delete store[url]
+    }
+    try {
+      await kv.put(aiVerdictsKey, JSON.stringify(store))
+    } catch (error) {
+      console.warn('[ai] no s\'ha pogut desar el cau', error?.message)
+    }
+  }
+  console.log(`[ai] ambigus=${ambiguous.length} nous=${judged} rescatats=${rescued.length}`)
+  return rescued
+}
+
 // --- Recol·lecció combinada -----------------------------------------------
 
-export async function collectLivePositiveNews() {
+export async function collectLivePositiveNews(env) {
   const [sectionResults, feedResults] = await Promise.all([
     Promise.all(sections.map(collectSectionStories)),
     Promise.all(rssFeeds.map(collectFeedStories)),
@@ -752,11 +841,19 @@ export async function collectLivePositiveNews() {
     }
   }
 
-  const filtered = [...uniqueStories.values()]
-    .filter(
-      (story) =>
-        Date.now() - new Date(story.publishedAt).getTime() <= maxLiveStoryAgeMs,
-    )
+  // Notícies dins de termini.
+  const recents = [...uniqueStories.values()].filter(
+    (story) =>
+      Date.now() - new Date(story.publishedAt).getTime() <= maxLiveStoryAgeMs,
+  )
+
+  // Segona capa d'IA: les que han passat el filtre de paraules ja són bones;
+  // les neutres (_needsAI) les jutja la IA i en rescatem només les constructives.
+  const confirmed = recents.filter((story) => !story._needsAI)
+  const ambiguous = recents.filter((story) => story._needsAI)
+  const rescued = await aiRescueAmbiguous(env, ambiguous)
+
+  const filtered = [...confirmed, ...rescued]
     .sort(
       (left, right) =>
         right.editorialScore - left.editorialScore ||
@@ -766,6 +863,7 @@ export async function collectLivePositiveNews() {
     .map((story) => {
       const publicStory = { ...story }
       delete publicStory.editorialScore
+      delete publicStory._needsAI
       return publicStory
     })
     .slice(0, collectionPoolSize)
@@ -887,7 +985,7 @@ function ensureCategoryCoverage(capped, pool, limit) {
   return result
 }
 
-export async function getLiveNewsPayload(kv, { force = false } = {}) {
+export async function getLiveNewsPayload(kv, { force = false, env } = {}) {
   let cached = null
   try {
     cached = await getCachedPayload(kv)
@@ -903,7 +1001,7 @@ export async function getLiveNewsPayload(kv, { force = false } = {}) {
     }
   }
 
-  const { stories: allStories, reviewed: reviewedThisPass } = await collectLivePositiveNews()
+  const { stories: allStories, reviewed: reviewedThisPass } = await collectLivePositiveNews(env)
   const seenEntries = await loadSeenEntries(kv)
   const seenSet = new Set(seenEntries.map((entry) => entry.url))
   const freshStories = allStories
