@@ -116,6 +116,9 @@ const editorialDictionaries = {
       'covard', 'no és demòcrata', 'frau de llei', 'audiència nacional',
       'detindr', 'detencions', 'sancions', 'rússia', 'escalfament',
       'més càlid', 'cobejada', 'imputaci',
+      'bloqueig', 'droga', 'drogues', 'narcotràfic', 'tedh', 'desaparegut',
+      'jutjat', 'jutge', 'al jutjat', 'descompte',
+      'cannabis', 'porros',
       // Verbs de mort i agressió (els substantius ja hi eren)
       'matar', 'mata ', 'maten ', 'matada', 'matades', 'matat', 'matats',
       'assassina ', 'assassinen', 'apunyala', 'apunyalen', 'apunyalat',
@@ -181,6 +184,9 @@ const editorialDictionaries = {
       // Política de conflicto/insulto, juzgados y sanciones.
       'cobarde', 'no es un demócrata', 'no es demócrata', 'fraude de ley',
       'audiencia nacional', 'sanciones', 'rusia', 'calentamiento',
+      'fallece', 'fallecen', 'fallecid', 'droga', 'drogas', 'bloqueo', 'desaparecid',
+      'juzgado', 'descuentos de', 'tira la casa por la ventana',
+      'cannabis', 'porros',
       // Mercat esportiu (fichajes), publicitat i contingut patrocinat
       'fichaje', 'fichajes', 'ficha por', 'fichar por', 'fichado por',
       'millones por', 'millones de euros por', 'traspaso de',
@@ -237,6 +243,8 @@ const editorialDictionaries = {
       'smear', 'smears', 'marred', 'slur', 'slurs', 'far-right',
       'exploit', 'exploits', 'sanctions', 'tax break',
       'strikes on', 'airstrike', 'air strike', 'lebanon', 'gaza', 'live updates',
+      'guns', 'drug user', 'medical records', 'tried to sell', 'dies after', 'fallece',
+      'cannabis', 'marijuana',
       'troops', 'crashes', 'crashed', 'tragedy', 'tragic', 'famine',
       'starvation', 'epidemic', 'pandemic', 'outbreak',
       // Sports transfers, advertising, sponsored podcast content
@@ -671,7 +679,7 @@ function normalizeFeedItem(block, feed) {
   const summarySnippet = `${summarySource.slice(0, 180)}${summarySource.length > 180 ? '...' : ''}`
   if (looksLikeAdvertorial({ url: link, title, summary: summarySnippet })) return null
   const fullText = `${title} ${summarySource}`
-  const { passes, isPositive, isNegative } = passesEditorialFilter(fullText, feed.language)
+  const { isPositive, isNegative } = passesEditorialFilter(fullText, feed.language)
   if (isNegative) return null // clarament negativa (guerra, conflicte…): fora directament
 
   const story = {
@@ -692,10 +700,10 @@ function normalizeFeedItem(block, feed) {
     editorialVersion: liveEditorialVersion,
     publishedAt,
   }
-  // Neutra (cap paraula positiva ni negativa): no la llencem; la marquem perquè
-  // la segona capa d'IA decideixi si té un sentit constructiu (p. ex. un
-  // producte nou amb aplicacions positives). Si la IA no la rescata, no es publica.
-  if (!passes) story._needsAI = true
+  // No la llencem (les clarament negatives ja han caigut amunt). La IA revisarà
+  // totes les candidates: vetarà les dolentes que han colat per paraula clau i
+  // rescatarà les bones neutres (p. ex. un producte nou amb aplicacions positives).
+  // editorialScore: 1 = ha passat per paraula clau · 0 = neutra.
   return story
 }
 
@@ -737,16 +745,16 @@ async function collectFeedStories(feed) {
 const AI_MODEL = '@cf/meta/llama-3.2-3b-instruct'
 const aiVerdictsKey = 'ai-verdicts' // un sol registre KV amb TOTS els veredictes
 const aiVerdictTtlMs = 14 * 24 * 60 * 60 * 1000 // 14 dies
-const maxAiPerRun = 12 // crides NOVES per passada (per no petar el límit de subpeticions)
+const maxAiPerRun = 14 // crides NOVES per passada (per no petar el límit de subpeticions)
 
 const AI_SYSTEM = [
-  "Ets l'editor d'El Bon Diari, un diari que NOMÉS publica bones notícies:",
-  'històries constructives que reparen el món, ajuden la gent, mostren',
-  "progrés o avenços, o productes/idees amb aplicacions positives per a les",
-  "persones o el planeta. L'anunci d'un producte o tecnologia ÉS bona notícia",
-  "si té una aplicació beneficiosa concreta. NO és bona notícia: política de",
-  'conflicte o insults, successos, guerra, judicis, escàndols, declaracions',
-  "tenses, ni publicitat buida. Respon NOMÉS amb una paraula: SI o NO.",
+  "Ets el filtre d'El Bon Diari, un diari que evita les MALES notícies.",
+  'Respon NO NOMÉS si la notícia és clarament dolenta o tensa: guerra, morts,',
+  'accidents, successos, crims, droga, armes, judicis o imputacions, política de',
+  "conflicte o insults, escàndols, corrupció, alertes o declaracions tenses.",
+  'Respon SI per a tota la resta: notícies constructives, culturals, científiques,',
+  "esportives, amables, o un producte o idea amb aplicacions positives. En cas de",
+  'dubte, respon SI. Respon NOMÉS amb una paraula: SI o NO.',
 ].join(' ')
 
 async function aiIsGoodNews(env, story) {
@@ -761,13 +769,20 @@ async function aiIsGoodNews(env, story) {
   return (text.startsWith('SI') || text.startsWith('SÍ') || text.startsWith('YES')) && !text.startsWith('NO')
 }
 
-// Rep les notícies neutres i en retorna les que la IA considera bones. Per no
-// petar el límit de subpeticions del Worker, TOTS els veredictes viuen en un sol
-// registre KV (una lectura + una escriptura per passada) i només es fan un màxim
-// de `maxAiPerRun` crides NOVES a la IA cada cop (la resta surten del cau; les
-// que no s'arribin a jutjar avui es jutgen en passades següents).
-async function aiRescueAmbiguous(env, ambiguous) {
-  if (!env?.AI || ambiguous.length === 0) return []
+// La IA revisa les notícies candidates: VETA les que han colat pel filtre de
+// paraules però no són bones (false positives), i RESCATA les neutres que sí
+// que ho són (false negatives, p. ex. un producte amb aplicacions positives).
+// Per no petar el límit de subpeticions del Worker, TOTS els veredictes viuen
+// en UN sol registre KV (1 lectura + 1 escriptura) i només es fan `maxAiPerRun`
+// crides NOVES per passada. Les candidates arriben ja ordenades (les que han
+// passat per paraula clau i les més fresques primer), així la IA gasta el seu
+// pressupost en les que es veuran a portada. Per a una notícia ENCARA no jutjada:
+// si ha passat per paraula clau es mostra provisionalment; si és neutra, s'amaga.
+async function aiReview(env, candidates) {
+  if (!env?.AI) {
+    // Sense IA disponible: comportament clàssic (només les de paraula clau).
+    return candidates.filter((story) => (story.editorialScore ?? 1) > 0)
+  }
   const kv = env.LIVE_NEWS_KV
   let store
   try {
@@ -776,30 +791,29 @@ async function aiRescueAmbiguous(env, ambiguous) {
     store = {}
   }
   const now = Date.now()
-  const rescued = []
+  const kept = []
   let judged = 0
   let dirty = false
-  // Gastem el sostre de crides noves en les notícies MÉS FRESQUES (les que es
-  // veuran a portada), no en les que ja són velles.
-  const cua = [...ambiguous].sort(
-    (a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime(),
-  )
-  for (const story of cua) {
+  for (const story of candidates) {
     const cached = store[story.url]
+    let good
     if (cached && now - cached.at < aiVerdictTtlMs) {
-      if (cached.v) rescued.push(story)
-      continue
+      good = cached.v
+    } else if (judged < maxAiPerRun) {
+      try {
+        good = await aiIsGoodNews(env, story)
+        store[story.url] = { v: good, at: now }
+        dirty = true
+        judged += 1
+      } catch (error) {
+        console.warn('[ai] error jutjant', error?.message || error)
+        good = (story.editorialScore ?? 1) > 0 // si la IA falla, confiem en la paraula clau
+      }
+    } else {
+      // Sense pressupost per jutjar-la avui: confiem en la paraula clau.
+      good = (story.editorialScore ?? 1) > 0
     }
-    if (judged >= maxAiPerRun) continue
-    try {
-      const good = await aiIsGoodNews(env, story)
-      store[story.url] = { v: good, at: now }
-      dirty = true
-      judged += 1
-      if (good) rescued.push(story)
-    } catch (error) {
-      console.warn('[ai] error jutjant', error?.message || error)
-    }
+    if (good) kept.push(story)
   }
   if (dirty) {
     for (const url of Object.keys(store)) {
@@ -811,8 +825,8 @@ async function aiRescueAmbiguous(env, ambiguous) {
       console.warn('[ai] no s\'ha pogut desar el cau', error?.message)
     }
   }
-  console.log(`[ai] ambigus=${ambiguous.length} nous=${judged} rescatats=${rescued.length}`)
-  return rescued
+  console.log(`[ai] candidats=${candidates.length} jutjats=${judged} acceptats=${kept.length}`)
+  return kept
 }
 
 // --- Recol·lecció combinada -----------------------------------------------
@@ -841,30 +855,31 @@ export async function collectLivePositiveNews(env) {
     }
   }
 
-  // Notícies dins de termini.
-  const recents = [...uniqueStories.values()].filter(
-    (story) =>
-      Date.now() - new Date(story.publishedAt).getTime() <= maxLiveStoryAgeMs,
-  )
-
-  // Segona capa d'IA: les que han passat el filtre de paraules ja són bones;
-  // les neutres (_needsAI) les jutja la IA i en rescatem només les constructives.
-  const confirmed = recents.filter((story) => !story._needsAI)
-  const ambiguous = recents.filter((story) => story._needsAI)
-  const rescued = await aiRescueAmbiguous(env, ambiguous)
-
-  const filtered = [...confirmed, ...rescued]
+  // Candidates dins de termini, ORDENADES per prometedores+fresques (les de
+  // paraula clau primer), perquè la IA gasti el pressupost de crides en les més
+  // probables de sortir.
+  const recents = [...uniqueStories.values()]
+    .filter(
+      (story) =>
+        Date.now() - new Date(story.publishedAt).getTime() <= maxLiveStoryAgeMs,
+    )
     .sort(
       (left, right) =>
         right.editorialScore - left.editorialScore ||
         new Date(right.publishedAt).getTime() -
           new Date(left.publishedAt).getTime(),
     )
+
+  // La IA revisa les candidates: veta les dolentes que han colat per paraula clau
+  // i rescata les bones neutres. Una positiva encara no jutjada es mostra provi-
+  // sionalment (el filtre de paraules ja atrapa les dolentes òbvies; la IA va
+  // revisant les subtils a cada refresc); una neutra no jutjada s'amaga.
+  const reviewed = await aiReview(env, recents)
+
+  const filtered = reviewed
     .map((story) => {
-      const publicStory = { ...story }
-      delete publicStory.editorialScore
-      delete publicStory._needsAI
-      return publicStory
+      const { editorialScore: _score, ...rest } = story
+      return rest
     })
     .slice(0, collectionPoolSize)
 
