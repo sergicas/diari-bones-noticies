@@ -9,7 +9,6 @@ import EditorialCounter from './components/EditorialCounter.jsx'
 import PageHero from './components/PageHero.jsx'
 import ManifestSection from './components/ManifestSection.jsx'
 import SourcesManifest from './components/SourcesManifest.jsx'
-import PortadaManifestTeaser from './components/PortadaManifestTeaser.jsx'
 import NotFoundPage from './components/NotFoundPage.jsx'
 import ShareRow from './components/ShareRow.jsx'
 import {
@@ -2043,6 +2042,10 @@ function App() {
     remainingStories,
     featuredStory,
   )
+  // Portada "a cop d'ull": totes les notícies del dia en una sola graella,
+  // ordenades per proximitat i recència, sense haver d'anar secció per secció.
+  // (Cada targeta ja porta la seva etiqueta de secció, així el lector s'hi ubica.)
+  const portadaStories = [...remainingStories].sort(sortByDistanceAndDate)
   const currentStory =
     route.page === 'story'
       ? allStories.find((story) => story.id === route.storyId)
@@ -2463,8 +2466,6 @@ function App() {
 
             </section>
 
-            <PortadaManifestTeaser onNavigate={navigate} />
-
             <section className="section-block">
               <div className="section-heading">
                 <div>
@@ -2548,76 +2549,14 @@ function App() {
 
               <MostReadSection allStories={allStories} onNavigate={navigate} />
 
-              {sectionGroups.length > 0 ? (
-                <div className="news-sections">
-                  {sectionGroups.map((section) => (
-                    <section
-                      id={`seccio-${section.id}`}
-                      key={section.id}
-                      className={`news-section ${
-                        activeCategory === section.label ? 'is-priority' : ''
-                      }`}
-                    >
-                      <div className="news-section__header">
-                        <div>
-                          <p className="section-tag">Secció</p>
-                          <h3>
-                            <a
-                              className="news-section__title-link"
-                              href={getFilterPath({
-                                category: section.label,
-                                distanceFilter: activeDistanceFilter,
-                                search: searchTerm,
-                              })}
-                              onClick={(event) =>
-                                applyCategoryFilter(section.label, event)
-                              }
-                            >
-                              {section.label}
-                            </a>
-                          </h3>
-                        </div>
-                        <div className="news-section__meta">
-                          <strong>
-                            {String(section.totalStories).padStart(2, '0')}
-                          </strong>
-                          <p className="news-section__summary">
-                            {section.description}
-                          </p>
-                        </div>
-                      </div>
-
-                      {section.stories.length > 0 ? (
-                        <div className="news-grid">
-                          {section.stories.map((story) => (
-                            <StoryCard
-                              key={story.id}
-                              story={story}
-                              onNavigate={navigate}
-                            />
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="news-section__placeholder">
-                          {section.hasFeaturedStory
-                            ? 'La peça destacada ja obre aquesta secció avui.'
-                            : 'Encara no hi ha cap història publicada dins d’aquesta secció.'}
-                        </div>
-                      )}
-
-                      <a
-                        className="news-section__back"
-                        href="#contingut"
-                        onClick={(event) => {
-                          event.preventDefault()
-                          if (typeof window !== 'undefined') {
-                            window.scrollTo({ top: 0, behavior: 'smooth' })
-                          }
-                        }}
-                      >
-                        ↑ Torna a l’inici
-                      </a>
-                    </section>
+              {portadaStories.length > 0 ? (
+                <div className="news-grid news-grid--portada">
+                  {portadaStories.map((story) => (
+                    <StoryCard
+                      key={story.id}
+                      story={story}
+                      onNavigate={navigate}
+                    />
                   ))}
                 </div>
               ) : (
