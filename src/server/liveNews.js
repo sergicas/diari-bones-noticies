@@ -122,6 +122,7 @@ const editorialDictionaries = {
       'condemna', 'condemnat', 'fuetades', 'divendres negre', 'despropòsit',
       'apuja el to', 'dèficit comercial', 'irregularitat', 'cas contra',
       'cas de begoña', 'tribunal penal',
+      'ultradreta', 'feixis', 'antifeixis', 'desafia', 'veto', 'vetar', 'moció de',
       // Verbs de mort i agressió (els substantius ja hi eren)
       'matar', 'mata ', 'maten ', 'matada', 'matades', 'matat', 'matats',
       'assassina ', 'assassinen', 'apunyala', 'apunyalen', 'apunyalat',
@@ -192,6 +193,7 @@ const editorialDictionaries = {
       'cannabis', 'porros',
       'condena', 'condenado', 'latigazos', 'irregularidad', 'déficit comercial',
       'caso contra', 'caso de begoña', 'sube el tono', 'desbanca',
+      'ultraderecha', 'fascis', 'antifascis', 'desafía', 'desafia la', 'veto', 'moción de',
       // Mercat esportiu (fichajes), publicitat i contingut patrocinat
       'fichaje', 'fichajes', 'ficha por', 'fichar por', 'fichado por',
       'millones por', 'millones de euros por', 'traspaso de',
