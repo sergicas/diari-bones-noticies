@@ -27,6 +27,9 @@ const defaultStoryImage = DEFAULT_STORY_IMAGE
 const currentLiveEditorialVersion = LIVE_EDITORIAL_VERSION
 const autoRefreshIntervalMs = 1 * 60 * 60 * 1000
 const activeEditionLimit = 40
+// A la portada només hi ha les notícies de menys de 2 dies; les més velles
+// passen automàticament a la Hemeroteca.
+const activeEditionMaxAgeMs = 2 * 24 * 60 * 60 * 1000
 const maxStoredFeedStories = 40
 const minStoriesPerSection = 5
 
@@ -851,11 +854,18 @@ function mergeLiveStories(currentStories, liveArticles) {
 }
 
 function splitEditionStories(stories) {
+  const now = Date.now()
   const sortedByAge = [...stories].sort(sortByPublishedAtDesc)
+  // Només poden ser a la portada les notícies de menys de 2 dies. Les més
+  // velles van sempre a l'hemeroteca, encara que hi hagi lloc a la portada.
+  const recent = sortedByAge.filter(
+    (story) => now - new Date(story.publishedAt).getTime() <= activeEditionMaxAgeMs,
+  )
   const activeStoryIds = new Set()
 
+  // Primer, una peça per secció (de les recents) per garantir cobertura diària.
   for (const section of editorialSections) {
-    const sectionStory = sortedByAge.find(
+    const sectionStory = recent.find(
       (story) => getStorySection(story).id === section.id,
     )
 
@@ -864,7 +874,8 @@ function splitEditionStories(stories) {
     }
   }
 
-  for (const story of sortedByAge) {
+  // Després, omplim amb les recents més noves fins al límit d'edició.
+  for (const story of recent) {
     if (activeStoryIds.size >= activeEditionLimit) {
       break
     }
@@ -873,9 +884,10 @@ function splitEditionStories(stories) {
   }
 
   return {
-    activeStories: sortedByAge
+    activeStories: recent
       .filter((story) => activeStoryIds.has(story.id))
       .sort(sortByDistanceAndDate),
+    // Hemeroteca: les recents que no caben + TOTES les de més de 2 dies.
     archiveStories: sortedByAge.filter((story) => !activeStoryIds.has(story.id)),
   }
 }
@@ -1797,7 +1809,7 @@ function ArchivePage({ archiveStories, lastRefreshLabel, onNavigate }) {
       <PageHero
         tag="Hemeroteca"
         title="Les bones notícies no desapareixen: queden guardades per tornar-hi."
-        description={`Quan una peça surt de la portada viva, passa a la Hemeroteca. Ara mateix hi ha ${archiveStories.length} històries antigues ordenades de més recent a més llunyana.`}
+        description={`Les notícies de més de 2 dies surten de la portada i es guarden aquí. Ara mateix hi ha ${archiveStories.length} històries ordenades de més recent a més llunyana.`}
         actions={
           <a
             className="button button--primary"
@@ -1889,8 +1901,8 @@ function ArchivePage({ archiveStories, lastRefreshLabel, onNavigate }) {
           <div className="empty-state">
             <h3>La Hemeroteca encara és buida.</h3>
             <p>
-              Quan la portada superi les {activeEditionLimit} peces més recents,
-              les més antigues quedaran guardades aquí automàticament.
+              Quan una notícia passa dels 2 dies, surt de la portada i queda
+              guardada aquí automàticament.
             </p>
           </div>
         )}
