@@ -119,6 +119,9 @@ const editorialDictionaries = {
       'bloqueig', 'droga', 'drogues', 'narcotràfic', 'tedh', 'desaparegut',
       'jutjat', 'jutge', 'al jutjat', 'descompte',
       'cannabis', 'porros',
+      'condemna', 'condemnat', 'fuetades', 'divendres negre', 'despropòsit',
+      'apuja el to', 'dèficit comercial', 'irregularitat', 'cas contra',
+      'cas de begoña', 'tribunal penal',
       // Verbs de mort i agressió (els substantius ja hi eren)
       'matar', 'mata ', 'maten ', 'matada', 'matades', 'matat', 'matats',
       'assassina ', 'assassinen', 'apunyala', 'apunyalen', 'apunyalat',
@@ -187,6 +190,8 @@ const editorialDictionaries = {
       'fallece', 'fallecen', 'fallecid', 'droga', 'drogas', 'bloqueo', 'desaparecid',
       'juzgado', 'descuentos de', 'tira la casa por la ventana',
       'cannabis', 'porros',
+      'condena', 'condenado', 'latigazos', 'irregularidad', 'déficit comercial',
+      'caso contra', 'caso de begoña', 'sube el tono', 'desbanca',
       // Mercat esportiu (fichajes), publicitat i contingut patrocinat
       'fichaje', 'fichajes', 'ficha por', 'fichar por', 'fichado por',
       'millones por', 'millones de euros por', 'traspaso de',
@@ -245,6 +250,7 @@ const editorialDictionaries = {
       'strikes on', 'airstrike', 'air strike', 'lebanon', 'gaza', 'live updates',
       'guns', 'drug user', 'medical records', 'tried to sell', 'dies after', 'fallece',
       'cannabis', 'marijuana',
+      'urged to drop', 'activists target', 'aramco', 'trade deficit', 'lashes',
       'troops', 'crashes', 'crashed', 'tragedy', 'tragic', 'famine',
       'starvation', 'epidemic', 'pandemic', 'outbreak',
       // Sports transfers, advertising, sponsored podcast content
@@ -749,12 +755,20 @@ const maxAiPerRun = 14 // crides NOVES per passada (per no petar el límit de su
 
 const AI_SYSTEM = [
   "Ets el filtre d'El Bon Diari, un diari que evita les MALES notícies.",
-  'Respon NO NOMÉS si la notícia és clarament dolenta o tensa: guerra, morts,',
-  'accidents, successos, crims, droga, armes, judicis o imputacions, política de',
-  "conflicte o insults, escàndols, corrupció, alertes o declaracions tenses.",
-  'Respon SI per a tota la resta: notícies constructives, culturals, científiques,',
-  "esportives, amables, o un producte o idea amb aplicacions positives. En cas de",
-  'dubte, respon SI. Respon NOMÉS amb una paraula: SI o NO.',
+  'Respon NO si la notícia és dolenta o tensa: guerra, morts, accidents,',
+  'successos, crims, droga, armes, judicis, imputacions, investigacions',
+  'judicials, corrupció, escàndols, política de conflicte, retrets o insults,',
+  'tensió diplomàtica o comercial, sancions, alertes, o qualsevol condemna o',
+  'càstig. Respon SI si és constructiva, cultural, científica, esportiva,',
+  'amable, o un producte o idea amb aplicacions positives.',
+  'Exemples: "L\'Iran condemna una cantant a fuetades" => NO.',
+  '"La UE puja el to amb la Xina pel dèficit comercial" => NO.',
+  '"La justícia investiga el cas de corrupció" => NO.',
+  '"El govern diu que el cas és un despropòsit" => NO.',
+  '"Inauguren una biblioteca al barri" => SI.',
+  '"Descobreixen un tractament contra el càncer" => SI.',
+  '"Un festival de cinema celebra 50 anys" => SI.',
+  'Respon NOMÉS amb una paraula: SI o NO.',
 ].join(' ')
 
 async function aiIsGoodNews(env, story) {
