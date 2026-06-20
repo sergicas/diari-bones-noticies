@@ -123,6 +123,8 @@ const editorialDictionaries = {
       'apuja el to', 'dèficit comercial', 'irregularitat', 'cas contra',
       'cas de begoña', 'tribunal penal',
       'ultradreta', 'feixis', 'antifeixis', 'desafia', 'veto', 'vetar', 'moció de',
+      'caça de combat', 'avió de combat', 'armament', 'bèl·lic', 'fcas',
+      'míssil', 'caça militar',
       // Verbs de mort i agressió (els substantius ja hi eren)
       'matar', 'mata ', 'maten ', 'matada', 'matades', 'matat', 'matats',
       'assassina ', 'assassinen', 'apunyala', 'apunyalen', 'apunyalat',
@@ -194,6 +196,8 @@ const editorialDictionaries = {
       'condena', 'condenado', 'latigazos', 'irregularidad', 'déficit comercial',
       'caso contra', 'caso de begoña', 'sube el tono', 'desbanca',
       'ultraderecha', 'fascis', 'antifascis', 'desafía', 'desafia la', 'veto', 'moción de',
+      'caza de combate', 'caza de sexta', 'avión de combate', 'aviones de combate',
+      'f-35', 'f-47', 'fcas', 'misil', 'armamento', 'bélic',
       // Mercat esportiu (fichajes), publicitat i contingut patrocinat
       'fichaje', 'fichajes', 'ficha por', 'fichar por', 'fichado por',
       'millones por', 'millones de euros por', 'traspaso de',
@@ -253,6 +257,7 @@ const editorialDictionaries = {
       'guns', 'drug user', 'medical records', 'tried to sell', 'dies after', 'fallece',
       'cannabis', 'marijuana',
       'urged to drop', 'activists target', 'aramco', 'trade deficit', 'lashes',
+      'fighter jet', 'combat aircraft', 'warplane', 'weapon', 'arms deal', 'f-35',
       'troops', 'crashes', 'crashed', 'tragedy', 'tragic', 'famine',
       'starvation', 'epidemic', 'pandemic', 'outbreak',
       // Sports transfers, advertising, sponsored podcast content
