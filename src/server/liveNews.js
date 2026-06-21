@@ -125,6 +125,7 @@ const editorialDictionaries = {
       'ultradreta', 'feixis', 'antifeixis', 'desafia', 'veto', 'vetar', 'moció de',
       'caça de combat', 'avió de combat', 'armament', 'bèl·lic', 'fcas',
       'míssil', 'caça militar',
+      'cop d\'estat', 'cop militar', 'exèrcit ha d', 'intervenció militar',
       // Verbs de mort i agressió (els substantius ja hi eren)
       'matar', 'mata ', 'maten ', 'matada', 'matades', 'matat', 'matats',
       'assassina ', 'assassinen', 'apunyala', 'apunyalen', 'apunyalat',
@@ -198,6 +199,7 @@ const editorialDictionaries = {
       'ultraderecha', 'fascis', 'antifascis', 'desafía', 'desafia la', 'veto', 'moción de',
       'caza de combate', 'caza de sexta', 'avión de combate', 'aviones de combate',
       'f-35', 'f-47', 'fcas', 'misil', 'armamento', 'bélic',
+      'golpe de estado', 'golpe militar', 'ejército debe', 'intervención militar', 'asonada',
       // Mercat esportiu (fichajes), publicitat i contingut patrocinat
       'fichaje', 'fichajes', 'ficha por', 'fichar por', 'fichado por',
       'millones por', 'millones de euros por', 'traspaso de',
@@ -297,6 +299,7 @@ const editorialDictionaries = {
       'catastrophe', 'tragique', 'tragédie', 'invasion', 'famine',
       'braquage', 'cambriolage', 'voleur', 'escroquerie', 'délit', 'criminel',
       'extrême droite', 'délinqu', 'xénophob',
+      'cannabis', 'drogue', 'armée', 'militaire', 'coup d\'état', 'intervention militaire',
       // Verbes de mort, violence, fin brutale
       'tue ', 'tué', 'tués', 'tuent', 'achève', 'achevé', 'liquide',
       'poignardé', 'poignardée', 'agresse', 'agressé', 'agression',
