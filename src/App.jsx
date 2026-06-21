@@ -235,8 +235,8 @@ const editorialSections = [
     id: 'mon-digital',
     label: 'Món digital',
     description:
-      'Tecnologia, ciència aplicada i eines digitals que poden fer la vida més fàcil.',
-    categories: ['Tecnologia', 'Món digital', 'Ciència'],
+      'Tecnologia i eines digitals que poden fer la vida una mica més fàcil.',
+    categories: ['Tecnologia', 'Món digital'],
     keywords: [
       'intel·ligència artificial',
       'tecnologia',
@@ -248,6 +248,38 @@ const editorialSections = [
       'videojoc',
       'xarxes socials',
     ],
+  },
+  {
+    id: 'ciencia',
+    label: 'Ciència',
+    description:
+      'Recerca, descobertes i coneixement que eixamplen el que sabem del món.',
+    categories: ['Ciència', 'Coneixement'],
+    keywords: ['recerca', 'descoberta', 'científic', 'astronomia', 'biologia', 'genètica', 'fòssil'],
+  },
+  {
+    id: 'economia',
+    label: 'Economia',
+    description:
+      'Feina, empreses i diners quan creen oportunitats o reparteixen millor.',
+    categories: ['Economia'],
+    keywords: ['empresa', 'feina', 'ocupació', 'inversió', 'pime', 'startup', 'cooperativa', 'salari'],
+  },
+  {
+    id: 'gastronomia',
+    label: 'Gastronomia',
+    description:
+      'Cuina, productes i cellers: el plaer de la taula ben feta.',
+    categories: ['Gastronomia'],
+    keywords: ['gastronomia', 'restaurant', 'cuina', 'recepta', 'celler', 'tast', 'xef', 'vins'],
+  },
+  {
+    id: 'habitatge',
+    label: 'Habitatge i ciutat',
+    description:
+      'Urbanisme, mobilitat i habitatge quan milloren la vida als barris.',
+    categories: [],
+    keywords: ['habitatge', 'urbanisme', 'mobilitat', 'transport públic', 'carril bici', 'rehabilitació', 'pacificació'],
   },
   {
     id: 'salut',
