@@ -15,6 +15,7 @@ const BASE = process.env.BONDIARI_URL || 'https://bondiari.sergicas.workers.dev'
 // Seccions editorials de la portada i les categories que hi cauen (mirall de
 // src/App.jsx → editorialSections).
 const SECCIONS = [
+  { nom: 'Local', cats: ['Local'] },
   { nom: 'Política', cats: ['Política'] },
   { nom: 'Societat', cats: ['Societat', 'Comunitat'] },
   { nom: 'Cultura', cats: ['Cultura'] },

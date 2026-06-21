@@ -26,6 +26,8 @@ const rssFeeds = [
   { name: 'ARA', url: 'https://www.ara.cat/rss/', language: 'ca', defaultCategory: 'Actualitat' },
   { name: 'El Punt Avui', url: 'https://www.elpuntavui.cat/?format=feed&type=rss', language: 'ca', defaultCategory: 'Actualitat' },
   { name: 'Betevé', url: 'https://beteve.cat/feed/', language: 'ca', defaultCategory: 'Barcelona' },
+  // Local de Mataró i el Maresme (Capgròs). Categoria forçada a 'Local'.
+  { name: 'Capgròs', url: 'https://capgros.elnacional.cat/uploads/feeds/feed_ca.xml', language: 'ca', defaultCategory: 'Local', forceCategory: true, lenient: true },
   { name: 'Crític', url: 'https://www.elcritic.cat/feed', language: 'ca', defaultCategory: 'Periodisme' },
   { name: 'Nació Digital', url: 'https://www.naciodigital.cat/rss/', language: 'ca', defaultCategory: 'Actualitat' },
 
@@ -712,7 +714,10 @@ function normalizeFeedItem(block, feed) {
     imageAlt: `Imatge de portada per a ${title}.`,
     imageCredit: feed.name,
     imageAttributionUrl: link,
-    editorialScore: isPositive ? 1 : 0,
+    // Els feeds "lenient" (locals: Mataró/Maresme) compten com a bons si no són
+    // negatius, encara que no tinguin cap paraula clau positiva: el contingut
+    // local de proximitat (festes, comunitat, esport de base) hi té cabuda.
+    editorialScore: (isPositive || feed.lenient) ? 1 : 0,
     editorialVersion: liveEditorialVersion,
     publishedAt,
   }
@@ -731,9 +736,15 @@ async function collectFeedStories(feed) {
         'user-agent': 'El Bon Diari/1.0 (+https://bondiari.com)',
       },
     })
-    if (!response.ok) return { stories: [], candidates: 0 }
+    if (!response.ok) {
+      console.warn(`[radar] Feed ${feed.name} ha respost ${response.status}`)
+      return { stories: [], candidates: 0 }
+    }
     const xml = await response.text()
-    if (!/<rss[\s>]|<feed[\s>]/i.test(xml)) return { stories: [], candidates: 0 }
+    if (!/<rss[\s>]|<feed[\s>]/i.test(xml)) {
+      console.warn(`[radar] Feed ${feed.name} no sembla RSS/Atom (${xml.length} bytes)`)
+      return { stories: [], candidates: 0 }
+    }
 
     const itemRegex = /<(item|entry)\b[^>]*>([\s\S]*?)<\/\1>/gi
     const stories = []
@@ -819,6 +830,13 @@ async function aiReview(env, candidates) {
   let judged = 0
   let dirty = false
   for (const story of candidates) {
+    // El contingut local (Mataró/Maresme) NO passa per la IA: el model petit
+    // gratuït el veta per error (festes majors, aniversaris, esport de base…).
+    // Confiem en el filtre de paraules, que ja n'ha tret les clarament dolentes.
+    if (story.category === 'Local') {
+      kept.push(story)
+      continue
+    }
     const cached = store[story.url]
     let good
     if (cached && now - cached.at < aiVerdictTtlMs) {
@@ -900,7 +918,22 @@ export async function collectLivePositiveNews(env) {
   // revisant les subtils a cada refresc); una neutra no jutjada s'amaga.
   const reviewed = await aiReview(env, recents)
 
-  const filtered = reviewed
+  // Abans de tallar el pool a collectionPoolSize, posem al davant la millor peça
+  // de cada secció garantida (Local, Cultura, Ciència…). Si no, una notícia bona
+  // però una mica més vella (p. ex. local del Maresme d'ahir) podria quedar fora
+  // del tall i no aparèixer mai, encara que tingués lloc reservat.
+  const headUrls = new Set()
+  const head = []
+  for (const cat of guaranteedCategories) {
+    const best = reviewed.find((s) => s.category === cat && !headUrls.has(s.url))
+    if (best) {
+      head.push(best)
+      headUrls.add(best.url)
+    }
+  }
+  const ordered = [...head, ...reviewed.filter((s) => !headUrls.has(s.url))]
+
+  const filtered = ordered
     .map((story) => {
       const { editorialScore: _score, ...rest } = story
       return rest
@@ -993,7 +1026,7 @@ export async function readEditorialStats(kv) {
 // Seccions editorials de poc volum que abans es quedaven seques perquè les
 // categories grans (Espanya, Societat…) s'enduien totes les places.
 const guaranteedCategories = [
-  'Cultura', 'Tecnologia', 'Ciència', 'Salut', 'Medi ambient', 'Educació',
+  'Local', 'Cultura', 'Tecnologia', 'Ciència', 'Salut', 'Medi ambient', 'Educació',
 ]
 
 // Garanteix que cada secció de la llista, si té alguna peça disponible al

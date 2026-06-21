@@ -200,6 +200,14 @@ const distanceFilterOptions = [
 
 const editorialSections = [
   {
+    id: 'local',
+    label: 'Local',
+    description:
+      'Mataró i el Maresme: el que passa al costat de casa.',
+    categories: ['Local'],
+    keywords: ['mataró', 'maresme', 'argentona', 'arenys', 'premià', 'vilassar', 'cabrera de mar', 'masnou', 'canet de mar', 'calella', 'pineda de mar', 'malgrat de mar', 'tordera', 'llavaneres', 'alella', 'montgat'],
+  },
+  {
     id: 'politica',
     label: 'Política',
     description:
