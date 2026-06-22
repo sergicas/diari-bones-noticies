@@ -2063,7 +2063,7 @@ function App() {
     (story) => getDistanceBand(story).rank <= activeDistanceOption.maxRank,
   )
 
-  const filteredStories = distanceFilteredStories.filter((story) => {
+  const matchesFilters = (story) => {
     const matchesCategory =
       activeCategory === 'Totes' ||
       getStorySection(story).label === activeCategory
@@ -2080,7 +2080,39 @@ function App() {
       .toLowerCase()
 
     return matchesCategory && searchableContent.includes(normalizedQuery)
-  })
+  }
+  const withinDistance = (story) =>
+    getDistanceBand(story).rank <= activeDistanceOption.maxRank
+
+  let filteredStories = distanceFilteredStories.filter(matchesFilters)
+  // Cap secció no pot quedar buida mai. Si has triat una SECCIÓ concreta i avui
+  // no té cap notícia recent, la completem amb l'hemeroteca (les més noves
+  // d'aquell tema). Si ni amb la proximitat triada n'hi ha, la relaxem com a
+  // últim recurs. Així clicar "Ciència", "Salut"… sempre ensenya alguna cosa.
+  let sectionFromArchive = false
+  let sectionShowingGeneral = false
+  if (activeCategory !== 'Totes' && filteredStories.length === 0) {
+    const archiveSorted = [...archiveStories].sort(sortByPublishedAtDesc)
+    const rescueWithDistance = archiveSorted.filter(
+      (story) => withinDistance(story) && matchesFilters(story),
+    )
+    const rescue = rescueWithDistance.length
+      ? rescueWithDistance
+      : archiveSorted.filter(matchesFilters)
+    if (rescue.length > 0) {
+      filteredStories = rescue
+      sectionFromArchive = true
+    } else if (normalizedQuery === '') {
+      // Últim recurs: la secció no té CAP notícia (ni recent ni a l'hemeroteca,
+      // p. ex. Gastronomia un dia fluix). Per no deixar mai una pàgina morta,
+      // ensenyem les bones notícies del dia amb un avís ben clar.
+      const general = [...activeStories].sort(sortByDistanceAndDate)
+      if (general.length > 0) {
+        filteredStories = general
+        sectionShowingGeneral = true
+      }
+    }
+  }
 
   const nearestAvailableBand = filteredStories[0]
     ? getDistanceBand(filteredStories[0])
@@ -2536,7 +2568,11 @@ function App() {
                   <h2 className="sr-only">Portada viva</h2>
                 </div>
                 <p className="section-caption">
-                  {headlineCount > 0
+                  {sectionShowingGeneral
+                    ? 'Aquesta secció encara no té notícies pròpies avui; mentrestant, aquí tens les bones notícies del dia.'
+                    : sectionFromArchive
+                    ? 'Aquesta secció no té novetats recents: et mostrem les últimes de l’hemeroteca.'
+                    : headlineCount > 0
                     ? `Mostrant ${headlineCount} bones notícies a l’edició actual.`
                     : 'Cap història coincideix amb aquest filtre ara mateix.'}
                   <a
