@@ -128,6 +128,7 @@ const editorialDictionaries = {
       'caça de combat', 'avió de combat', 'armament', 'bèl·lic', 'fcas',
       'míssil', 'caça militar',
       'cop d\'estat', 'cop militar', 'exèrcit ha d', 'intervenció militar',
+      'posconvergent', 'no descarta', 'aliança catalana',
       // Verbs de mort i agressió (els substantius ja hi eren)
       'matar', 'mata ', 'maten ', 'matada', 'matades', 'matat', 'matats',
       'assassina ', 'assassinen', 'apunyala', 'apunyalen', 'apunyalat',
@@ -202,6 +203,7 @@ const editorialDictionaries = {
       'caza de combate', 'caza de sexta', 'avión de combate', 'aviones de combate',
       'f-35', 'f-47', 'fcas', 'misil', 'armamento', 'bélic',
       'golpe de estado', 'golpe militar', 'ejército debe', 'intervención militar', 'asonada',
+      'posconvergent', 'no descarta', 'alianza catalana',
       // Mercat esportiu (fichajes), publicitat i contingut patrocinat
       'fichaje', 'fichajes', 'ficha por', 'fichar por', 'fichado por',
       'millones por', 'millones de euros por', 'traspaso de',
