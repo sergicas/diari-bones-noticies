@@ -30,6 +30,10 @@ const activeEditionLimit = 40
 // A la portada només hi ha les notícies de menys de 2 dies; les més velles
 // passen automàticament a la Hemeroteca.
 const activeEditionMaxAgeMs = 2 * 24 * 60 * 60 * 1000
+// Terra de seguretat: la portada MAI no es buida. Si un dia no hi ha prou
+// notícies fresques (< 2 dies), ensenyem igualment les més noves disponibles
+// fins a aquest mínim, perquè el diari no quedi mai en blanc.
+const activeEditionFloor = 12
 const maxStoredFeedStories = 40
 const minStoriesPerSection = 5
 
@@ -901,11 +905,18 @@ function splitEditionStories(stories) {
   const recent = sortedByAge.filter(
     (story) => now - new Date(story.publishedAt).getTime() <= activeEditionMaxAgeMs,
   )
+  // Si hi ha prou notícies fresques, la portada són només aquestes (les velles
+  // van a la Hemeroteca). Però si avui n'hi ha poques o cap de < 2 dies, no
+  // deixem la portada buida: agafem les més noves disponibles fins al terra.
+  const pool =
+    recent.length >= activeEditionFloor
+      ? recent
+      : sortedByAge.slice(0, Math.max(activeEditionFloor, recent.length))
   const activeStoryIds = new Set()
 
-  // Primer, una peça per secció (de les recents) per garantir cobertura diària.
+  // Primer, una peça per secció (del pool) per garantir cobertura diària.
   for (const section of editorialSections) {
-    const sectionStory = recent.find(
+    const sectionStory = pool.find(
       (story) => getStorySection(story).id === section.id,
     )
 
@@ -914,8 +925,8 @@ function splitEditionStories(stories) {
     }
   }
 
-  // Després, omplim amb les recents més noves fins al límit d'edició.
-  for (const story of recent) {
+  // Després, omplim amb les més noves fins al límit d'edició.
+  for (const story of pool) {
     if (activeStoryIds.size >= activeEditionLimit) {
       break
     }
@@ -924,10 +935,10 @@ function splitEditionStories(stories) {
   }
 
   return {
-    activeStories: recent
+    activeStories: pool
       .filter((story) => activeStoryIds.has(story.id))
       .sort(sortByDistanceAndDate),
-    // Hemeroteca: les recents que no caben + TOTES les de més de 2 dies.
+    // Hemeroteca: la resta (les que no caben i les més velles).
     archiveStories: sortedByAge.filter((story) => !activeStoryIds.has(story.id)),
   }
 }

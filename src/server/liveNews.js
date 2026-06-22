@@ -8,7 +8,12 @@ import { normalizeCategory } from '../lib/category.js'
 export const refreshIntervalMs = 4 * 60 * 60 * 1000
 
 const cacheKey = 'latest'
-const maxLiveStoryAgeMs = 60 * 24 * 60 * 60 * 1000
+// El Bon Diari és un DIARI: el radar només manté notícies de pocs dies. Una
+// finestra llarga deixava que notícies velles amb moltes paraules positives
+// dominessin la portada eternament. 4 dies = prou marge per a seccions lentes
+// (ciència, cultura) sense fossilitzar-se. La portada del web encara n'ensenya
+// les de < 2 dies; la resta van a l'Hemeroteca.
+const maxLiveStoryAgeMs = 4 * 24 * 60 * 60 * 1000
 const liveEditorialVersion = LIVE_EDITORIAL_VERSION
 const targetStoryLimit = 30
 const maxStoriesPerSource = 5
@@ -935,12 +940,19 @@ export async function collectLivePositiveNews(env) {
       (story) =>
         Date.now() - new Date(story.publishedAt).getTime() <= maxLiveStoryAgeMs,
     )
-    .sort(
-      (left, right) =>
-        right.editorialScore - left.editorialScore ||
-        new Date(right.publishedAt).getTime() -
-          new Date(left.publishedAt).getTime(),
-    )
+    .sort((left, right) => {
+      // Un DIARI lidera amb el dia d'avui. Ordenem per DIA (el més nou primer)
+      // i, dins del mateix dia, per com de prometedora és (paraula clau primer),
+      // perquè la IA gasti el pressupost de crides en les millors d'avui. Abans
+      // s'ordenava per puntuació sense mirar el dia, i una notícia vella amb
+      // moltes paraules positives passava davant de la d'avui.
+      const timeLeft = new Date(left.publishedAt).getTime()
+      const timeRight = new Date(right.publishedAt).getTime()
+      const dayBucket =
+        Math.floor(timeRight / 86400000) - Math.floor(timeLeft / 86400000)
+      if (dayBucket !== 0) return dayBucket
+      return right.editorialScore - left.editorialScore || timeRight - timeLeft
+    })
 
   // La IA revisa les candidates: veta les dolentes que han colat per paraula clau
   // i rescata les bones neutres. Una positiva encara no jutjada es mostra provi-
@@ -1138,6 +1150,12 @@ export async function getLiveNewsPayload(kv, { force = false, env } = {}) {
     // s'havien mostrat a passades anteriors.
     const carryover = cached.stories
       .filter((s) => !freshUrlSet.has(s.url))
+      // CADUCITAT: les notícies velles surten del cau quan passen de la finestra
+      // (abans s'arrossegaven eternament i fossilitzaven la portada amb peces de
+      // fa setmanes). Un diari no recicla notícies de fa dies.
+      .filter(
+        (s) => Date.now() - new Date(s.publishedAt).getTime() <= maxLiveStoryAgeMs,
+      )
       // Revalidem contra el filtre editorial ACTUAL: si l'hem endurit, les
       // peces velles que ara no passen el tall (p. ex. guerra, política tensa)
       // cauen aquí en lloc d'arrossegar-se eternament pel cache.
