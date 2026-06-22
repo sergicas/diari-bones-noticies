@@ -674,6 +674,23 @@ function extractPrimaryCategory(block, fallback) {
   return normalizeCategory(null, fallback)
 }
 
+// Marcadors de contingut POLÍTIC tens (partits, procés electoral o parlamentari,
+// judicial). No bloquegen la notícia —de tant en tant hi ha política bona— però
+// li treuen el passi lliure: haurà de passar per la IA per sortir, en lloc de
+// colar-se per una paraula positiva incidental. S'eviten mots ambigus com "junts"
+// (=plegats) o "sumar" (=afegir); s'usen formes inequívoques.
+const POLITICAL_MARKERS = new RegExp(
+  [
+    'psoe', '\\bvox\\b', '\\berc\\b', 'podemos', 'bildu', '\\bpnv\\b', 'ciudadanos',
+    'alian[çc]a catalana', 'partit popular', 'partido popular', 'prim[àa]ries',
+    'primarias', 'investidura', 'moci[óo] de censura', 'esmena', 'enmienda',
+    'escaño', 'bancada', 'electoral', 'eleccion', 'elecci[óo]ns', 'urnes',
+    'portaveu del', 'portavoz del', 'posconvergent', 'no descarta', 'retret',
+    'reproche', 'dimissi', 'dimisi[óo]n', 'destituci', 'cessament',
+  ].join('|'),
+  'i',
+)
+
 function normalizeFeedItem(block, feed) {
   const title = decodeHtmlEntities(stripHtml(extractTag(block, 'title')))
   const linkTag = extractTag(block, 'link')
@@ -702,6 +719,18 @@ function normalizeFeedItem(block, feed) {
   const { isPositive, isNegative } = passesEditorialFilter(fullText, feed.language)
   if (isNegative) return null // clarament negativa (guerra, conflicte…): fora directament
 
+  // Contingut POLÍTIC tens (maniobres de partit, eleccions, judicis, ultradreta…):
+  // rarament és bona notícia, però se'ns cola perquè té una paraula positiva
+  // incidental al resum ("guanya les primàries"…). Li traiem el passi lliure: el
+  // tractem com a NEUTRE (editorialScore 0), de manera que NOMÉS surti si la IA
+  // l'aprova. La política constructiva de debò (un pacte que crea feina, una llei
+  // que ajuda) no porta marcadors de maniobra i continua passant. Els feeds locals
+  // queden exempts (el plenari de Mataró sí que hi té cabuda).
+  const isPolitical =
+    !feed.lenient &&
+    (category === 'Política' || POLITICAL_MARKERS.test(fullText.toLowerCase()))
+  const editorialScore = isPolitical ? 0 : (isPositive || feed.lenient ? 1 : 0)
+
   const story = {
     title,
     category,
@@ -716,10 +745,9 @@ function normalizeFeedItem(block, feed) {
     imageAlt: `Imatge de portada per a ${title}.`,
     imageCredit: feed.name,
     imageAttributionUrl: link,
-    // Els feeds "lenient" (locals: Mataró/Maresme) compten com a bons si no són
-    // negatius, encara que no tinguin cap paraula clau positiva: el contingut
-    // local de proximitat (festes, comunitat, esport de base) hi té cabuda.
-    editorialScore: (isPositive || feed.lenient) ? 1 : 0,
+    // editorialScore calculat a dalt: 0 = neutre/polític (només surt si la IA
+    // l'aprova) · 1 = bo (paraula clau positiva o feed local).
+    editorialScore,
     editorialVersion: liveEditorialVersion,
     publishedAt,
   }
