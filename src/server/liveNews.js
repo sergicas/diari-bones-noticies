@@ -134,6 +134,10 @@ const editorialDictionaries = {
       'míssil', 'caça militar',
       'cop d\'estat', 'cop militar', 'exèrcit ha d', 'intervenció militar',
       'posconvergent', 'no descarta', 'aliança catalana',
+      // Dimissions, destitucions i governs que cauen: no és mai bona notícia
+      // (colat el 22/06 amb la dimissió del primer ministre britànic).
+      'dimissi', 'dimiteix', 'dimitir', 'destitu', 'cessament', 'cau el govern',
+      'govern cau', 'crisi de govern',
       // Verbs de mort i agressió (els substantius ja hi eren)
       'matar', 'mata ', 'maten ', 'matada', 'matades', 'matat', 'matats',
       'assassina ', 'assassinen', 'apunyala', 'apunyalen', 'apunyalat',
@@ -209,6 +213,10 @@ const editorialDictionaries = {
       'f-35', 'f-47', 'fcas', 'misil', 'armamento', 'bélic',
       'golpe de estado', 'golpe militar', 'ejército debe', 'intervención militar', 'asonada',
       'posconvergent', 'no descarta', 'alianza catalana',
+      // Dimisiones, destituciones y gobiernos que caen: no es buena noticia
+      // (colado el 22/06 con la dimisión del primer ministro británico).
+      'dimite', 'dimiten', 'dimitir', 'dimisión', 'dimisi', 'destitu', 'cese del',
+      'cae el gobierno', 'crisis de gobierno',
       // Mercat esportiu (fichajes), publicitat i contingut patrocinat
       'fichaje', 'fichajes', 'ficha por', 'fichar por', 'fichado por',
       'millones por', 'millones de euros por', 'traspaso de',
@@ -271,6 +279,11 @@ const editorialDictionaries = {
       'fighter jet', 'combat aircraft', 'warplane', 'weapon', 'arms deal', 'f-35',
       'troops', 'crashes', 'crashed', 'tragedy', 'tragic', 'famine',
       'starvation', 'epidemic', 'pandemic', 'outbreak',
+      // Resignations, ousters and collapsing governments: not good news
+      // (slipped in on 22/06 with the UK prime minister's resignation).
+      'resign', 'resigns', 'resigned', 'resignation', 'steps down',
+      'stepped down', 'ousted', 'ouster', 'no-confidence', 'quits as',
+      'topples government', 'government collapse',
       // Sports transfers, advertising, sponsored podcast content
       'transfer', 'transfers', 'transfer market', 'transfer talk',
       'transfer rumours', 'transfer rumors', 'signs for', 'signs with',
@@ -309,6 +322,9 @@ const editorialDictionaries = {
       'braquage', 'cambriolage', 'voleur', 'escroquerie', 'délit', 'criminel',
       'extrême droite', 'délinqu', 'xénophob',
       'cannabis', 'drogue', 'armée', 'militaire', 'coup d\'état', 'intervention militaire',
+      // Démissions, destitutions et gouvernements qui tombent : pas une bonne nouvelle.
+      'démission', 'démissionne', 'démissionner', 'destitu', 'limogé',
+      'chute du gouvernement', 'motion de censure',
       // Verbes de mort, violence, fin brutale
       'tue ', 'tué', 'tués', 'tuent', 'achève', 'achevé', 'liquide',
       'poignardé', 'poignardée', 'agresse', 'agressé', 'agression',
@@ -327,7 +343,11 @@ function getDictionary(language) {
 }
 
 export function passesEditorialFilter(text, language) {
-  const normalized = text.toLowerCase()
+  // Alguns noms propis xoquen amb arrels negatives quan es compara per trossos:
+  // "Mataró" conté "matar". Sense neutralitzar-los, TOTA notícia de Mataró (la
+  // ciutat de la secció Local) cauria com si parlés de matar. Els substituïm per
+  // un token neutre abans de buscar paraules dolentes.
+  const normalized = text.toLowerCase().replace(/matar[oó]/g, 'la-ciutat')
   const dict = getDictionary(language)
   const isNegative = dict.negative.some((word) => normalized.includes(word))
   const isPositive = dict.positive.some((word) => normalized.includes(word))
