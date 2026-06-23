@@ -18,6 +18,10 @@ const liveEditorialVersion = LIVE_EDITORIAL_VERSION
 const targetStoryLimit = 30
 const maxStoriesPerSource = 5
 const collectionPoolSize = 80
+// Bondiari és un diari de Catalunya: el català i el castellà manen i no tenen
+// límit al lot. Les altres llengües enriqueixen (món, ciència, cultura) però
+// no poden inundar la portada, així que cadascuna té un sostre de peces.
+const maxStoriesPerLanguage = { en: 8, fr: 5, it: 5, pt: 4 }
 
 // Els feeds per secció de 3cat van quedar TRENCATS el 2026 (ara són pàgines
 // HTML, no RSS): donaven 0 notícies i malgastaven una subpetició cadascun. Les
@@ -25,49 +29,141 @@ const collectionPoolSize = 80
 // Tecnologia/Ciència, ARA Cultura, etc.).
 const sections = []
 
+// Llista mestra de fonts en SIS llengües (ca, es, en, pt, fr, it). És massa
+// gran per baixar-la sencera en un sol refresc sense petar el límit de
+// subpeticions del pla gratuït (~50), així que les marcades amb `core: true`
+// es baixen SEMPRE (una àncora per llengua perquè cap quedi muda) i la resta
+// ROTEN: cada refresc n'agafa una finestra diferent (vegeu selectFeedsForRun).
+// Totes les URLs estan validades (responen RSS/Atom amb peces fresques).
 const rssFeeds = [
-  // Catalanes
-  { name: 'Vilaweb', url: 'https://www.vilaweb.cat/feed/', language: 'ca', defaultCategory: 'Actualitat' },
+  // ===================== CATALÀ =====================
+  { name: 'Vilaweb', url: 'https://www.vilaweb.cat/feed/', language: 'ca', defaultCategory: 'Actualitat', core: true },
   { name: 'ARA', url: 'https://www.ara.cat/rss/', language: 'ca', defaultCategory: 'Actualitat' },
+  { name: 'Nació Digital', url: 'https://www.naciodigital.cat/rss/', language: 'ca', defaultCategory: 'Actualitat', core: true },
+  { name: 'El Món', url: 'https://elmon.cat/feed/', language: 'ca', defaultCategory: 'Actualitat' },
+  // Local de Mataró i el Maresme (Capgròs). Categoria forçada a 'Local'.
+  { name: 'Capgròs', url: 'https://capgros.elnacional.cat/uploads/feeds/feed_ca.xml', language: 'ca', defaultCategory: 'Local', forceCategory: true, lenient: true, core: true },
   { name: 'El Punt Avui', url: 'https://www.elpuntavui.cat/?format=feed&type=rss', language: 'ca', defaultCategory: 'Actualitat' },
   { name: 'Betevé', url: 'https://beteve.cat/feed/', language: 'ca', defaultCategory: 'Barcelona' },
-  // Local de Mataró i el Maresme (Capgròs). Categoria forçada a 'Local'.
-  { name: 'Capgròs', url: 'https://capgros.elnacional.cat/uploads/feeds/feed_ca.xml', language: 'ca', defaultCategory: 'Local', forceCategory: true, lenient: true },
   { name: 'Crític', url: 'https://www.elcritic.cat/feed', language: 'ca', defaultCategory: 'Periodisme' },
-  { name: 'Nació Digital', url: 'https://www.naciodigital.cat/rss/', language: 'ca', defaultCategory: 'Actualitat' },
+  { name: 'Diari de Tarragona', url: 'https://www.diaridetarragona.com/rss', language: 'ca', defaultCategory: 'Actualitat' },
+  { name: 'ARA Cultura', url: 'https://www.ara.cat/rss/cultura', language: 'ca', defaultCategory: 'Cultura', forceCategory: true },
+  { name: 'ARA Internacional', url: 'https://www.ara.cat/rss/internacional', language: 'ca', defaultCategory: 'Internacional', forceCategory: true },
 
-  // Castellà
+  // ===================== CASTELLÀ =====================
+  { name: 'El País', url: 'https://feeds.elpais.com/mrss-s/pages/ep/site/elpais.com/portada', language: 'es', defaultCategory: 'Espanya', core: true },
   { name: 'La Vanguardia', url: 'https://www.lavanguardia.com/rss/home.xml', language: 'es', defaultCategory: 'Espanya' },
-  { name: 'El País', url: 'https://feeds.elpais.com/mrss-s/pages/ep/site/elpais.com/portada', language: 'es', defaultCategory: 'Espanya' },
   { name: 'elDiario', url: 'https://www.eldiario.es/rss/', language: 'es', defaultCategory: 'Espanya' },
   { name: 'RTVE', url: 'https://www.rtve.es/rss/temas_noticias.xml', language: 'es', defaultCategory: 'Espanya' },
-
-  // Feeds PER SECCIÓ per alimentar Cultura/Tecnologia/Ciència (els de 3cat van
-  // quedar trencats el 2026: ara són pàgines HTML, no RSS). Aquests sí que
-  // donen inflow constant a les seccions que abans es quedaven seques.
+  { name: '20minutos', url: 'https://www.20minutos.es/rss/', language: 'es', defaultCategory: 'Espanya' },
+  { name: 'ABC', url: 'https://www.abc.es/rss/2.0/portada/', language: 'es', defaultCategory: 'Espanya' },
+  { name: 'El Confidencial', url: 'https://rss.elconfidencial.com/espana/', language: 'es', defaultCategory: 'Espanya' },
+  { name: 'El Español', url: 'https://www.elespanol.com/rss/', language: 'es', defaultCategory: 'Espanya' },
+  { name: 'El Mundo', url: 'https://e00-elmundo.uecdn.es/elmundo/rss/portada.xml', language: 'es', defaultCategory: 'Espanya' },
+  { name: 'El País Sociedad', url: 'https://feeds.elpais.com/mrss-s/pages/ep/site/elpais.com/section/sociedad/portada', language: 'es', defaultCategory: 'Societat', forceCategory: true },
+  // Feeds temàtics per alimentar Cultura/Tecnologia/Ciència.
   { name: 'El País Cultura', url: 'https://feeds.elpais.com/mrss-s/pages/ep/site/elpais.com/section/cultura/portada', language: 'es', defaultCategory: 'Cultura', forceCategory: true },
   { name: 'El País Tecnologia', url: 'https://feeds.elpais.com/mrss-s/pages/ep/site/elpais.com/section/tecnologia/portada', language: 'es', defaultCategory: 'Tecnologia', forceCategory: true },
   { name: 'El País Ciència', url: 'https://feeds.elpais.com/mrss-s/pages/ep/site/elpais.com/section/ciencia/portada', language: 'es', defaultCategory: 'Ciència', forceCategory: true },
-  { name: 'ARA Cultura', url: 'https://www.ara.cat/rss/cultura', language: 'ca', defaultCategory: 'Cultura', forceCategory: true },
+  { name: 'La Vanguardia Cultura', url: 'https://www.lavanguardia.com/rss/cultura.xml', language: 'es', defaultCategory: 'Cultura', forceCategory: true },
+  { name: 'La Vanguardia Ciència', url: 'https://www.lavanguardia.com/rss/ciencia.xml', language: 'es', defaultCategory: 'Ciència', forceCategory: true },
 
-  // Anglès — diaris internacionals
-  { name: 'BBC', url: 'https://feeds.bbci.co.uk/news/world/rss.xml', language: 'en', defaultCategory: 'Món' },
-  { name: 'CNN', url: 'http://rss.cnn.com/rss/edition.rss', language: 'en', defaultCategory: 'Món' },
+  // ===================== ANGLÈS =====================
+  { name: 'BBC', url: 'https://feeds.bbci.co.uk/news/world/rss.xml', language: 'en', defaultCategory: 'Món', core: true },
+  // Diaris de bones notícies (ja curats: passen sense exigir paraula positiva).
+  { name: 'Positive News', url: 'https://www.positive.news/feed/', language: 'en', defaultCategory: 'Món', lenient: true, core: true },
+  { name: 'Good News Network', url: 'https://www.goodnewsnetwork.org/feed/', language: 'en', defaultCategory: 'Món', lenient: true },
+  { name: 'Reasons to be Cheerful', url: 'https://reasonstobecheerful.world/feed/', language: 'en', defaultCategory: 'Món', lenient: true },
   { name: 'The Guardian', url: 'https://www.theguardian.com/world/rss', language: 'en', defaultCategory: 'Món' },
-  { name: 'Wall Street Journal', url: 'https://feeds.a.dj.com/rss/RSSWorldNews.xml', language: 'en', defaultCategory: 'Món' },
+  { name: 'CNN', url: 'http://rss.cnn.com/rss/edition.rss', language: 'en', defaultCategory: 'Món' },
   { name: 'Al Jazeera', url: 'https://www.aljazeera.com/xml/rss/all.xml', language: 'en', defaultCategory: 'Món' },
   { name: 'Washington Post', url: 'https://feeds.washingtonpost.com/rss/world', language: 'en', defaultCategory: 'Món' },
   { name: 'New York Times', url: 'https://rss.nytimes.com/services/xml/rss/nyt/World.xml', language: 'en', defaultCategory: 'Món' },
+  { name: 'NPR', url: 'https://feeds.npr.org/1001/rss.xml', language: 'en', defaultCategory: 'Món' },
+  { name: 'Sky News', url: 'https://feeds.skynews.com/feeds/rss/world.xml', language: 'en', defaultCategory: 'Món' },
+  { name: 'The Independent', url: 'https://www.independent.co.uk/news/world/rss', language: 'en', defaultCategory: 'Món' },
+  { name: 'Wall Street Journal', url: 'https://feeds.a.dj.com/rss/RSSWorldNews.xml', language: 'en', defaultCategory: 'Món' },
   { name: 'Bloomberg', url: 'https://feeds.bloomberg.com/news.rss', language: 'en', defaultCategory: 'Economia' },
   { name: 'Financial Times', url: 'https://www.ft.com/world?format=rss', language: 'en', defaultCategory: 'Economia' },
-  { name: 'MIT Technology Review', url: 'https://www.technologyreview.com/feed/', language: 'en', defaultCategory: 'Tecnologia' },
   { name: 'The Conversation', url: 'https://theconversation.com/articles.atom', language: 'en', defaultCategory: 'Coneixement' },
-
-  // Europa altres llengües
-  { name: 'Le Monde', url: 'https://www.lemonde.fr/rss/une.xml', language: 'fr', defaultCategory: 'Europa' },
-  { name: 'Deutsche Welle', url: 'https://rss.dw.com/xml/rss-en-all', language: 'en', defaultCategory: 'Europa' },
+  { name: 'Science Daily', url: 'https://www.sciencedaily.com/rss/all.xml', language: 'en', defaultCategory: 'Ciència', forceCategory: true },
+  { name: 'Phys.org', url: 'https://phys.org/rss-feed/', language: 'en', defaultCategory: 'Ciència', forceCategory: true },
+  { name: 'BBC Science', url: 'https://feeds.bbci.co.uk/news/science_and_environment/rss.xml', language: 'en', defaultCategory: 'Ciència', forceCategory: true },
+  { name: 'Guardian Science', url: 'https://www.theguardian.com/science/rss', language: 'en', defaultCategory: 'Ciència', forceCategory: true },
+  { name: 'BBC Technology', url: 'https://feeds.bbci.co.uk/news/technology/rss.xml', language: 'en', defaultCategory: 'Tecnologia', forceCategory: true },
+  { name: 'MIT Technology Review', url: 'https://www.technologyreview.com/feed/', language: 'en', defaultCategory: 'Tecnologia', forceCategory: true },
+  { name: 'TechCrunch', url: 'https://techcrunch.com/feed/', language: 'en', defaultCategory: 'Tecnologia', forceCategory: true },
+  { name: 'The Verge', url: 'https://www.theverge.com/rss/index.xml', language: 'en', defaultCategory: 'Tecnologia', forceCategory: true },
+  { name: 'Guardian Culture', url: 'https://www.theguardian.com/culture/rss', language: 'en', defaultCategory: 'Cultura', forceCategory: true },
+  { name: 'Smithsonian', url: 'https://www.smithsonianmag.com/rss/latest_articles/', language: 'en', defaultCategory: 'Cultura', forceCategory: true },
   { name: 'Euronews', url: 'https://www.euronews.com/rss?level=theme&name=news', language: 'en', defaultCategory: 'Europa' },
+
+  // ===================== PORTUGUÈS =====================
+  { name: 'Observador', url: 'https://observador.pt/feed/', language: 'pt', defaultCategory: 'Món', core: true },
+  { name: 'RTP Notícias', url: 'https://www.rtp.pt/noticias/rss', language: 'pt', defaultCategory: 'Món' },
+  { name: 'CNN Portugal', url: 'https://cnnportugal.iol.pt/rss', language: 'pt', defaultCategory: 'Món' },
+  { name: 'Folha de S.Paulo', url: 'https://feeds.folha.uol.com.br/emcimadahora/rss091.xml', language: 'pt', defaultCategory: 'Món' },
+  { name: 'G1', url: 'https://g1.globo.com/rss/g1/', language: 'pt', defaultCategory: 'Món' },
+  { name: 'Agência Brasil', url: 'https://agenciabrasil.ebc.com.br/rss/ultimasnoticias/feed.xml', language: 'pt', defaultCategory: 'Món' },
+
+  // ===================== FRANCÈS =====================
+  { name: 'Le Monde', url: 'https://www.lemonde.fr/rss/une.xml', language: 'fr', defaultCategory: 'Europa', core: true },
+  { name: 'Positivr', url: 'https://positivr.fr/feed/', language: 'fr', defaultCategory: 'Europa', lenient: true },
+  { name: 'Le Figaro', url: 'https://www.lefigaro.fr/rss/figaro_actualites.xml', language: 'fr', defaultCategory: 'Europa' },
+  { name: 'Libération', url: 'https://www.liberation.fr/arc/outboundfeeds/rss/?outputType=xml', language: 'fr', defaultCategory: 'Europa' },
+  { name: 'France 24', url: 'https://www.france24.com/fr/rss', language: 'fr', defaultCategory: 'Europa' },
+  { name: 'RFI', url: 'https://www.rfi.fr/fr/rss', language: 'fr', defaultCategory: 'Europa' },
+  { name: '20 Minutes', url: 'https://www.20minutes.fr/feeds/rss-une.xml', language: 'fr', defaultCategory: 'Europa' },
+  { name: 'Ouest-France', url: 'https://www.ouest-france.fr/rss/une', language: 'fr', defaultCategory: 'Europa' },
+  { name: 'Franceinfo', url: 'https://www.francetvinfo.fr/titres.rss', language: 'fr', defaultCategory: 'Europa' },
+  { name: 'Le Parisien', url: 'https://feeds.leparisien.fr/leparisien/rss', language: 'fr', defaultCategory: 'Europa' },
+  { name: 'Courrier International', url: 'https://www.courrierinternational.com/feed/all/rss.xml', language: 'fr', defaultCategory: 'Món' },
+  { name: 'Sciences et Avenir', url: 'https://www.sciencesetavenir.fr/rss.xml', language: 'fr', defaultCategory: 'Ciència', forceCategory: true },
+
+  // ===================== ITALIÀ =====================
+  { name: 'la Repubblica', url: 'https://www.repubblica.it/rss/homepage/rss2.0.xml', language: 'it', defaultCategory: 'Europa', core: true },
+  { name: 'ANSA', url: 'https://www.ansa.it/sito/ansait_rss.xml', language: 'it', defaultCategory: 'Europa' },
+  { name: 'La Stampa', url: 'https://www.lastampa.it/rss', language: 'it', defaultCategory: 'Europa' },
+  { name: 'Rai News', url: 'https://www.rainews.it/rss/tutti', language: 'it', defaultCategory: 'Europa' },
+  { name: 'Il Fatto Quotidiano', url: 'https://www.ilfattoquotidiano.it/feed/', language: 'it', defaultCategory: 'Europa' },
+  { name: 'Open', url: 'https://www.open.online/feed/', language: 'it', defaultCategory: 'Europa' },
+  { name: 'Internazionale', url: 'https://www.internazionale.it/sitemaps/rss.xml', language: 'it', defaultCategory: 'Món' },
+  { name: 'Il Sole 24 Ore', url: 'https://www.ilsole24ore.com/rss/italia.xml', language: 'it', defaultCategory: 'Economia' },
+  { name: 'ANSA Cultura', url: 'https://www.ansa.it/sito/notizie/cultura/cultura_rss.xml', language: 'it', defaultCategory: 'Cultura', forceCategory: true },
 ]
+
+// Quantes fonts es baixen com a màxim per refresc (límit de subpeticions del
+// pla gratuït ~50; en deixem ~14 per a la IA). Les `core` sempre; la resta
+// roten en finestres deterministes que avancen cada interval de refresc, de
+// manera que en poques hores es cobreixen totes les fonts del món.
+// Quantes fonts ROTATÒRIES de cada llengua entren a CADA refresc. El català i
+// el castellà (llengües de casa) en porten més; la resta, menys però sempre
+// alguna. Roten dins de cada llengua (avancen amb el temps), de manera que cada
+// refresc duu sempre una barreja de les sis llengües i, en uns quants refrescs,
+// es cobreix tota la llista mestra. core (10) + 14 rotatòries = 24 fonts/refresc,
+// que deixa marge per a les ~10 crides de la IA sota el límit de subpeticions.
+const rotatingPerLanguage = { ca: 4, es: 3, en: 4, fr: 1, it: 1, pt: 1 }
+
+function selectFeedsForRun(nowMs) {
+  const core = rssFeeds.filter((feed) => feed.core)
+  const tick = Math.floor(nowMs / refreshIntervalMs)
+  const seen = new Set(core.map((feed) => feed.url))
+  const picked = []
+  for (const [language, count] of Object.entries(rotatingPerLanguage)) {
+    const pool = rssFeeds.filter(
+      (feed) => !feed.core && feed.language === language,
+    )
+    if (!pool.length) continue
+    for (let i = 0; i < count; i += 1) {
+      const feed = pool[(tick * count + i) % pool.length]
+      if (!seen.has(feed.url)) {
+        seen.add(feed.url)
+        picked.push(feed)
+      }
+    }
+  }
+  return [...core, ...picked]
+}
 
 // --- Diccionaris editorials per idioma -------------------------------------
 
@@ -336,6 +432,67 @@ const editorialDictionaries = {
       'podcast', 'podcasts', 'contenu sponsorisé', 'parrainé par',
     ],
   },
+  pt: {
+    positive: [
+      'sucesso', 'ajuda', 'ajudam', 'solidariedade', 'recupera', 'salva',
+      'salvou', 'salvar', 'prémio', 'prêmio', 'galardão', 'recorde', 'ganha',
+      'vence', 'venceu', 'campeão', 'inaugura', 'estreia', 'estréia', 'regressa',
+      'descobre', 'descoberta', 'inovação', 'inovador', 'projeto', 'projecto',
+      'nasce', 'melhora', 'melhoria', 'avança', 'esperança', 'protege',
+      'restaura', 'abre', 'celebra', 'homenagem', 'reconhecimento', 'histórico',
+      'acordo', 'pacto', 'investigação', 'pesquisa', 'voluntário', 'voluntária',
+      'doação', 'iniciativa', 'conquista', 'vacina', 'recuperação', 'impulsiona',
+      'reforça', 'beneficia', 'apoia', 'crescimento', 'inclusão', 'inclusivo',
+      'gratuito', 'gratuita', 'renova', 'sustentável', 'cooperação',
+    ],
+    negative: [
+      'guerra', 'míssil', 'bomba', 'ataque', 'atentado', 'violência',
+      'violencia', 'conflito', 'invasão', 'derrota', 'crise', 'morte', 'morto',
+      'morta', 'mortos', 'morre', 'morreu', 'vítima', 'vítimas', 'refém',
+      'reféns', 'assalto', 'assassinato', 'assassino', 'homicídio', 'tiroteio',
+      'massacre', 'genocídio', 'crime', 'criminoso', 'roubo', 'furto', 'ladrão',
+      'fraude', 'corrupção', 'corrupto', 'detido', 'detida', 'preso', 'prisão',
+      'cadeia', 'denúncia', 'queixa', 'condenado', 'condenação', 'escândalo',
+      'tragédia', 'trágico', 'catástrofe', 'incêndio', 'terramoto', 'terremoto',
+      'seca', 'enchente', 'inundação', 'emergência', 'droga', 'drogas',
+      'cannabis', 'narcotráfico', 'extrema-direita', 'extrema direita',
+      'fascista', 'xenofobia', 'terrorismo', 'terrorista', 'demite', 'demitir',
+      'demissão', 'demitiu', 'destitui', 'destituição', 'queda do governo',
+      'moção de censura', 'greve', 'despedimento', 'cancro', 'doença', 'surto',
+      'pandemia', 'epidemia', 'abuso', 'agressão', 'sequestro', 'rapto',
+      'polémica', 'polêmica', 'guerrilha', 'golpe de estado',
+    ],
+  },
+  it: {
+    positive: [
+      'successo', 'aiuta', 'aiuto', 'solidarietà', 'recupera', 'salva',
+      'salvato', 'premio', 'riconoscimento', 'record', 'vittoria', 'ha vinto',
+      'campione', 'inaugura', 'debutta', 'scopre', 'scoperta', 'innovazione',
+      'innovativo', 'progetto', 'nasce', 'migliora', 'miglioramento', 'avanza',
+      'speranza', 'protegge', 'restaura', 'apre', 'celebra', 'omaggio',
+      'storico', 'accordo', 'patto', 'ricerca', 'volontario', 'volontaria',
+      'donazione', 'iniziativa', 'traguardo', 'vaccino', 'rinasce', 'sostiene',
+      'rafforza', 'beneficia', 'conquista', 'crescita', 'inclusione',
+      'inclusivo', 'gratuito', 'gratuita', 'rinnova', 'sostenibile',
+      'cooperazione', 'guarisce', 'guarito',
+    ],
+    negative: [
+      'guerra', 'missile', 'bomba', 'attacco', 'attentato', 'violenza',
+      'conflitto', 'invasione', 'sconfitta', 'crisi', 'morte', 'morto', 'morta',
+      'morti', 'muore', 'ucciso', 'uccide', 'omicidio', 'assassinio',
+      'assassino', 'vittima', 'vittime', 'ostaggio', 'sparatoria', 'strage',
+      'genocidio', 'crimine', 'criminale', 'rapina', 'furto', 'ladro', 'frode',
+      'corruzione', 'corrotto', 'arrestato', 'arresto', 'carcere', 'prigione',
+      'denuncia', 'condannato', 'condanna', 'scandalo', 'tragedia', 'tragico',
+      'catastrofe', 'incendio', 'terremoto', 'siccità', 'alluvione', 'emergenza',
+      'droga', 'droghe', 'cannabis', 'narcotraffico', 'estrema destra',
+      'fascista', 'xenofobia', 'terrorismo', 'terrorista', 'dimette',
+      'dimissioni', 'dimissione', 'destituz', 'sfiducia', 'licenziamento',
+      'licenzia', 'sciopero', 'cancro', 'malattia', 'epidemia', 'pandemia',
+      'abuso', 'aggressione', 'sequestro', 'rapimento', 'crollo', 'degrado',
+      'golpe', 'colpo di stato',
+    ],
+  },
 }
 
 function getDictionary(language) {
@@ -457,6 +614,29 @@ export function applyDiversityCap(stories, maxPerSource, targetTotal) {
     return primary.slice(0, targetTotal)
   }
   return [...primary, ...overflow].slice(0, targetTotal)
+}
+
+// Acota quantes peces pot aportar cada llengua forana (les de casa, ca/es, no
+// tenen sostre). Manté l'ordre d'entrada; descarta l'excedent de cada llengua
+// limitada. Evita que un dia els feeds europeus d'alt volum omplin tota la
+// portada i deixin el català i el castellà fora.
+export function capPerLanguage(stories, caps) {
+  const counts = new Map()
+  const kept = []
+  for (const story of stories) {
+    const language = story.language || '?'
+    const cap = caps[language]
+    if (cap == null) {
+      kept.push(story)
+      continue
+    }
+    const count = counts.get(language) || 0
+    if (count < cap) {
+      kept.push(story)
+      counts.set(language, count + 1)
+    }
+  }
+  return kept
 }
 
 // --- Utilitats compartides -------------------------------------------------
@@ -827,7 +1007,7 @@ async function collectFeedStories(feed) {
 const AI_MODEL = '@cf/meta/llama-3.2-3b-instruct'
 const aiVerdictsKey = 'ai-verdicts' // un sol registre KV amb TOTS els veredictes
 const aiVerdictTtlMs = 14 * 24 * 60 * 60 * 1000 // 14 dies
-const maxAiPerRun = 14 // crides NOVES per passada (per no petar el límit de subpeticions)
+const maxAiPerRun = 10 // crides NOVES per passada (per no petar el límit de subpeticions)
 
 const AI_SYSTEM = [
   "Ets el filtre d'El Bon Diari, un diari que evita les MALES notícies.",
@@ -929,9 +1109,12 @@ async function aiReview(env, candidates) {
 // --- Recol·lecció combinada -----------------------------------------------
 
 export async function collectLivePositiveNews(env) {
+  // Només la finestra de fonts d'aquest refresc (core + rotatòries), per no
+  // petar el límit de subpeticions. La rotació avança sola amb el temps.
+  const feedsThisRun = selectFeedsForRun(Date.now())
   const [sectionResults, feedResults] = await Promise.all([
     Promise.all(sections.map(collectSectionStories)),
-    Promise.all(rssFeeds.map(collectFeedStories)),
+    Promise.all(feedsThisRun.map(collectFeedStories)),
   ])
 
   const stories = []
@@ -1022,7 +1205,7 @@ async function setCachedPayload(kv, stories) {
 
 // --- Memòria d'URLs ja servides (perquè cada dia hi hagi peces noves) -----
 
-const seenUrlsKey = 'seen-urls-v1'
+const seenUrlsKey = 'seen-urls-v2'
 const seenUrlsRetentionMs = 14 * 24 * 60 * 60 * 1000
 const minFreshStoriesForFullRefresh = 10
 
@@ -1148,49 +1331,56 @@ export async function getLiveNewsPayload(kv, { force = false, env } = {}) {
     return { ...cached, cache: 'stale' }
   }
 
-  // Marquem les noves com a "vistes" perquè no tornin demà.
-  if (freshStories.length > 0) {
+  // (El marcatge de "vistes" es fa MÉS AVALL, només per a les que de debò entren
+  // al lot. Marcar-les totes aquí cremava notícies acceptades que quedaven fora
+  // del tall —p. ex. catalanes desplaçades per l'allau de bones notícies en
+  // anglès— i no podien tornar mai. Vegeu el bloc després de finalStories.)
+
+  // Construïm el lot final. Amb 80 fonts en sis llengües cap refresc sol no pot
+  // representar-les totes (cada passada captura un grapat de fresques, sovint
+  // d'una sola llengua). Per això SEMPRE ACUMULEM: notícies fresques d'aquest
+  // refresc + arrossegament del lot anterior (revalidat i caducat als 4 dies).
+  // Així, refresc rere refresc, el lot va sumant català, castellà, anglès… fins
+  // a un mosaic divers i equilibrat, en lloc de substituir-se per la captura
+  // d'avui. Les fresques van al davant (lideren les d'avui); el sostre per
+  // llengua i la diversitat per font fan la resta.
+  const carryover = (cached?.stories || [])
+    .filter((s) => !freshUrlSet.has(s.url))
+    // CADUCITAT: les notícies surten del lot quan passen de la finestra (4 dies),
+    // perquè no s'arrosseguin eternament i fossilitzin la portada.
+    .filter(
+      (s) => Date.now() - new Date(s.publishedAt).getTime() <= maxLiveStoryAgeMs,
+    )
+    // Revalidem contra el filtre editorial ACTUAL (si l'hem endurit, les velles
+    // que ara no passen cauen aquí en lloc d'arrossegar-se).
+    .filter((s) => passesEditorialFilter(`${s.title} ${s.summary || ''}`, s.language).passes)
+    .map(({ isFresh: _isFresh, ...rest }) => rest)
+  const preDiversity = [...freshStories, ...carryover]
+  // Acotem les llengües foranes ABANS de la diversitat per font, perquè el
+  // català i el castellà mai no quedin fora encara que un dia hi hagi allau de
+  // notícies europees.
+  const balanced = capPerLanguage(preDiversity, maxStoriesPerLanguage)
+  const finalStories = ensureCategoryCoverage(
+    applyDiversityCap(balanced, maxStoriesPerSource, targetStoryLimit),
+    balanced,
+    targetStoryLimit,
+  )
+
+  // Marquem com a "vistes" NOMÉS les noves que de debò entren al lot. Una
+  // notícia acceptada que avui queda fora (pel sostre d'una altra llengua o per
+  // diversitat de font) segueix sent elegible al pròxim refresc en lloc de
+  // cremar-se. Així el català i el castellà no els devora l'allau anglesa.
+  const shownFreshUrls = finalStories
+    .filter((story) => freshUrlSet.has(story.url))
+    .map((story) => story.url)
+  if (shownFreshUrls.length > 0) {
     const now = Date.now()
     const updatedSeen = [
       ...seenEntries,
-      ...freshStories.map((story) => ({ url: story.url, firstSeenAt: now })),
+      ...shownFreshUrls.map((url) => ({ url, firstSeenAt: now })),
     ]
     await saveSeenEntries(kv, updatedSeen)
   }
-
-  // Construïm el lot final i li apliquem el sostre per font (diversitat).
-  let preDiversity
-  if (freshStories.length >= minFreshStoriesForFullRefresh) {
-    // Hi ha prou novetat — el lot és íntegrament nou.
-    preDiversity = freshStories
-  } else if (cached?.stories?.length) {
-    // Poques noves: encapçalem amb les noves i completem amb les del cache anterior
-    // (excloent duplicats). Així cada visita té novetat sense quedar-se mai amb
-    // una portada curta. Les del cache antic perden l'etiqueta isFresh perquè ja
-    // s'havien mostrat a passades anteriors.
-    const carryover = cached.stories
-      .filter((s) => !freshUrlSet.has(s.url))
-      // CADUCITAT: les notícies velles surten del cau quan passen de la finestra
-      // (abans s'arrossegaven eternament i fossilitzaven la portada amb peces de
-      // fa setmanes). Un diari no recicla notícies de fa dies.
-      .filter(
-        (s) => Date.now() - new Date(s.publishedAt).getTime() <= maxLiveStoryAgeMs,
-      )
-      // Revalidem contra el filtre editorial ACTUAL: si l'hem endurit, les
-      // peces velles que ara no passen el tall (p. ex. guerra, política tensa)
-      // cauen aquí en lloc d'arrossegar-se eternament pel cache.
-      .filter((s) => passesEditorialFilter(`${s.title} ${s.summary || ''}`, s.language).passes)
-      .map(({ isFresh: _isFresh, ...rest }) => rest)
-    preDiversity = [...freshStories, ...carryover]
-  } else {
-    // Primer cop o sense cache: el que hi hagi, marcat com a fresh (tot és nou).
-    preDiversity = allStories.map((story) => ({ ...story, isFresh: true }))
-  }
-  const finalStories = ensureCategoryCoverage(
-    applyDiversityCap(preDiversity, maxStoriesPerSource, targetStoryLimit),
-    preDiversity,
-    targetStoryLimit,
-  )
 
   try {
     const payload = await setCachedPayload(kv, finalStories)
