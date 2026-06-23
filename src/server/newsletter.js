@@ -138,10 +138,11 @@ export async function handleSubscribe(request, env) {
     const confirmUrl = `https://bondiari.com/api/newsletter/confirm?token=${token}`
     const unsubscribeUrl = `https://bondiari.com/api/newsletter/unsubscribe?token=${token}`
     const html = renderConfirmationEmail({ language, confirmUrl, unsubscribeUrl })
+    const text = renderConfirmationText({ language, confirmUrl, unsubscribeUrl })
     const fromEmail = env.NEWSLETTER_FROM_EMAIL || 'butlleti@bondiari.com'
     const fromName = env.NEWSLETTER_FROM_NAME || 'El Bon Diari'
     const subject = subjectForLanguage(language, 'confirm')
-    const result = await sendWithResend({ apiKey, fromEmail, fromName, to: email, subject, html })
+    const result = await sendWithResend({ apiKey, fromEmail, fromName, to: email, subject, html, text })
     confirmationSent = result.ok
     if (!result.ok) {
       console.warn(`[newsletter] No s'ha pogut enviar la confirmació a ${email} (${result.status})`)
@@ -358,6 +359,26 @@ export function renderConfirmationEmail({ language = 'ca', confirmUrl, unsubscri
 </table></body></html>`
 }
 
+// Versió de TEXT PLA del correu de confirmació. Enviar-la al costat de l'HTML
+// apuja molt la nota anti-brossa (Apple/iCloud i Gmail penalitzen els correus
+// només-HTML); és una de les millores de deliverability més efectives.
+export function renderConfirmationText({ language = 'ca', confirmUrl, unsubscribeUrl }) {
+  const lang = confirmationCopy[language] ? language : 'ca'
+  const c = confirmationCopy[lang]
+  return [
+    c.hello,
+    '',
+    c.intro,
+    '',
+    `${c.button}: ${confirmUrl}`,
+    '',
+    c.note,
+    '',
+    '— El Bon Diari · bondiari.com',
+    `${c.unsub}: ${unsubscribeUrl}`,
+  ].join('\n')
+}
+
 export function renderDigestEmail({ language = 'ca', stories, unsubscribeUrl }) {
   const lang = greetings[language] ? language : 'ca'
   const g = greetings[lang]
@@ -397,22 +418,43 @@ export function renderDigestEmail({ language = 'ca', stories, unsubscribeUrl }) 
 </table></body></html>`
 }
 
+// Versió de text pla del butlletí diari (mateixa raó: deliverability anti-brossa).
+export function renderDigestText({ language = 'ca', stories, unsubscribeUrl }) {
+  const lang = greetings[language] ? language : 'ca'
+  const g = greetings[lang]
+  const items = stories
+    .map((s) => `• ${s.title}${s.source ? ` (${s.source})` : ''}\n  ${s.url}`)
+    .join('\n\n')
+  return [
+    g.hello,
+    g.intro,
+    '',
+    items,
+    '',
+    `${g.cta}: https://bondiari.com/`,
+    `${g.unsub}: ${unsubscribeUrl}`,
+  ].join('\n')
+}
+
 // Resend és el proveïdor d'enviament actual. La key viu a env.RESEND_API_KEY.
 // El "from" va com a una sola cadena "Name <email>" — diferent de MailerSend
 // que ho separava en objecte.
-async function sendWithResend({ apiKey, fromEmail, fromName, to, subject, html }) {
+async function sendWithResend({ apiKey, fromEmail, fromName, to, subject, html, text }) {
+  const payload = {
+    from: `${fromName} <${fromEmail}>`,
+    to: [to],
+    subject,
+    html,
+  }
+  // La versió de text pla és clau per a la deliverability (sobretot iCloud).
+  if (text) payload.text = text
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
       authorization: `Bearer ${apiKey}`,
       'content-type': 'application/json',
     },
-    body: JSON.stringify({
-      from: `${fromName} <${fromEmail}>`,
-      to: [to],
-      subject,
-      html,
-    }),
+    body: JSON.stringify(payload),
   })
   return { ok: response.ok, status: response.status }
 }
@@ -454,6 +496,11 @@ export async function sendDailyDigest(env) {
         stories,
         unsubscribeUrl,
       })
+      const text = renderDigestText({
+        language: data.language || 'ca',
+        stories,
+        unsubscribeUrl,
+      })
       const subject = subjectForLanguage(data.language || 'ca', 'digest')
 
       if (!apiKey) {
@@ -461,7 +508,7 @@ export async function sendDailyDigest(env) {
         logged += 1
         continue
       }
-      const result = await sendWithResend({ apiKey, fromEmail, fromName, to: data.email, subject, html })
+      const result = await sendWithResend({ apiKey, fromEmail, fromName, to: data.email, subject, html, text })
       if (result.ok) sent += 1
       else {
         failed += 1
