@@ -234,6 +234,13 @@ const editorialDictionaries = {
       // (colat el 22/06 amb la dimissió del primer ministre britànic).
       'dimissi', 'dimiteix', 'dimitir', 'destitu', 'cessament', 'cau el govern',
       'govern cau', 'crisi de govern',
+      // Fracàs acadèmic i dades en declivi: no és bona notícia (colat el 24/06
+      // amb "els estudiants suspenen... la mitjana més baixa de la dècada").
+      'suspèn', 'suspenen', 'suspès', 'suspesos', 'suspeses', 'fracàs escolar',
+      'abandonament escolar', 'mitjana més baixa', 'nota més baixa',
+      'més baixa de la dècada', 'més baix de la dècada', 'pitjor mitjana',
+      'pitjor nota', 'pitjor resultat', 'pitjors resultats', 'pitjor dada',
+      'pitjor de la dècada', 'pitjor de la història',
       // Verbs de mort i agressió (els substantius ja hi eren)
       'matar', 'mata ', 'maten ', 'matada', 'matades', 'matat', 'matats',
       'assassina ', 'assassinen', 'apunyala', 'apunyalen', 'apunyalat',
@@ -313,6 +320,12 @@ const editorialDictionaries = {
       // (colado el 22/06 con la dimisión del primer ministro británico).
       'dimite', 'dimiten', 'dimitir', 'dimisión', 'dimisi', 'destitu', 'cese del',
       'cae el gobierno', 'crisis de gobierno',
+      // Fracaso académico y datos en declive (paral·lel al català).
+      'suspende', 'suspenden', 'suspenso', 'suspensos', 'fracaso escolar',
+      'abandono escolar', 'media más baja', 'nota más baja',
+      'más baja de la década', 'más baja de la historia', 'peor media',
+      'peor nota', 'peor resultado', 'peores resultados', 'peor dato',
+      'peor de la década', 'peor de la historia',
       // Mercat esportiu (fichajes), publicitat i contingut patrocinat
       'fichaje', 'fichajes', 'ficha por', 'fichar por', 'fichado por',
       'millones por', 'millones de euros por', 'traspaso de',
@@ -380,6 +393,8 @@ const editorialDictionaries = {
       'resign', 'resigns', 'resigned', 'resignation', 'steps down',
       'stepped down', 'ousted', 'ouster', 'no-confidence', 'quits as',
       'topples government', 'government collapse',
+      'lowest average', 'worst results', 'worst in a decade', 'school dropout',
+      'dropout rate', 'failing grades', 'record low pass',
       // Sports transfers, advertising, sponsored podcast content
       'transfer', 'transfers', 'transfer market', 'transfer talk',
       'transfer rumours', 'transfer rumors', 'signs for', 'signs with',
@@ -421,6 +436,7 @@ const editorialDictionaries = {
       // Démissions, destitutions et gouvernements qui tombent : pas une bonne nouvelle.
       'démission', 'démissionne', 'démissionner', 'destitu', 'limogé',
       'chute du gouvernement', 'motion de censure',
+      'moyenne la plus basse', 'pires résultats', 'échec scolaire', 'décrochage scolaire',
       // Verbes de mort, violence, fin brutale
       'tue ', 'tué', 'tués', 'tuent', 'achève', 'achevé', 'liquide',
       'poignardé', 'poignardée', 'agresse', 'agressé', 'agression',
@@ -458,6 +474,7 @@ const editorialDictionaries = {
       'cannabis', 'narcotráfico', 'extrema-direita', 'extrema direita',
       'fascista', 'xenofobia', 'terrorismo', 'terrorista', 'demite', 'demitir',
       'demissão', 'demitiu', 'destitui', 'destituição', 'queda do governo',
+      'média mais baixa', 'piores resultados', 'fracasso escolar', 'abandono escolar',
       'moção de censura', 'greve', 'despedimento', 'cancro', 'doença', 'surto',
       'pandemia', 'epidemia', 'abuso', 'agressão', 'sequestro', 'rapto',
       'polémica', 'polêmica', 'guerrilha', 'golpe de estado',
@@ -491,6 +508,7 @@ const editorialDictionaries = {
       'licenzia', 'sciopero', 'cancro', 'malattia', 'epidemia', 'pandemia',
       'abuso', 'aggressione', 'sequestro', 'rapimento', 'crollo', 'degrado',
       'golpe', 'colpo di stato',
+      'media più bassa', 'peggiori risultati', 'abbandono scolastico', 'bocciati',
     ],
   },
 }
@@ -500,11 +518,15 @@ function getDictionary(language) {
 }
 
 export function passesEditorialFilter(text, language) {
-  // Alguns noms propis xoquen amb arrels negatives quan es compara per trossos:
-  // "Mataró" conté "matar". Sense neutralitzar-los, TOTA notícia de Mataró (la
-  // ciutat de la secció Local) cauria com si parlés de matar. Els substituïm per
-  // un token neutre abans de buscar paraules dolentes.
-  const normalized = text.toLowerCase().replace(/matar[oó]/g, 'la-ciutat')
+  // Algunes paraules xoquen amb arrels del diccionari quan es compara per
+  // trossos: "Mataró" conté "matar" (negatiu); "estudiant" conté "estudi"
+  // (positiu), de manera que QUALSEVOL notícia d'estudiants es llegia com a bona
+  // (p. ex. "els estudiants suspenen..."). Les neutralitzem amb un token abans
+  // de buscar paraules bones i dolentes.
+  const normalized = text
+    .toLowerCase()
+    .replace(/matar[oó]/g, 'la-ciutat')
+    .replace(/estudiant/g, 'alumne')
   const dict = getDictionary(language)
   const isNegative = dict.negative.some((word) => normalized.includes(word))
   const isPositive = dict.positive.some((word) => normalized.includes(word))
