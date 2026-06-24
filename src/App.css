@@ -267,6 +267,22 @@
   color: var(--muted);
 }
 
+/* Avís de fase de proves: nota de precaució (groc suau + vora negra de la marca). */
+.masthead__beta {
+  margin: 18px 0 0;
+  max-width: 60ch;
+  padding: 9px 14px;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: #1a1a1a;
+  background: #fff4c2;
+  border: 2px solid #000;
+}
+
+.masthead__beta span {
+  margin-right: 4px;
+}
+
 .site-main {
   display: grid;
   gap: 24px;

@@ -1051,6 +1051,11 @@ function SiteHeader({ currentPage, isRefreshing, onNavigate, onRefresh }) {
           El diari que només deixa passar històries que reparen el món, cuiden
           la gent o demostren que una idea bona es pot replicar.
         </p>
+
+        <p className="masthead__beta" role="note">
+          <span aria-hidden="true">⚠️</span> El Bon Diari es troba en fase de
+          proves i, per error, encara s’hi pot colar alguna mala notícia.
+        </p>
       </div>
     </header>
   )
