@@ -929,6 +929,15 @@ const POLITICAL_MARKERS = new RegExp(
     'escaño', 'bancada', 'electoral', 'eleccion', 'elecci[óo]ns', 'urnes',
     'portaveu del', 'portavoz del', 'posconvergent', 'no descarta', 'retret',
     'reproche', 'dimissi', 'dimisi[óo]n', 'destituci', 'cessament',
+    // Eleccions i recompte de vots en QUALSEVOL llengua: un resultat electoral
+    // no és classificable com a bona/mala notícia (política contestada). Es
+    // tracta com a política → neutre → només surt si la IA ho aprova.
+    'elezioni', 'elei[çc][õo]es', 'eleitoral', '\\belections?', 'scrutin',
+    'scrutín', 'ballottaggio', 'ballot', 'runoff', 'voters', 'comicios',
+    'voti esteri', 'al voto', 'recompte de vots', 'recuento de votos',
+    // 'lectoral' captura electoral I électoral (fr); presidencial/-iel/-ziale
+    // cobreixen "élection présidentielle", "elezioni presidenziali", etc.
+    'lectoral', 'présidentiel', 'presidenzial', 'presidencial', 'législativ',
   ].join('|'),
   'i',
 )
