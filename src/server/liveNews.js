@@ -927,8 +927,9 @@ const POLITICAL_MARKERS = new RegExp(
     'alian[çc]a catalana', 'partit popular', 'partido popular', 'prim[àa]ries',
     'primarias', 'investidura', 'moci[óo] de censura', 'esmena', 'enmienda',
     'escaño', 'bancada', 'electoral', 'eleccion', 'elecci[óo]ns', 'urnes',
-    'portaveu del', 'portavoz del', 'posconvergent', 'no descarta', 'retret',
+    'portaveu del', 'portavoz del', 'posconvergent', 'retret',
     'reproche', 'dimissi', 'dimisi[óo]n', 'destituci', 'cessament',
+    '\\bpcp\\b', 'm[áa]s madrid', 'fratelli d', 'rassemblement national',
     // Eleccions i recompte de vots en QUALSEVOL llengua: un resultat electoral
     // no és classificable com a bona/mala notícia (política contestada). Es
     // tracta com a política → neutre → només surt si la IA ho aprova.
@@ -938,6 +939,61 @@ const POLITICAL_MARKERS = new RegExp(
     // 'lectoral' captura electoral I électoral (fr); presidencial/-iel/-ziale
     // cobreixen "élection présidentielle", "elezioni presidenziali", etc.
     'lectoral', 'présidentiel', 'presidenzial', 'presidencial', 'législativ',
+  ].join('|'),
+  'i',
+)
+
+// Bloc dur UNIVERSAL (multilingüe): categories de mala notícia que el filtre de
+// paraules per idioma i el model petit deixaven passar. Es bloquegen en sec.
+const UNIVERSAL_NEG = new RegExp(
+  [
+    // Calor extrema / desastre climàtic (ca/es/it/fr/pt/en).
+    'onada de calor', 'ola de calor', 'onda de calor', 'ondata di calore',
+    'vague de chaleur', 'heatwave', 'heat wave', 'calor extrem', 'calor extremo',
+    'calor h[úu]m[ei]do', 'caldo record', 'caldo torrido', 'morsa del caldo',
+    'd[íi][ae]s de calor', 'calor perill', 'calor peligros',
+    'hottest day', 'jour le plus chaud', 'dia mais quente', 'devido ao calor',
+    'cop de calor', 'golpe de calor', 'colpo di calore', 'dies de calor',
+    // Addicció a les pantalles / mòbil.
+    'enganchados al m[óo]vil', 'enganxats al m[òo]bil', 'adicci[óo]n al m[óo]vil',
+    'addicci[óo] al m[òo]bil', 'phone addiction', 'dipendenza da smartphone',
+    'adicci[óo]n a las pantallas',
+    // Conflicte, guerra i geopolítica tensa (el model petit ho aprova massa):
+    'netanyahu', 'cisjord[àa]nia', 'cisjordania', 'west bank',
+    'israel', '\\bgaza\\b', '\\bhamas\\b', 'hezbol', 'taliban', 'l[íi]bano',
+    'l[íi]ban\\b', 'ucra[ïi]na', 'ucrania', 'ukraine', '\\bputin\\b', 'kremlin',
+    '\\bir[áa]n', 'ir[ãa]o', 'ormuz', 'houthi', 'hut[íi]', '\\bsiria\\b',
+    '\\bsyrie\\b', 'guerra', 'm[íi]ssil', 'misil', 'missile', 'bombarde',
+    'retirada de tropes', 'retirada de tropas', 'alto el fuego', 'cessez-le-feu',
+    // Justícia, jutjats i causes (no és bona notícia):
+    '\\bjuez\\b', '\\bjutge\\b', 'al jutge', 'al juez', 'pasaporte al',
+    'imputad', 'imputaci', 'fiscal[íi]a', 'tribunal', 'comparece ante',
+    // Esport en directe / retransmissió (farciment, no és notícia constructiva):
+    'en direct\\b', 'en directe', 'en directo', 'minuto a minuto', 'minut a minut',
+    // Alertes sanitàries i alimentàries / retirades de producte:
+    'alerta aliment', 'alerta sanit', 'salmonel', 'listeria', 'recall',
+    'rappel produit', 'retiran del mercado', 'retiren del mercat',
+    // Caiguda i crisi econòmica:
+    'recess', 'desplome', 'desplom\\b', 'pierde su condici', 'cae en bolsa',
+    'cau en borsa', 'crac bors', 'crash burs', 'crescer menos',
+    // Dòping:
+    'doping', 'dopatge', 'dopaje', 'dopage', 'antidop',
+    // Armes i decomisos:
+    'armes blanques', 'armas blancas', 'arma blanca', 'comissad', 'decomisad',
+    'incautad',
+    // Codi penal / pèrdua de nacionalitat:
+    'c[óo]digo penal', 'codi penal', 'perda de nacionalidade',
+    'p[ée]rdida de nacionalidad',
+    // Morts (inclou plurals que se saltaven 'muerte'/'mort') i ofegaments:
+    '\\bmuertos?\\b', '\\bmorts\\b', '\\bmorti\\b', '\\bmortes\\b', 'falleci',
+    'd[ée]c[èe]s', 'ahogad', 'ahogamiento', 'afogad', 'afogamento', 'noyade',
+    'annega', 'drowning', 'drowned',
+    // Brots i malalties:
+    '\\bgripe\\b', 'epidemia', 'epidemic', 'brote de', 'brot de', 'surto de',
+    // Estadístiques negatives de salut (obesitat/sobrepès) i segrestos:
+    'sobrepes', 'excesso de peso', 'exceso de peso', 'obesi', 'overweight',
+    'ob[ée]sit', 'secuestr', 'sequestr', 'segrest', 'rapiment', 'held captive',
+    'kidnap',
   ].join('|'),
   'i',
 )
@@ -967,20 +1023,22 @@ function normalizeFeedItem(block, feed) {
   const summarySnippet = `${summarySource.slice(0, 180)}${summarySource.length > 180 ? '...' : ''}`
   if (looksLikeAdvertorial({ url: link, title, summary: summarySnippet })) return null
   const fullText = `${title} ${summarySource}`
+  const fullTextLower = fullText.toLowerCase()
   const { isPositive, isNegative } = passesEditorialFilter(fullText, feed.language)
   if (isNegative) return null // clarament negativa (guerra, conflicte…): fora directament
+  // Bloc dur universal (multilingüe) per a categories que el model petit deixa
+  // passar: calor extrem/desastre climàtic i addicció a les pantalles.
+  if (!feed.lenient && UNIVERSAL_NEG.test(fullTextLower)) return null
 
-  // Contingut POLÍTIC tens (maniobres de partit, eleccions, judicis, ultradreta…):
-  // rarament és bona notícia, però se'ns cola perquè té una paraula positiva
-  // incidental al resum ("guanya les primàries"…). Li traiem el passi lliure: el
-  // tractem com a NEUTRE (editorialScore 0), de manera que NOMÉS surti si la IA
-  // l'aprova. La política constructiva de debò (un pacte que crea feina, una llei
-  // que ajuda) no porta marcadors de maniobra i continua passant. Els feeds locals
-  // queden exempts (el plenari de Mataró sí que hi té cabuda).
+  // Contingut POLÍTIC (maniobres de partit, eleccions, judicis, ultradreta…):
+  // gairebé mai és bona notícia i el model petit l'aprova per error massa sovint.
+  // El BLOQUEGEM en sec, com les negatives. Els feeds locals queden exempts (el
+  // plenari de Mataró sí que hi té cabuda).
   const isPolitical =
     !feed.lenient &&
-    (category === 'Política' || POLITICAL_MARKERS.test(fullText.toLowerCase()))
-  const editorialScore = isPolitical ? 0 : (isPositive || feed.lenient ? 1 : 0)
+    (category === 'Política' || POLITICAL_MARKERS.test(fullTextLower))
+  if (isPolitical) return null
+  const editorialScore = isPositive || feed.lenient ? 1 : 0
 
   const story = {
     title,
@@ -999,6 +1057,9 @@ function normalizeFeedItem(block, feed) {
     // editorialScore calculat a dalt: 0 = neutre/polític (només surt si la IA
     // l'aprova) · 1 = bo (paraula clau positiva o feed local).
     editorialScore,
+    // Font ja curada de bones notícies (Positive News, Good News Network…): la
+    // IA hi confia i no la veta (com el contingut Local).
+    curated: Boolean(feed.lenient),
     editorialVersion: liveEditorialVersion,
     publishedAt,
   }
@@ -1051,52 +1112,63 @@ async function collectFeedStories(feed) {
 // KV per URL perquè no s'hagi de tornar a jutjar a cada refresc.
 
 const AI_MODEL = '@cf/meta/llama-3.2-3b-instruct'
-const aiVerdictsKey = 'ai-verdicts' // un sol registre KV amb TOTS els veredictes
+const aiVerdictsKey = 'ai-verdicts-v2' // un sol registre KV amb TOTS els veredictes
 const aiVerdictTtlMs = 14 * 24 * 60 * 60 * 1000 // 14 dies
-const maxAiPerRun = 10 // crides NOVES per passada (per no petar el límit de subpeticions)
+// La IA jutja en LOTS: moltes notícies en una sola crida. Així, amb poques
+// subpeticions (límit del pla gratuït), arriba a revisar-ne ~aiBatchSize ×
+// maxAiCallsPerRun per passada i passa a ser el PORTER de debò, en lloc de
+// revisar-ne només 10 i deixar passar la resta per paraula clau.
+const aiBatchSize = 10
+const maxAiCallsPerRun = 6 // 6×10 = 60 jutjades/passada; 24 feeds + 6 = 30 subpeticions
 
-const AI_SYSTEM = [
-  "Ets el filtre d'El Bon Diari, un diari que evita les MALES notícies.",
-  'Respon NO si la notícia és dolenta o tensa: guerra, morts, accidents,',
-  'successos, crims, droga, armes, judicis, imputacions, investigacions',
-  'judicials, corrupció, escàndols, política de conflicte, retrets o insults,',
-  'tensió diplomàtica o comercial, sancions, alertes, o qualsevol condemna o',
-  'càstig. Respon SI si és constructiva, cultural, científica, esportiva,',
-  'amable, o un producte o idea amb aplicacions positives.',
-  'Exemples: "L\'Iran condemna una cantant a fuetades" => NO.',
-  '"La UE puja el to amb la Xina pel dèficit comercial" => NO.',
-  '"La justícia investiga el cas de corrupció" => NO.',
-  '"El govern diu que el cas és un despropòsit" => NO.',
-  '"Inauguren una biblioteca al barri" => SI.',
-  '"Descobreixen un tractament contra el càncer" => SI.',
-  '"Un festival de cinema celebra 50 anys" => SI.',
-  'Respon NOMÉS amb una paraula: SI o NO.',
+const AI_SYSTEM_BATCH = [
+  "Ets el filtre d'El Bon Diari, un diari que NOMÉS publica BONES notícies.",
+  'Et passo una llista numerada de titulars. Per a CADA número respon en una',
+  'línia amb el format "N: SI" o "N: NO" (només això, res més).',
+  'Respon NO si el titular és dolent, trist o tens: guerra, mort, accident,',
+  'succés, crim, armes, droga, judici, corrupció, escàndol, política o',
+  'eleccions, conflicte, retret o insult, tensió diplomàtica o comercial,',
+  'sanció, alerta sanitària o alimentària, condemna o càstig, dòping, onada de',
+  'calor o desastre climàtic, crisi o caiguda econòmica, acomiadaments, o',
+  'resultats i fitxatges de competició esportiva.',
+  'Respon SI NOMÉS si és clarament constructiva, amable, cultural, científica,',
+  'solidària, educativa o un avenç positiu. En cas de DUBTE, respon NO.',
+  'Exemple:\n1: NO\n2: SI\n3: NO',
 ].join(' ')
 
-async function aiIsGoodNews(env, story) {
+// Jutja un lot de notícies en una sola crida. Retorna un array de true/false/
+// null (null = el model no ha donat veredicte clar per a aquell número).
+async function aiJudgeBatch(env, stories) {
+  const list = stories
+    .map((s, i) => `${i + 1}. ${(s.title || '').replace(/\s+/g, ' ').slice(0, 150)}`)
+    .join('\n')
   const out = await env.AI.run(AI_MODEL, {
-    max_tokens: 4,
+    max_tokens: 256,
     messages: [
-      { role: 'system', content: AI_SYSTEM },
-      { role: 'user', content: `Títol: ${story.title}\nResum: ${story.summary || ''}\n\nÉs una bona notícia per a El Bon Diari?` },
+      { role: 'system', content: AI_SYSTEM_BATCH },
+      { role: 'user', content: `Titulars:\n${list}` },
     ],
   })
-  const text = String(out?.response || '').trim().toUpperCase()
-  return (text.startsWith('SI') || text.startsWith('SÍ') || text.startsWith('YES')) && !text.startsWith('NO')
+  const text = String(out?.response || '')
+  const verdicts = new Array(stories.length).fill(null)
+  for (const m of text.matchAll(/(\d{1,2})\s*[:.)\-]?\s*(S[IÍ]|NO|YES)\b/gi)) {
+    const idx = parseInt(m[1], 10) - 1
+    if (idx >= 0 && idx < stories.length && verdicts[idx] === null) {
+      verdicts[idx] = /^[SY]/i.test(m[2])
+    }
+  }
+  return verdicts
 }
 
-// La IA revisa les notícies candidates: VETA les que han colat pel filtre de
-// paraules però no són bones (false positives), i RESCATA les neutres que sí
-// que ho són (false negatives, p. ex. un producte amb aplicacions positives).
-// Per no petar el límit de subpeticions del Worker, TOTS els veredictes viuen
-// en UN sol registre KV (1 lectura + 1 escriptura) i només es fan `maxAiPerRun`
-// crides NOVES per passada. Les candidates arriben ja ordenades (les que han
-// passat per paraula clau i les més fresques primer), així la IA gasta el seu
-// pressupost en les que es veuran a portada. Per a una notícia ENCARA no jutjada:
-// si ha passat per paraula clau es mostra provisionalment; si és neutra, s'amaga.
+// La IA revisa les candidates EN LOTS (moltes per crida) i VETA les dolentes
+// que han colat pel filtre de paraules. Defensa en profunditat: els blocs durs
+// (negatius per idioma + UNIVERSAL_NEG + política) treuen les categories
+// clarament dolentes de manera fiable; la IA, a sobre, neteja les subtils. Una
+// notícia no jutjada (per pressupost o IA caiguda) es manté si ha passat per
+// paraula clau, de manera que una fallada de la IA mai no buida ni embruta el
+// diari. Els veredictes es guarden en UN sol registre KV (14 dies).
 async function aiReview(env, candidates) {
   if (!env?.AI) {
-    // Sense IA disponible: comportament clàssic (només les de paraula clau).
     return candidates.filter((story) => (story.editorialScore ?? 1) > 0)
   }
   const kv = env.LIVE_NEWS_KV
@@ -1107,37 +1179,65 @@ async function aiReview(env, candidates) {
     store = {}
   }
   const now = Date.now()
-  const kept = []
-  let judged = 0
+  const verdict = new Map() // url -> bool
+  const toJudge = []
   let dirty = false
+
   for (const story of candidates) {
-    // El contingut local (Mataró/Maresme) NO passa per la IA: el model petit
-    // gratuït el veta per error (festes majors, aniversaris, esport de base…).
-    // Confiem en el filtre de paraules, que ja n'ha tret les clarament dolentes.
-    if (story.category === 'Local') {
-      kept.push(story)
+    // Contingut Local (Mataró/Maresme) i fonts JA curades de bones notícies:
+    // s'hi confia, no passen per la IA (el model petit els vetaria per error).
+    if (story.category === 'Local' || story.curated) {
+      verdict.set(story.url, true)
       continue
     }
     const cached = store[story.url]
-    let good
     if (cached && now - cached.at < aiVerdictTtlMs) {
-      good = cached.v
-    } else if (judged < maxAiPerRun) {
-      try {
-        good = await aiIsGoodNews(env, story)
-        store[story.url] = { v: good, at: now }
-        dirty = true
-        judged += 1
-      } catch (error) {
-        console.warn('[ai] error jutjant', error?.message || error)
-        good = (story.editorialScore ?? 1) > 0 // si la IA falla, confiem en la paraula clau
-      }
+      verdict.set(story.url, cached.v)
     } else {
-      // Sense pressupost per jutjar-la avui: confiem en la paraula clau.
-      good = (story.editorialScore ?? 1) > 0
+      toJudge.push(story)
     }
-    if (good) kept.push(story)
   }
+
+  let judged = 0
+  let consecutiveFails = 0
+  for (
+    let i = 0;
+    i < toJudge.length && judged < maxAiCallsPerRun * aiBatchSize;
+    i += aiBatchSize
+  ) {
+    const batch = toJudge.slice(i, i + aiBatchSize)
+    let res = null
+    try {
+      res = await aiJudgeBatch(env, batch)
+      consecutiveFails = 0
+    } catch (error) {
+      console.warn('[ai] error jutjant lot', error?.message || error)
+      consecutiveFails += 1
+    }
+    batch.forEach((story, j) => {
+      const v = res ? res[j] : null
+      if (v === null || v === undefined) {
+        // No jutjada (o la crida ha fallat): paraula clau. Els blocs durs ja
+        // n'han tret les clarament dolentes, així que és prou segur.
+        verdict.set(story.url, (story.editorialScore ?? 1) > 0)
+      } else {
+        verdict.set(story.url, v)
+        store[story.url] = { v, at: now }
+        dirty = true
+      }
+    })
+    judged += batch.length
+    if (consecutiveFails >= 2) break // IA caiguda: deixem de gastar-hi crides
+  }
+
+  // Les que han quedat sense jutjar (passat el pressupost): paraula clau. Els
+  // blocs durs (UNIVERSAL_NEG, política, negatius per idioma) ja han tret les
+  // categories dolentes; la IA neteja les subtils que SÍ que ha pogut jutjar.
+  for (const story of toJudge) {
+    if (verdict.has(story.url)) continue
+    verdict.set(story.url, (story.editorialScore ?? 1) > 0)
+  }
+
   if (dirty) {
     for (const url of Object.keys(store)) {
       if (now - store[url].at > aiVerdictTtlMs) delete store[url]
@@ -1148,6 +1248,7 @@ async function aiReview(env, candidates) {
       console.warn('[ai] no s\'ha pogut desar el cau', error?.message)
     }
   }
+  const kept = candidates.filter((story) => verdict.get(story.url))
   console.log(`[ai] candidats=${candidates.length} jutjats=${judged} acceptats=${kept.length}`)
   return kept
 }
@@ -1251,7 +1352,7 @@ async function setCachedPayload(kv, stories) {
 
 // --- Memòria d'URLs ja servides (perquè cada dia hi hagi peces noves) -----
 
-const seenUrlsKey = 'seen-urls-v2'
+const seenUrlsKey = 'seen-urls-v3'
 const seenUrlsRetentionMs = 14 * 24 * 60 * 60 * 1000
 const minFreshStoriesForFullRefresh = 10
 
