@@ -437,6 +437,8 @@ const editorialDictionaries = {
       'démission', 'démissionne', 'démissionner', 'destitu', 'limogé',
       'chute du gouvernement', 'motion de censure',
       'moyenne la plus basse', 'pires résultats', 'échec scolaire', 'décrochage scolaire',
+      // Onada de calor i angoixa (colat el 24/06: "la canicule fauche les écoles").
+      'canicule', 'désemparé', 'désemparés', 'fortes chaleurs', 'fauche',
       // Verbes de mort, violence, fin brutale
       'tue ', 'tué', 'tués', 'tuent', 'achève', 'achevé', 'liquide',
       'poignardé', 'poignardée', 'agresse', 'agressé', 'agression',
@@ -699,23 +701,36 @@ function slugify(value) {
     .replace(/(^-|-$)/g, '')
 }
 
+// Coincidència per PARAULA SENCERA. Sense això, topònims curts es colaven dins
+// de paraules d'altres llengües: "reus" dins de "nombreuses" (fr) feia que una
+// notícia francesa es localitzés a "Reus, Catalunya". \p{L} tracta les lletres
+// accentuades com a part de la paraula.
+function hasWord(text, word) {
+  const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return new RegExp(`(^|[^\\p{L}])${escaped}([^\\p{L}]|$)`, 'iu').test(text)
+}
+
 function detectLocation(text) {
-  if (text.includes('mataró') || text.includes('maresme')) return 'Mataró, Maresme'
-  if (text.includes('barcelona') || text.includes('bcn')) return 'Barcelona, Catalunya'
-  if (text.includes('girona')) return 'Girona, Catalunya'
-  if (text.includes('lleida')) return 'Lleida, Catalunya'
-  if (text.includes('tarragona')) return 'Tarragona, Catalunya'
-  if (text.includes('reus')) return 'Reus, Catalunya'
-  if (text.includes('catalunya') || text.includes('català')) return 'Catalunya'
-  if (text.includes('madrid')) return 'Madrid'
-  if (text.includes('sevilla')) return 'Sevilla'
-  if (text.includes('españa') || text.includes('spain')) return 'Espanya'
-  if (text.includes('london') || text.includes('londres')) return 'Londres'
-  if (text.includes('paris') || text.includes('parís')) return 'París'
-  if (text.includes('berlin') || text.includes('berlín')) return 'Berlín'
-  if (text.includes('washington')) return 'Washington'
-  if (text.includes('new york') || text.includes('nova york')) return 'Nova York'
-  if (text.includes('europe') || text.includes('europa')) return 'Europa'
+  if (hasWord(text, 'mataró') || hasWord(text, 'maresme')) return 'Mataró, Maresme'
+  if (hasWord(text, 'barcelona') || hasWord(text, 'bcn')) return 'Barcelona, Catalunya'
+  if (hasWord(text, 'girona')) return 'Girona, Catalunya'
+  if (hasWord(text, 'lleida')) return 'Lleida, Catalunya'
+  if (hasWord(text, 'tarragona')) return 'Tarragona, Catalunya'
+  if (hasWord(text, 'reus')) return 'Reus, Catalunya'
+  if (hasWord(text, 'catalunya') || hasWord(text, 'català')) return 'Catalunya'
+  if (hasWord(text, 'madrid')) return 'Madrid'
+  if (hasWord(text, 'sevilla')) return 'Sevilla'
+  if (hasWord(text, 'españa') || hasWord(text, 'spain')) return 'Espanya'
+  if (hasWord(text, 'london') || hasWord(text, 'londres')) return 'Londres'
+  if (hasWord(text, 'paris') || hasWord(text, 'parís')) return 'París'
+  if (hasWord(text, 'berlin') || hasWord(text, 'berlín')) return 'Berlín'
+  if (hasWord(text, 'washington')) return 'Washington'
+  if (hasWord(text, 'new york') || hasWord(text, 'nova york')) return 'Nova York'
+  if (hasWord(text, 'france') || hasWord(text, 'frança')) return 'França'
+  if (hasWord(text, 'italia') || hasWord(text, 'italy') || hasWord(text, 'roma')) return 'Itàlia'
+  if (hasWord(text, 'portugal') || hasWord(text, 'lisboa') || hasWord(text, 'lisbon')) return 'Portugal'
+  if (hasWord(text, 'brasil') || hasWord(text, 'brazil')) return 'Brasil'
+  if (hasWord(text, 'europe') || hasWord(text, 'europa')) return 'Europa'
   return 'Món'
 }
 

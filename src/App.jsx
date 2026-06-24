@@ -604,8 +604,21 @@ function formatDateTime(value) {
   return dateTimeFormatter.format(date)
 }
 
+const wholeWordRegexCache = new Map()
 function includesAnyKeyword(text, keywords) {
-  return keywords.some((keyword) => text.includes(keyword))
+  // Coincidència per PARAULA SENCERA (no per trossos): així topònims curts com
+  // "reus" o "vic" no casen dins de paraules com "nombreuses" (fr) o "victime".
+  // \p{L} tracta les lletres accentuades com a part de la paraula. La regex es
+  // compila un sol cop per llista (memoïtzada per referència).
+  let regex = wholeWordRegexCache.get(keywords)
+  if (!regex) {
+    const alternation = keywords
+      .map((keyword) => keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+      .join('|')
+    regex = new RegExp(`(^|[^\\p{L}])(?:${alternation})([^\\p{L}]|$)`, 'iu')
+    wholeWordRegexCache.set(keywords, regex)
+  }
+  return regex.test(text)
 }
 
 function getDistanceBand(story) {
