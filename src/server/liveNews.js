@@ -1111,7 +1111,10 @@ async function collectFeedStories(feed) {
 // ambigus i en rescata els que SÍ són bones notícies. El veredicte es desa a
 // KV per URL perquè no s'hagi de tornar a jutjar a cada refresc.
 
-const AI_MODEL = '@cf/meta/llama-3.2-3b-instruct'
+// Llama 3.3 70B (≈23× més gran que el 3B anterior): jutja "bona/mala notícia"
+// molt millor i amb els matisos. Gratis dins de la quota diària de Neurons de
+// Cloudflare; el consum és baix perquè només es jutgen les notícies noves.
+const AI_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast'
 const aiVerdictsKey = 'ai-verdicts-v2' // un sol registre KV amb TOTS els veredictes
 const aiVerdictTtlMs = 14 * 24 * 60 * 60 * 1000 // 14 dies
 // La IA jutja en LOTS: moltes notícies en una sola crida. Així, amb poques
