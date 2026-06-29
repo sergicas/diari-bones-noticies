@@ -56,6 +56,25 @@ describe('passesEditorialFilter — català', () => {
     expect(passesEditorialFilter("Descobreixen un nou ecosistema marí", 'ca').passes).toBe(true)
     expect(passesEditorialFilter("Reconeixen la trajectòria del mestre amb un homenatge", 'ca').passes).toBe(true)
   })
+
+  it('descarta immigració marítima/naufragis (regression "Arriben dues pasteres a Formentera")', () => {
+    expect(passesEditorialFilter("Arriben dues pasteres amb 25 persones a Formentera", 'ca').passes).toBe(false)
+    expect(passesEditorialFilter("Rescaten un cayuco amb desenes de persones", 'ca').passes).toBe(false)
+    expect(passesEditorialFilter("Llegan varias pateras a las costas de Almería", 'es').passes).toBe(false)
+    // Però una notícia bona amb la mateixa paraula "arriben" segueix passant:
+    expect(passesEditorialFilter("Arriben els premis a la millor iniciativa solidària del barri", 'ca').passes).toBe(true)
+  })
+
+  it('descarta pujada de preus i turistificació (regression "Hotels plens i preus més alts")', () => {
+    expect(passesEditorialFilter("Hotels plens i preus més alts abans del Grand Départ del Tour a Barcelona", 'ca').passes).toBe(false)
+    expect(passesEditorialFilter("Suben los precios y se masifica el centro por el turismo", 'es').passes).toBe(false)
+  })
+
+  it('"arriba/arribada" ja no és un passi lliure (era el forat de pasteres i hotels)', () => {
+    // Sense cap altra paraula positiva, "arriba" ja no marca la notícia com a bona.
+    expect(passesEditorialFilter("Arriba el Tour de França a Barcelona", 'ca').isPositive).toBe(false)
+    expect(passesEditorialFilter("Llega el verano a la costa", 'es').isPositive).toBe(false)
+  })
 })
 
 describe('passesEditorialFilter — castellà', () => {

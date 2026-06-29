@@ -18,10 +18,12 @@ const liveEditorialVersion = LIVE_EDITORIAL_VERSION
 const targetStoryLimit = 30
 const maxStoriesPerSource = 5
 const collectionPoolSize = 80
-// Bondiari és un diari de Catalunya: el català i el castellà manen i no tenen
-// límit al lot. Les altres llengües enriqueixen (món, ciència, cultura) però
-// no poden inundar la portada, així que cadascuna té un sostre de peces.
-const maxStoriesPerLanguage = { en: 8, fr: 5, it: 5, pt: 4 }
+// Bondiari és un diari de Catalunya. Proporcions OBJECTIU sobre el lot
+// (targetStoryLimit = 30): català ~60% (sense sostre: omple la resta de la
+// portada), castellà ~20% (6), anglès ~10% (3) i la resta de llengües ~10% en
+// conjunt (francès/italià/portuguès, una cadascuna). Així el català domina la
+// portada i cap llengua forana no la pot inundar.
+const maxStoriesPerLanguage = { es: 6, en: 3, fr: 1, it: 1, pt: 1 }
 
 // Els feeds per secció de 3cat van quedar TRENCATS el 2026 (ara són pàgines
 // HTML, no RSS): donaven 0 notícies i malgastaven una subpetició cadascun. Les
@@ -140,9 +142,11 @@ const rssFeeds = [
 // el castellà (llengües de casa) en porten més; la resta, menys però sempre
 // alguna. Roten dins de cada llengua (avancen amb el temps), de manera que cada
 // refresc duu sempre una barreja de les sis llengües i, en uns quants refrescs,
-// es cobreix tota la llista mestra. core (10) + 14 rotatòries = 24 fonts/refresc,
-// que deixa marge per a les ~10 crides de la IA sota el límit de subpeticions.
-const rotatingPerLanguage = { ca: 4, es: 3, en: 4, fr: 1, it: 1, pt: 1 }
+// es cobreix tota la llista mestra. core (9) + 13 rotatòries = 22 fonts/refresc,
+// que deixa marge per a les ~6 crides de la IA sota el límit de subpeticions.
+// El català en porta més (és la llengua de casa i ha de dominar la portada) i
+// l'anglès menys (ja té dues fonts core: BBC i Positive News).
+const rotatingPerLanguage = { ca: 5, es: 3, en: 2, fr: 1, it: 1, pt: 1 }
 
 function selectFeedsForRun(nowMs) {
   const core = rssFeeds.filter((feed) => feed.core)
@@ -186,7 +190,7 @@ const editorialDictionaries = {
       'recerca', 'consolida', 'compromís', 'obre', 'obren', 'reobre',
       'esperança', 'innovació', 'innovador', 'innovadora', 'cooperació',
       'col·laboració', 'sostenible', 'sostenibilitat', 'transforma',
-      'transformació', 'amplia', 'amplien', 'arriba', 'reviu', 'reviuen',
+      'transformació', 'amplia', 'amplien', 'reviu', 'reviuen',
       'positiu', 'positiva', 'històric', 'històrica',
       'aprova', 'aprovat', 'aprovada', 'aprovació',
       'aporta', 'aporten', 'aposta', 'aposten',
@@ -252,6 +256,15 @@ const editorialDictionaries = {
       'contingut patrocinat', 'patrocinat per',
       // Opinió comercial vestida de notícia
       'que ens convida a', 'columna d’opinió', 'columna d\'opinió',
+      // Immigració per via marítima i naufragis (colat el 28/06: "Arriben dues
+      // pasteres amb 25 persones a Formentera" — "arriben" és paraula positiva).
+      'pastera', 'pasteres', 'naufragi', 'ofegat', 'ofegats', 'ofegada',
+      'immigració irregular', 'sense papers', 'salt a la tanca',
+      // Pujada de preus, turistificació i massificació (colat el 28/06: "Hotels
+      // plens i preus més alts abans del Tour" — "arribada" comptava com a positiu).
+      'preus més alts', 'preus disparats', 'preus pels núvols', 'encariment',
+      'encareix', 'apuja els preus', 'apugen els preus', 'turistificació',
+      'sobreturisme',
     ],
   },
   es: {
@@ -272,7 +285,7 @@ const editorialDictionaries = {
       'consolida', 'compromiso', 'abre', 'abren', 'reabre', 'esperanza',
       'innovación', 'innovador', 'innovadora', 'cooperación',
       'colaboración', 'sostenible', 'sostenibilidad', 'transforma',
-      'transformación', 'amplía', 'amplían', 'llega', 'llegan', 'revive',
+      'transformación', 'amplía', 'amplían', 'revive',
       'reviven', 'positivo', 'positiva', 'histórico', 'histórica',
       'aprueba', 'aprobado', 'aprobada', 'aprobación', 'aporta',
       'aportan', 'apuesta', 'apuestan',
@@ -337,6 +350,14 @@ const editorialDictionaries = {
       'podcast', 'podcasts', 'el más vendido', 'los más vendidos',
       'compra al mejor', 'oferta amazon', 'amazon prime day',
       'imputado', 'imputados', 'imputada', 'imputadas',
+      // Inmigración por vía marítima y naufragios (paral·lel al català: "llegan
+      // pateras", "rescate de un cayuco"…). Siempre es contenido de crisis.
+      'patera', 'pateras', 'cayuco', 'cayucos', 'naufragio', 'ahogad',
+      'inmigración irregular', 'migración irregular', 'sin papeles',
+      'salto a la valla',
+      // Subida de precios, turistificación y masificación (paral·lel al català).
+      'precios más altos', 'se disparan los precios', 'suben los precios',
+      'encarecimiento', 'encarece', 'sobreturismo', 'turistificación',
     ],
   },
   en: {
@@ -352,7 +373,7 @@ const editorialDictionaries = {
       'initiative', 'project', 'research', 'consolidates', 'commitment',
       'reopen', 'reopens', 'hope', 'hopeful', 'innovation', 'innovative',
       'cooperation', 'collaboration', 'sustainable', 'sustainability',
-      'transforms', 'expands', 'arrives', 'revives', 'positive',
+      'transforms', 'expands', 'revives', 'positive',
       'historic', 'approves', 'approved', 'approval', 'contributes',
       'launches', 'launched', 'celebrated', 'partnership', 'partnerships',
       'recovery', 'recovers',
@@ -419,7 +440,7 @@ const editorialDictionaries = {
       'record', 'reconnaissance', 'hommage', 'initiative', 'projet',
       'recherche', 'consolide', 'espoir', 'innovation', 'innovant',
       'coopération', 'collaboration', 'durable', 'transforme', 'élargit',
-      'arrive', 'positif', 'positive', 'historique', 'approuve', 'apporte',
+      'positif', 'positive', 'historique', 'approuve', 'apporte',
       'parie', 'lance', 'sauve', 'sauvent',
     ],
     negative: [
@@ -994,6 +1015,13 @@ const UNIVERSAL_NEG = new RegExp(
     'sobrepes', 'excesso de peso', 'exceso de peso', 'obesi', 'overweight',
     'ob[ée]sit', 'secuestr', 'sequestr', 'segrest', 'rapiment', 'held captive',
     'kidnap',
+    // Immigració per via marítima i naufragis: el radar ho tractava com a BONA
+    // notícia perquè "arriben/arribar" és paraula positiva (colat el 28/06 amb
+    // "Arriben dues pasteres a Formentera"). És sempre contingut de crisi.
+    'pastera', 'pasteres', 'patera', 'cayuco', 'cayucos', 'naufrag',
+    'migrant boat', 'small boat', 'channel crossing',
+    'migraci[óo]n irregular', 'immigraci[óo] irregular', 'imigra[çc][ãa]o ilegal',
+    'sin papeles', 'sense papers', 'salto a la valla', 'salt a la tanca',
   ].join('|'),
   'i',
 )
@@ -1132,7 +1160,8 @@ const AI_SYSTEM_BATCH = [
   'succés, crim, armes, droga, judici, corrupció, escàndol, política o',
   'eleccions, conflicte, retret o insult, tensió diplomàtica o comercial,',
   'sanció, alerta sanitària o alimentària, condemna o càstig, dòping, onada de',
-  'calor o desastre climàtic, crisi o caiguda econòmica, acomiadaments, o',
+  'calor o desastre climàtic, crisi o caiguda econòmica, acomiadaments,',
+  'immigració irregular, pasteres, naufragis o rescats al mar, o',
   'resultats i fitxatges de competició esportiva.',
   'Respon SI NOMÉS si és clarament constructiva, amable, cultural, científica,',
   'solidària, educativa o un avenç positiu. En cas de DUBTE, respon NO.',
