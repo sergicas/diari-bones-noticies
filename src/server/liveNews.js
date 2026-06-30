@@ -633,6 +633,13 @@ const advertorialPhrasePatterns = [
   // el 29/06: "La celulitis se puede eliminar. Nosotros te ayudamos...").
   /\b(celulitis|cel·lulitis|estr[íi]as|estries|flacidez|flaccidesa|arrugas|arrugues|antiarrugas|antiarrugues|adelgazar|aprimar|perder peso|perdre pes|rejuvenecer|rejovenir|estr[íi]as|varices|varius)\b/i,
   /\b(nosotros\s+te\s+ayudamos|te\s+ayudamos\s+proponi|os\s+ajudem|t['’]ajudem|te\s+proponemos|et\s+proposem|trucos\s+m[áa]s\s+efectivos|trucs\s+m[ée]s\s+efectius|c[óo]mo\s+eliminar|com\s+eliminar)\b/i,
+  // Sortejos, concursos i bases legals (promoció, no notícia).
+  /\b(bases\s+legales|bases\s+legals|sorteo|sorteig|giveaway)\b/i,
+  // Cotilleo de famosos: aniversaris, luxe i excentricitats (colat el 30/06:
+  // "Así ha celebrado Kanye West su 49º cumpleaños... 400.000 dólares gastados").
+  /\bsu\s+\d{1,3}\s*[ºo°]?\s*(cumpleaños|aniversari|aniversario)\b/i,
+  /\b(baile\s+de\s+máscaras|alfombra\s+roja|red\s+carpet|photocall|paparazzi)\b/i,
+  /\b\d[\d.,]*\s*(d[óo]lares|euros)\s+gastad[oa]s\b/i,
 ]
 
 export function looksLikeAdvertorial({ url, title, summary }) {
@@ -1176,7 +1183,9 @@ const AI_SYSTEM_BATCH = [
   'eleccions, conflicte, retret o insult, tensió diplomàtica o comercial,',
   'sanció, alerta sanitària o alimentària, condemna o càstig, dòping, onada de',
   'calor o desastre climàtic, crisi o caiguda econòmica, acomiadaments,',
-  'immigració irregular, pasteres, naufragis o rescats al mar, o',
+  'immigració irregular, pasteres, naufragis o rescats al mar,',
+  'cotilleos o vida privada de famosos, luxe i excentricitats de rics,',
+  'sortejos o bases legals de concursos, o',
   'resultats i fitxatges de competició esportiva.',
   'Respon SI NOMÉS si és clarament constructiva, amable, cultural, científica,',
   'solidària, educativa o un avenç positiu. En cas de DUBTE, respon NO.',

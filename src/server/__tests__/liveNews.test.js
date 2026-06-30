@@ -279,6 +279,15 @@ describe('looksLikeAdvertorial — per patrons de títol', () => {
     })).toBe(true)
   })
 
+  it('detecta cotilleo de famosos i sortejos (regression Kanye West / BASES LEGALES)', () => {
+    expect(looksLikeAdvertorial({
+      url: '',
+      title: 'Así ha celebrado Kanye West su 49º cumpleaños: baile de máscaras en Versalles y 400.000 dólares gastados',
+      summary: 'El rapero celebró la cita con su pareja, Bianca Censori',
+    })).toBe(true)
+    expect(looksLikeAdvertorial({ url: '', title: 'BASES LEGALES DEL SORTEO "Entradas para el concierto"', summary: '' })).toBe(true)
+  })
+
   it('detecta clickbait de bellesa/dieta (regression "La celulitis se puede eliminar")', () => {
     expect(looksLikeAdvertorial({
       url: '',
