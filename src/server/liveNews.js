@@ -170,6 +170,13 @@ function selectFeedsForRun(nowMs) {
 }
 
 // --- Diccionaris editorials per idioma -------------------------------------
+// CRITERI de les paraules POSITIVES: només hi entren mots que denoten BONDAT en
+// si mateixa (premi, salva, inaugura, descobreix, solidaritat...). S'eviten els
+// verbs DIRECCIONALS o neutres que poden ser bons o dolents segons el context
+// —creix ("creix l'atur"), amplia ("amplia la condemna"), obre ("obre una
+// investigació"), arriba ("arriben pasteres"), aposta/aporta, mostra—: aquests
+// es treuen, de manera que la notícia queda NEUTRA i només surt si la IA
+// l'aprova, en lloc de colar-se per una paraula positiva incidental (29/06).
 
 const editorialDictionaries = {
   ca: {
@@ -177,7 +184,7 @@ const editorialDictionaries = {
       'èxit', 'recupera', 'recuperen', 'aconsegueix', 'aconsegueixen',
       'ajuda', 'ajuden', 'solidaritat', 'solidari', 'solidària',
       'millora', 'milloren', 'estrena', 'estrenen', 'guanya', 'guanyen',
-      'creix', 'creixen', 'pioner', 'pionera', 'avança', 'avancen',
+      'pioner', 'pionera', 'avança', 'avancen',
       'acollida', 'acolliment', 'renaixement', 'ajut', 'donació', 'salva',
       'salven', 'premi', 'premiat', 'premiada', 'protecció', 'protegeix',
       'protegeixen', 'restaura', 'restauren', 'rehabilita', 'rehabiliten',
@@ -187,16 +194,15 @@ const editorialDictionaries = {
       'descobreix', 'descoberta', 'descobreixen', 'rècord', 'fita',
       'reconeix', 'reconegut', 'reconeguda', 'reconeixement', 'homenatge',
       'guardó', 'guardonat', 'guardonada', 'iniciativa', 'projecte',
-      'recerca', 'consolida', 'compromís', 'obre', 'obren', 'reobre',
+      'recerca', 'consolida', 'compromís',
       'esperança', 'innovació', 'innovador', 'innovadora', 'cooperació',
       'col·laboració', 'sostenible', 'sostenibilitat', 'transforma',
-      'transformació', 'amplia', 'amplien', 'reviu', 'reviuen',
+      'transformació', 'reviu', 'reviuen',
       'positiu', 'positiva', 'històric', 'històrica',
       'aprova', 'aprovat', 'aprovada', 'aprovació',
-      'aporta', 'aporten', 'aposta', 'aposten',
       // Cultura i ciència (contingut constructiu que sovint no diu "guanya"):
       'exposició', 'novel·la', 'pel·lícula', 'llibre', 'museu', 'festival',
-      'concert', 'estudi', 'troballa', 'mostra', 'documental', 'biografia',
+      'concert', 'estudi', 'troballa', 'documental', 'biografia',
       'poemari', 'disc', 'retrospectiva', 'estrena', 'recital',
       'nobel', 'avenç', 'invent', 'patent', 'vacuna', 'renovable', 'prototip',
     ],
@@ -275,7 +281,7 @@ const editorialDictionaries = {
       'éxito', 'recupera', 'recuperan', 'logra', 'logran', 'consigue',
       'consiguen', 'ayuda', 'ayudan', 'solidaridad', 'solidario',
       'solidaria', 'mejora', 'mejoran', 'estrena', 'estrenan', 'gana',
-      'ganan', 'crece', 'crecen', 'pionero', 'pionera', 'avanza',
+      'ganan', 'pionero', 'pionera', 'avanza',
       'avanzan', 'acoge', 'acogida', 'donación', 'salva', 'salvan',
       'premio', 'premiado', 'premiada', 'protege', 'protegen', 'restaura',
       'restauran', 'rehabilita', 'rehabilitan', 'gratuito', 'gratuita',
@@ -285,16 +291,15 @@ const editorialDictionaries = {
       'récord', 'hito', 'reconoce', 'reconocido', 'reconocida',
       'reconocimiento', 'homenaje', 'galardón', 'galardonado',
       'galardonada', 'iniciativa', 'proyecto', 'investigación',
-      'consolida', 'compromiso', 'abre', 'abren', 'reabre', 'esperanza',
+      'consolida', 'compromiso', 'esperanza',
       'innovación', 'innovador', 'innovadora', 'cooperación',
       'colaboración', 'sostenible', 'sostenibilidad', 'transforma',
-      'transformación', 'amplía', 'amplían', 'revive',
+      'transformación', 'revive',
       'reviven', 'positivo', 'positiva', 'histórico', 'histórica',
-      'aprueba', 'aprobado', 'aprobada', 'aprobación', 'aporta',
-      'aportan', 'apuesta', 'apuestan',
+      'aprueba', 'aprobado', 'aprobada', 'aprobación',
       // Cultura y ciencia (contenido constructivo sin "gana/récord"):
       'exposición', 'novela', 'película', 'libro', 'museo', 'festival',
-      'concierto', 'estudio', 'hallazgo', 'muestra', 'documental', 'biografía',
+      'concierto', 'estudio', 'hallazgo', 'documental', 'biografía',
       'poemario', 'disco', 'retrospectiva', 'resucita', 'recital',
       'nobel', 'avance', 'invento', 'patente', 'vacuna', 'renovable', 'prototipo',
     ],
@@ -369,7 +374,7 @@ const editorialDictionaries = {
   en: {
     positive: [
       'success', 'succeeds', 'achievement', 'achieves', 'helps', 'help ',
-      'solidarity', 'improves', 'opens', 'wins', 'won ', 'grows', 'grown',
+      'solidarity', 'improves', 'wins', 'won ',
       'pioneer', 'pioneering', 'advances', 'welcomes', 'breakthrough',
       'donation', 'saves', 'rescue', 'rescued', 'prize', 'award',
       'awarded', 'protects', 'restores', 'restored', 'rehabilitates',
@@ -377,9 +382,9 @@ const editorialDictionaries = {
       'celebrates', 'inaugurates', 'discovers', 'discovery', 'record',
       'milestone', 'recognized', 'recognised', 'recognition', 'tribute',
       'initiative', 'project', 'research', 'consolidates', 'commitment',
-      'reopen', 'reopens', 'hope', 'hopeful', 'innovation', 'innovative',
+      'hope', 'hopeful', 'innovation', 'innovative',
       'cooperation', 'collaboration', 'sustainable', 'sustainability',
-      'transforms', 'expands', 'revives', 'positive',
+      'transforms', 'revives', 'positive',
       'historic', 'approves', 'approved', 'approval', 'contributes',
       'launches', 'launched', 'celebrated', 'partnership', 'partnerships',
       'recovery', 'recovers',
@@ -445,7 +450,7 @@ const editorialDictionaries = {
       'naissance', 'célèbre', 'inaugure', 'découverte', 'découvre',
       'record', 'reconnaissance', 'hommage', 'initiative', 'projet',
       'recherche', 'consolide', 'espoir', 'innovation', 'innovant',
-      'coopération', 'collaboration', 'durable', 'transforme', 'élargit',
+      'coopération', 'collaboration', 'durable', 'transforme',
       'positif', 'positive', 'historique', 'approuve', 'apporte',
       'parie', 'lance', 'sauve', 'sauvent',
     ],

@@ -75,6 +75,16 @@ describe('passesEditorialFilter — català', () => {
     expect(passesEditorialFilter("Arriba el Tour de França a Barcelona", 'ca').isPositive).toBe(false)
     expect(passesEditorialFilter("Llega el verano a la costa", 'es').isPositive).toBe(false)
   })
+
+  it('els verbs DIRECCIONALS neutres ja no són passi lliure (creix, obre, amplia, aposta...)', () => {
+    // Casos en què la direcció és clarament DOLENTA: no han de marcar isPositive.
+    expect(passesEditorialFilter("Creix l'atur a Catalunya", 'ca').isPositive).toBe(false)
+    expect(passesEditorialFilter("Obre una investigació contra l'alcalde", 'ca').isPositive).toBe(false)
+    expect(passesEditorialFilter("Crece la deuda pública", 'es').isPositive).toBe(false)
+    expect(passesEditorialFilter("Abre diligencias por el caso", 'es').isPositive).toBe(false)
+    // Però el que és bo de debò segueix passant per altres paraules:
+    expect(passesEditorialFilter("Inauguren una biblioteca i premien la iniciativa solidària", 'ca').passes).toBe(true)
+  })
 })
 
 describe('passesEditorialFilter — castellà', () => {
