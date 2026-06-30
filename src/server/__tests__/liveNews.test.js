@@ -269,6 +269,16 @@ describe('looksLikeAdvertorial — per patrons de títol', () => {
     })).toBe(true)
   })
 
+  it('detecta clickbait de bellesa/dieta (regression "La celulitis se puede eliminar")', () => {
+    expect(looksLikeAdvertorial({
+      url: '',
+      title: 'La celulitis se puede eliminar',
+      summary: 'Nosotros te ayudamos proponiéndote los tratamientos y trucos más efectivos',
+    })).toBe(true)
+    expect(looksLikeAdvertorial({ url: '', title: 'Trucos para adelgazar este verano', summary: '' })).toBe(true)
+    expect(looksLikeAdvertorial({ url: '', title: 'Una crema antiarrugas que rejuvenece', summary: '' })).toBe(true)
+  })
+
   it('no marca notícies editorials normals com a advertorial', () => {
     expect(looksLikeAdvertorial({
       url: '',

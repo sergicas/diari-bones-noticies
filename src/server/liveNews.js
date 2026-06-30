@@ -265,6 +265,9 @@ const editorialDictionaries = {
       'preus més alts', 'preus disparats', 'preus pels núvols', 'encariment',
       'encareix', 'apuja els preus', 'apugen els preus', 'turistificació',
       'sobreturisme',
+      // Clickbait de bellesa/dieta (paral·lel al castellà "celulitis").
+      'cel·lulitis', 'aprimar', 'perdre pes', 'rejovenir', 'antiarrugues',
+      'flaccidesa',
     ],
   },
   es: {
@@ -358,6 +361,9 @@ const editorialDictionaries = {
       // Subida de precios, turistificación y masificación (paral·lel al català).
       'precios más altos', 'se disparan los precios', 'suben los precios',
       'encarecimiento', 'encarece', 'sobreturismo', 'turistificación',
+      // Clickbait de belleza/dieta (colat el 29/06: "La celulitis se puede eliminar").
+      'celulitis', 'adelgazar', 'perder peso', 'rejuvenecer', 'antiarrugas',
+      'flacidez',
     ],
   },
   en: {
@@ -618,6 +624,10 @@ const advertorialPhrasePatterns = [
   /\b(amazon|el\s+corte\s+ingl[eé]s|inditex|zara|mercadona|mango|decathlon|carrefour|fnac|media\s+markt)\s+(ofrece|presenta|lanza|estrena|propone|ofreix|llança|estrena)\b/i,
   // Reportatges que recomanen restaurants/hotels com a publi
   /\b(el|la|los|las|els|les)\s+(restaurante?s?|restaurants?|hoteles?|hotels?)\s+(que\s+no\s+(?:te\s+)?pued|que\s+debes\s+visitar|imprescindibl|imperdibl|secret)/i,
+  // Clickbait de bellesa, dieta i "trucs" cosmètics venut com a notícia (colat
+  // el 29/06: "La celulitis se puede eliminar. Nosotros te ayudamos...").
+  /\b(celulitis|cel·lulitis|estr[íi]as|estries|flacidez|flaccidesa|arrugas|arrugues|antiarrugas|antiarrugues|adelgazar|aprimar|perder peso|perdre pes|rejuvenecer|rejovenir|estr[íi]as|varices|varius)\b/i,
+  /\b(nosotros\s+te\s+ayudamos|te\s+ayudamos\s+proponi|os\s+ajudem|t['’]ajudem|te\s+proponemos|et\s+proposem|trucos\s+m[áa]s\s+efectivos|trucs\s+m[ée]s\s+efectius|c[óo]mo\s+eliminar|com\s+eliminar)\b/i,
 ]
 
 export function looksLikeAdvertorial({ url, title, summary }) {
