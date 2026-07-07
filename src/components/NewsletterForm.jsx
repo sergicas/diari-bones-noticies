@@ -5,7 +5,9 @@ function formatCount(value) {
   return new Intl.NumberFormat('ca-ES').format(value)
 }
 
-export default function NewsletterForm({ defaultLanguage = 'ca' }) {
+export default function NewsletterForm({ defaultLanguage = 'ca', variant = 'full' }) {
+  const isCompact = variant === 'compact'
+  const headingId = `newsletter-heading-${variant}`
   const [email, setEmail] = useState('')
   const [language, setLanguage] = useState(defaultLanguage)
   const [status, setStatus] = useState('idle') // idle | sending | ok | already | error
@@ -58,14 +60,17 @@ export default function NewsletterForm({ defaultLanguage = 'ca' }) {
   }
 
   return (
-    <section className="newsletter-block" aria-labelledby="newsletter-heading">
+    <section
+      className={`newsletter-block${isCompact ? ' newsletter-block--compact' : ''}`}
+      aria-labelledby={headingId}
+    >
       <div className="newsletter-block__inner">
         <p className="newsletter-block__kicker">El butlletí</p>
-        <h2 id="newsletter-heading">Les bones notícies, cada matí a les 7</h2>
+        <h2 id={headingId}>Les bones notícies, cada matí a les 7</h2>
         <p className="newsletter-block__intro">
-          Una selecció breu i curada de les millors notícies del dia, sense soroll ni publicitat.
-          T'arriba al correu cada matí a les 7. Et pots donar de baixa en qualsevol moment
-          amb un sol clic.
+          {isCompact
+            ? 'Rep les millors notícies del dia al correu. Gratis, sense soroll i sense publicitat.'
+            : "Una selecció breu i curada de les millors notícies del dia, sense soroll ni publicitat. T'arriba al correu cada matí a les 7. Et pots donar de baixa en qualsevol moment amb un sol clic."}
         </p>
         {typeof subscriberCount === 'number' && subscriberCount > 0 ? (
           <p className="newsletter-block__count" aria-live="polite">
@@ -88,19 +93,21 @@ export default function NewsletterForm({ defaultLanguage = 'ca' }) {
               disabled={status === 'sending'}
             />
           </label>
-          <label className="newsletter-block__field newsletter-block__field--lang">
-            <span className="newsletter-block__label">Idioma</span>
-            <select
-              value={language}
-              onChange={(event) => setLanguage(event.target.value)}
-              disabled={status === 'sending'}
-            >
-              <option value="ca">Català</option>
-              <option value="es">Castellà</option>
-              <option value="en">Anglès</option>
-              <option value="fr">Francès</option>
-            </select>
-          </label>
+          {!isCompact ? (
+            <label className="newsletter-block__field newsletter-block__field--lang">
+              <span className="newsletter-block__label">Idioma</span>
+              <select
+                value={language}
+                onChange={(event) => setLanguage(event.target.value)}
+                disabled={status === 'sending'}
+              >
+                <option value="ca">Català</option>
+                <option value="es">Castellà</option>
+                <option value="en">Anglès</option>
+                <option value="fr">Francès</option>
+              </select>
+            </label>
+          ) : null}
           <button type="submit" className="newsletter-block__submit" disabled={status === 'sending'}>
             {status === 'sending' ? 'Enviant…' : 'Subscriu-me'}
           </button>
@@ -120,9 +127,11 @@ export default function NewsletterForm({ defaultLanguage = 'ca' }) {
             {errorMsg}
           </p>
         ) : null}
-        <p className="newsletter-block__note">
-          Mai compartim la teva adreça. Només el rebran les bones notícies de bondiari.
-        </p>
+        {!isCompact ? (
+          <p className="newsletter-block__note">
+            Mai compartim la teva adreça. Només el rebran les bones notícies de bondiari.
+          </p>
+        ) : null}
       </div>
     </section>
   )

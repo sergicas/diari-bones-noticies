@@ -57,6 +57,14 @@ const staticPages = [
     priority: '0.6',
     changefreq: 'yearly',
   },
+  {
+    path: '/privacitat',
+    title: `Política de privacitat · ${siteName}`,
+    description:
+      "Política de privacitat d'El Bon Diari: quines dades es recullen al web i a l'app, notificacions push, butlletí i els teus drets.",
+    priority: '0.4',
+    changefreq: 'yearly',
+  },
 ]
 
 const hiddenPages = [

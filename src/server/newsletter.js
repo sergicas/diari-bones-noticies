@@ -211,10 +211,32 @@ export async function handleConfirm(request, env) {
     confirmedAt: new Date().toISOString(),
   }
   await env.STATS_KV.put(key, JSON.stringify(updated))
+
+  // Correu de BENVINGUDA (best-effort): no bloqueja ni trenca la confirmació si
+  // Resend falla. Fidelitza el nou subscriptor i el convida a compartir.
+  const apiKey = env.RESEND_API_KEY
+  if (apiKey && existing.email) {
+    try {
+      const language = existing.language || 'ca'
+      const unsubscribeUrl = `https://bondiari.com/api/newsletter/unsubscribe?token=${token}`
+      const html = renderWelcomeEmail({ language, unsubscribeUrl })
+      const text = renderWelcomeText({ language, unsubscribeUrl })
+      const fromEmail = env.NEWSLETTER_FROM_EMAIL || 'butlleti@bondiari.com'
+      const fromName = env.NEWSLETTER_FROM_NAME || 'El Bon Diari'
+      const subject = subjectForLanguage(language, 'welcome')
+      const result = await sendWithResend({ apiKey, fromEmail, fromName, to: existing.email, subject, html, text })
+      if (!result.ok) {
+        console.warn(`[newsletter] No s'ha pogut enviar la benvinguda a ${existing.email} (${result.status})`)
+      }
+    } catch (err) {
+      console.warn('[newsletter] error enviant el correu de benvinguda', err)
+    }
+  }
+
   return htmlResponse(
     confirmationPageHtml({
       title: 'Confirmat. Benvingut a Bondiari.',
-      body: 'Ja estàs a la llista. Cada matí a les 7 et trobaràs un correu amb les bones notícies del dia.',
+      body: 'Ja estàs a la llista. Cada matí a les 7 et trobaràs un correu amb les bones notícies del dia. T\'hem enviat també un correu de benvinguda.',
     }),
   )
 }
@@ -324,6 +346,9 @@ function subjectForLanguage(language, kind) {
   if (kind === 'confirm') {
     return (confirmationCopy[language] || confirmationCopy.ca).subject
   }
+  if (kind === 'welcome') {
+    return (welcomeCopy[language] || welcomeCopy.ca).subject
+  }
   if (language === 'es') return 'Las buenas noticias de hoy · El Bon Diari'
   if (language === 'en') return "Today's good news · El Bon Diari"
   if (language === 'fr') return 'Les bonnes nouvelles du jour · El Bon Diari'
@@ -373,6 +398,95 @@ export function renderConfirmationText({ language = 'ca', confirmUrl, unsubscrib
     `${c.button}: ${confirmUrl}`,
     '',
     c.note,
+    '',
+    '— El Bon Diari · bondiari.com',
+    `${c.unsub}: ${unsubscribeUrl}`,
+  ].join('\n')
+}
+
+// --- Correu de BENVINGUDA (s'envia en confirmar la subscripció) -------------
+// Fidelitza el nou subscriptor: confirma el valor, marca l'expectativa (cada
+// matí a les 7) i convida a compartir i a seguir les xarxes. Un dels correus
+// amb més retorn de tota la seqüència.
+const welcomeCopy = {
+  ca: {
+    subject: 'Ja hi ets. Benvingut/da a El Bon Diari',
+    hello: 'Ja hi ets!',
+    intro:
+      'Gràcies per sumar-te a El Bon Diari. Cada matí a les 7 rebràs un correu curt amb les bones notícies del dia: reals, verificades i a prop teu.',
+    button: 'Comença a llegir',
+    tip: 'Un favor petit: si coneixes algú que necessiti bones notícies, reenvia-li aquest correu o comparteix bondiari.com. Així ens ajudes a créixer.',
+    unsub: 'Donar-me de baixa',
+  },
+  es: {
+    subject: 'Ya estás dentro. Bienvenido/a a El Bon Diari',
+    hello: '¡Ya estás dentro!',
+    intro:
+      'Gracias por sumarte a El Bon Diari. Cada mañana a las 7 recibirás un correo breve con las buenas noticias del día: reales, verificadas y cercanas.',
+    button: 'Empieza a leer',
+    tip: 'Un favor: si conoces a alguien que necesite buenas noticias, reenvíale este correo o comparte bondiari.com.',
+    unsub: 'Darme de baja',
+  },
+  en: {
+    subject: "You're in. Welcome to El Bon Diari",
+    hello: "You're in!",
+    intro:
+      "Thanks for joining El Bon Diari. Every morning at 7 you'll get a short email with the day's good news: real, verified and close to home.",
+    button: 'Start reading',
+    tip: 'A small favour: if you know someone who needs good news, forward this email or share bondiari.com.',
+    unsub: 'Unsubscribe',
+  },
+  fr: {
+    subject: 'Vous y êtes. Bienvenue à El Bon Diari',
+    hello: 'Vous y êtes !',
+    intro:
+      'Merci de rejoindre El Bon Diari. Chaque matin à 7h, vous recevrez un court e-mail avec les bonnes nouvelles du jour : réelles, vérifiées et proches.',
+    button: 'Commencer à lire',
+    tip: "Un petit service : si vous connaissez quelqu'un qui a besoin de bonnes nouvelles, transférez cet e-mail ou partagez bondiari.com.",
+    unsub: 'Se désabonner',
+  },
+}
+
+export function renderWelcomeEmail({ language = 'ca', siteUrl = 'https://bondiari.com', unsubscribeUrl }) {
+  const lang = welcomeCopy[language] ? language : 'ca'
+  const c = welcomeCopy[lang]
+  return `<!DOCTYPE html><html lang="${lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${c.subject}</title></head>
+<body style="margin:0;padding:0;background:#F4F1EA;color:#000;font-family:Georgia,Times New Roman,serif">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F4F1EA">
+  <tr><td align="center" style="padding:32px 16px">
+    <table role="presentation" width="100%" style="max-width:520px;background:#FFFFFF;border:2px solid #000" cellpadding="0" cellspacing="0">
+      <tr><td style="padding:28px 28px 8px">
+        <div style="font-size:13px;letter-spacing:.18em;text-transform:uppercase;color:#146356;font-weight:800">El Bon Diari</div>
+        <h1 style="margin:8px 0 4px;font-family:Georgia,serif;font-size:28px;letter-spacing:-.02em">${c.hello}</h1>
+      </td></tr>
+      <tr><td style="padding:8px 28px 16px">
+        <p style="margin:0 0 16px;color:#222;font-size:15px;line-height:1.5">${c.intro}</p>
+      </td></tr>
+      <tr><td style="padding:8px 28px 24px;text-align:center">
+        <a href="${siteUrl}" style="display:inline-block;background:#000;color:#FFFFFF;text-decoration:none;padding:14px 26px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;font-size:14px;border:2px solid #000">${c.button}</a>
+      </td></tr>
+      <tr><td style="padding:8px 28px 24px">
+        <p style="margin:0;color:#666;font-size:13px;line-height:1.5">${c.tip}</p>
+      </td></tr>
+      <tr><td style="padding:14px 28px;border-top:1px solid #EEE;font-size:12px;color:#666;text-align:center">
+        <a href="${unsubscribeUrl}" style="color:#666;text-decoration:underline">${c.unsub}</a>
+      </td></tr>
+    </table>
+  </td></tr>
+</table></body></html>`
+}
+
+export function renderWelcomeText({ language = 'ca', siteUrl = 'https://bondiari.com', unsubscribeUrl }) {
+  const lang = welcomeCopy[language] ? language : 'ca'
+  const c = welcomeCopy[lang]
+  return [
+    c.hello,
+    '',
+    c.intro,
+    '',
+    `${c.button}: ${siteUrl}`,
+    '',
+    c.tip,
     '',
     '— El Bon Diari · bondiari.com',
     `${c.unsub}: ${unsubscribeUrl}`,

@@ -3,3 +3,4 @@ Allow: /
 Disallow: /estadistiques
 
 Sitemap: https://bondiari.com/sitemap.xml
+Sitemap: https://bondiari.com/news-sitemap.xml
