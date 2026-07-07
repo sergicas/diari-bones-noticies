@@ -1,3 +1,5 @@
+import { storyImagePath } from '../lib/story-image-path.js'
+
 export const categoryOptions = [
   'Política',
   'Societat',
@@ -37,7 +39,7 @@ export const editorialValues = [
   },
 ]
 
-export const seedArticles = [
+const seedArticlesRaw = [
   {
     id: 'banderes-blaves-catalunya-2026',
     title:
@@ -2170,3 +2172,16 @@ export const seedArticles = [
     ],
   },
 ]
+
+// BLINDATGE DE DRETS D'AUTOR (hemeroteca): igual que el radar en viu, els
+// articles d'arxiu NO mostren la foto del mitjà, sinó una il·lustració
+// editorial pròpia generada per IA i cachejada. Vegeu src/server/storyImage.js.
+export const seedArticles = seedArticlesRaw.map((article) => ({
+  ...article,
+  imageUrl: storyImagePath(article.url, {
+    title: article.title,
+    category: article.category,
+  }),
+  imageCredit: 'El Bon Diari (il·lustració IA)',
+  imageAttributionUrl: '',
+}))

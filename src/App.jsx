@@ -2015,12 +2015,7 @@ function StoryPage({ story, sourceLink, imageLink, relatedStories, onNavigate })
               />
             </a>
             {story.imageCredit ? (
-              <p className="image-credit">
-                Foto:{' '}
-                <a href={imageLink} target="_blank" rel="noopener noreferrer">
-                  {story.imageCredit}
-                </a>
-              </p>
+              <p className="image-credit">{story.imageCredit}</p>
             ) : null}
           </div>
 
@@ -2870,14 +2865,7 @@ function App() {
 
                     {featuredStory.imageCredit ? (
                       <p className="image-credit image-credit--light">
-                        Foto:{' '}
-                        <a
-                          href={featuredImageLink}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          {featuredStory.imageCredit}
-                        </a>
+                        {featuredStory.imageCredit}
                       </p>
                     ) : null}
 

@@ -16,6 +16,10 @@ const ILLUSTRATION_PATH_HINT = '/story-images/'
 const ILLUSTRATION_EXTENSIONS = ['.svg']
 const EDITORIAL_PHOTO_PREFIX = '/story-images/editorial/'
 const PHOTO_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp', '.avif', '.gif']
+// Il·lustració editorial pròpia generada per IA i servida per la ruta del
+// Worker. És una imatge original i única per peça (cap risc de drets d'autor):
+// compta com a imatge vàlida a tots els efectes. Vegeu src/server/storyImage.js.
+const GENERATED_IMAGE_PREFIX = '/api/story-image/'
 
 function isNonEmptyString(value) {
   return typeof value === 'string' && value.trim().length > 0
@@ -44,13 +48,17 @@ function looksLikePhoto(url) {
 export function classifyImage(url) {
   if (!isNonEmptyString(url)) return 'missing'
   if (looksLikePlaceholder(url)) return 'placeholder'
+  if (url.trim().toLowerCase().startsWith(GENERATED_IMAGE_PREFIX)) return 'generated'
   if (isLocalIllustration(url)) return 'illustration'
   if (looksLikePhoto(url)) return 'photo'
   return 'unknown'
 }
 
+// "Té imatge pròpia vàlida?": ara inclou les il·lustracions generades per IA
+// (originals, úniques per peça) a més de les fotografies pròpies.
 export function hasOriginalPhoto(story) {
-  return classifyImage(story?.imageUrl) === 'photo'
+  const kind = classifyImage(story?.imageUrl)
+  return kind === 'photo' || kind === 'generated'
 }
 
 export function validateArticleImage(article) {

@@ -4,6 +4,7 @@
 
 import { LIVE_EDITORIAL_VERSION } from '../lib/editorial-version.js'
 import { normalizeCategory, refineCategoryByContent } from '../lib/category.js'
+import { storyImagePath } from '../lib/story-image-path.js'
 
 export const refreshIntervalMs = 4 * 60 * 60 * 1000
 
@@ -872,9 +873,10 @@ function normalizeThreeCatStory(item, section) {
   const { passes, isPositive } = passesEditorialFilter(fullText, 'ca')
   if (!passes) return null
 
+  const category = refineCategoryByContent(section.category, title, description)
   return {
     title,
-    category: refineCategoryByContent(section.category, title, description),
+    category,
     location: detectLocation(fullText.toLowerCase()),
     summary: summarySnippet,
     impact:
@@ -882,10 +884,12 @@ function normalizeThreeCatStory(item, section) {
     source: '3CatInfo',
     language: 'ca',
     url: link,
-    imageUrl,
-    imageAlt: `Imatge de portada per a ${title}.`,
-    imageCredit: '3CatInfo',
-    imageAttributionUrl: link,
+    // Igual que a la resta del radar: la imatge del mitjà només filtra qualitat;
+    // publiquem una il·lustració editorial pròpia (cap foto de tercers).
+    imageUrl: storyImagePath(link, { title, category }),
+    imageAlt: `Il·lustració editorial per a ${title}.`,
+    imageCredit: 'El Bon Diari (il·lustració IA)',
+    imageAttributionUrl: '',
     editorialScore: isPositive ? 1 : 0,
     editorialVersion: liveEditorialVersion,
     publishedAt,
@@ -1155,10 +1159,14 @@ function normalizeFeedItem(block, feed) {
     source: feed.name,
     language: feed.language,
     url: link,
-    imageUrl,
-    imageAlt: `Imatge de portada per a ${title}.`,
-    imageCredit: feed.name,
-    imageAttributionUrl: link,
+    // La foto del mitjà (imageUrl) només s'ha fet servir amunt com a senyal de
+    // qualitat (que la peça és un article real amb imatge). NO es publica: en
+    // lloc seu, una il·lustració editorial pròpia generada per IA (cap risc de
+    // drets d'autor). Vegeu src/server/storyImage.js.
+    imageUrl: storyImagePath(link, { title, category }),
+    imageAlt: `Il·lustració editorial per a ${title}.`,
+    imageCredit: 'El Bon Diari (il·lustració IA)',
+    imageAttributionUrl: '',
     // editorialScore calculat a dalt: 0 = neutre/polític (només surt si la IA
     // l'aprova) · 1 = bo (paraula clau positiva o feed local).
     editorialScore,
@@ -1626,11 +1634,26 @@ export async function getLiveNewsPayload(kv, { force = false, env } = {}) {
     targetStoryLimit,
   )
 
+  // BLINDATGE DE DRETS D'AUTOR: sigui quin sigui l'origen de la peça (fresca
+  // d'aquest refresc o arrossegada d'un lot anterior amb el codi antic),
+  // MAI publiquem la foto del mitjà. Aquí forcem que TOTES les peces del lot
+  // final facin servir la il·lustració editorial pròpia. Vegeu storyImage.js.
+  const publishedStories = finalStories.map((s) =>
+    String(s.imageUrl || '').startsWith('/api/story-image/')
+      ? s
+      : {
+          ...s,
+          imageUrl: storyImagePath(s.url, { title: s.title, category: s.category }),
+          imageCredit: 'El Bon Diari (il·lustració IA)',
+          imageAttributionUrl: '',
+        },
+  )
+
   // Marquem com a "vistes" NOMÉS les noves que de debò entren al lot. Una
   // notícia acceptada que avui queda fora (pel sostre d'una altra llengua o per
   // diversitat de font) segueix sent elegible al pròxim refresc en lloc de
   // cremar-se. Així el català i el castellà no els devora l'allau anglesa.
-  const shownFreshUrls = finalStories
+  const shownFreshUrls = publishedStories
     .filter((story) => freshUrlSet.has(story.url))
     .map((story) => story.url)
   if (shownFreshUrls.length > 0) {
@@ -1643,10 +1666,10 @@ export async function getLiveNewsPayload(kv, { force = false, env } = {}) {
   }
 
   try {
-    const payload = await setCachedPayload(kv, finalStories)
+    const payload = await setCachedPayload(kv, publishedStories)
     await updateEditorialStats(kv, {
       reviewed: reviewedThisPass,
-      published: finalStories.length,
+      published: publishedStories.length,
     })
     const cacheLabel =
       freshStories.length >= minFreshStoriesForFullRefresh
@@ -1667,7 +1690,7 @@ export async function getLiveNewsPayload(kv, { force = false, env } = {}) {
     return {
       updatedAt,
       nextRefreshAt: new Date(Date.now() + refreshIntervalMs).toISOString(),
-      stories: finalStories,
+      stories: publishedStories,
       cache: 'transient',
     }
   }

@@ -18,6 +18,7 @@ import { renderStoryPage } from './server/storyMeta.js'
 import { handleNewsSitemap } from './server/newsSitemap.js'
 import { handlePushSubscribe, handlePushUnsubscribe, sendPushToAll } from './server/push.js'
 import { handleApnsRegister, sendApnsToAll } from './server/apns.js'
+import { handleStoryImage } from './server/storyImage.js'
 import { feedStoryId } from './lib/story-id.js'
 import { announceFreshStories } from './server/social.js'
 
@@ -111,9 +112,13 @@ async function handleRefreshNews(request, env) {
   }
 }
 
-async function route(request, env) {
+async function route(request, env, ctx) {
   const url = new URL(request.url)
   const path = url.pathname
+
+  // Il·lustració editorial pròpia de cada peça (generada per IA i cachejada).
+  // Substitueix les fotos de premsa de tercers: cap risc de drets d'autor.
+  if (path.startsWith('/api/story-image/')) return handleStoryImage(request, env, ctx)
 
   if (path === '/api/live-news') return handleLiveNews(request, env)
   if (path === '/api/refresh-news') return handleRefreshNews(request, env)
@@ -153,8 +158,8 @@ async function route(request, env) {
 }
 
 export default {
-  async fetch(request, env) {
-    const response = await route(request, env)
+  async fetch(request, env, ctx) {
+    const response = await route(request, env, ctx)
     return withSecurityHeaders(response)
   },
 
