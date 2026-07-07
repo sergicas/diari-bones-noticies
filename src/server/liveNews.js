@@ -5,6 +5,7 @@
 import { LIVE_EDITORIAL_VERSION } from '../lib/editorial-version.js'
 import { normalizeCategory, refineCategoryByContent } from '../lib/category.js'
 import { storyImagePath } from '../lib/story-image-path.js'
+import { applyOwnHeadlines } from './storyText.js'
 
 export const refreshIntervalMs = 4 * 60 * 60 * 1000
 
@@ -1638,7 +1639,7 @@ export async function getLiveNewsPayload(kv, { force = false, env } = {}) {
   // d'aquest refresc o arrossegada d'un lot anterior amb el codi antic),
   // MAI publiquem la foto del mitjà. Aquí forcem que TOTES les peces del lot
   // final facin servir la il·lustració editorial pròpia. Vegeu storyImage.js.
-  const publishedStories = finalStories.map((s) =>
+  const withOwnImages = finalStories.map((s) =>
     String(s.imageUrl || '').startsWith('/api/story-image/')
       ? s
       : {
@@ -1648,6 +1649,10 @@ export async function getLiveNewsPayload(kv, { force = false, env } = {}) {
           imageAttributionUrl: '',
         },
   )
+
+  // BLINDATGE DE DRETS D'AUTOR (text): reescrivim el titular amb veu pròpia i
+  // eliminem el resum copiat del mitjà. Vegeu src/server/storyText.js.
+  const publishedStories = await applyOwnHeadlines(withOwnImages, env)
 
   // Marquem com a "vistes" NOMÉS les noves que de debò entren al lot. Una
   // notícia acceptada que avui queda fora (pel sostre d'una altra llengua o per

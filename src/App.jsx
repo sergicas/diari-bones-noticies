@@ -1128,7 +1128,7 @@ function StoryCard({ story, onNavigate }) {
       </div>
 
       <h3>{story.title}</h3>
-      <p className="story-card__summary">{story.summary}</p>
+      <p className="story-card__summary">{story.summary || story.impact}</p>
 
       <div className="story-card__footer">
         <span>{story.location}</span>
@@ -1955,7 +1955,7 @@ function StoryPage({ story, sourceLink, imageLink, relatedStories, onNavigate })
         headingLevel="h2"
         tag="Pàgina d'article"
         title={story.title}
-        description={story.summary}
+        description={story.summary || story.impact}
         actions={
           <>
             <a
@@ -2494,7 +2494,7 @@ function App() {
         "La Hemeroteca d'El Bon Diari conserva les bones notícies que ja han passat per portada."
     } else if (route.page === 'story' && currentStory) {
       nextTitle = `${currentStory.title} | ${siteName}`
-      nextDescription = currentStory.summary
+      nextDescription = currentStory.summary || currentStory.impact
       nextType = 'article'
       nextImage = currentStory.imageUrl?.startsWith('http')
         ? currentStory.imageUrl
@@ -2836,7 +2836,7 @@ function App() {
                     </p>
                     <h2>{featuredStory.title}</h2>
                     <p className="featured-story__summary">
-                      {featuredStory.summary}
+                      {featuredStory.summary || featuredStory.impact}
                     </p>
                   </div>
 
