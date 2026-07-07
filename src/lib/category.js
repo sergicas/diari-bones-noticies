@@ -133,3 +133,30 @@ export function canonicalizeCategory(raw) {
 export function normalizeCategory(raw, fallback) {
   return canonicalizeCategory(raw) || fallback || 'Actualitat'
 }
+
+// --- Correcció de categoria per CONTINGUT -----------------------------------
+// La categoria ve del feed d'origen (forceCategory), no del contingut. Això fa
+// que una peça pugui heretar una etiqueta equivocada: p. ex. un tema de TV que
+// ve d'un feed d'esports acaba etiquetat com a "Esports". Aquesta capa mira el
+// títol + resum i corregeix la categoria quan hi ha un senyal temàtic clar.
+// L'ordre importa: la primera regla que coincideix guanya.
+const CONTENT_CATEGORY_RULES = [
+  { cat: 'Cultura', rx: /(fotografi|exposici[óo]|mostra fotogr|museu|museo|museum|pintur|escultur|galer[íi]a d'?art|retrospectiva|\bcinema\b|\bcine\b|pel·?l[íi]cula|pel[íi]cula|\bfilm\b|documental|teatre|teatro|[òo]pera|concert|concierto|festival de (cinema|m[úu]sica|cine|teatre)|novel·?la|novela|\bllibre\b|\blibro\b|poesia|poes[íi]a|[àa]lbum|banda sonora|exposici)/i },
+  { cat: 'Esports', rx: /(f[úu]tbol|b[àa]squet|handbol|waterpolo|tenis|tennis|\bliga\b|lliga|partit\b|partido\b|golejador|\bgol\b|golejada|jugador|entrenador|selecci[óo] (espanyola|catalana|de f[úu]tbol)|mundial de|ol[íi]mpi[ck]|maratón|marató|ciclisme|ciclismo|\bmotogp\b|f[óo]rmula 1|\bnba\b|\bipl\b|campionat|campeonato)/i },
+  { cat: 'Salut', rx: /(hospital|vacuna|c[àa]ncer|c[áa]ncer|tractament m[èe]dic|tratamiento m[ée]dico|pacient|paciente|sanitat|sanidad|medicament|assaig cl[íi]nic|ensayo cl[íi]nico)/i },
+  { cat: 'Medi ambient', rx: /(biodiversitat|biodiversidad|reforestaci|energia renovable|energía renovable|esp[èe]cie amenaç|especie amenaz|reciclatge|reciclaje|arrecife|escull|aiguamoll)/i },
+  { cat: 'Ciència', rx: /(recerca cient[íi]fica|investigaci[óo]n cient[íi]fica|astronom|gal[àa]xia|galaxia|telescopi|f[òo]ssil|f[óo]sil|genoma|ADN\b|part[íi]cula)/i },
+]
+
+export function refineCategoryByContent(category, title = '', summary = '') {
+  const text = `${title} ${summary}`.toLowerCase()
+  for (const rule of CONTENT_CATEGORY_RULES) {
+    if (rule.rx.test(text)) return rule.cat
+  }
+  // Etiquetada com a Esports però SENSE cap senyal esportiu → no és esport.
+  // (Cas real: "'El sótano club', de Alba Carrillo" colat com a Esports.)
+  if (category === 'Esports' && !CONTENT_CATEGORY_RULES[1].rx.test(text)) {
+    return 'Societat'
+  }
+  return category
+}
