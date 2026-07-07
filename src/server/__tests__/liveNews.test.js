@@ -9,11 +9,183 @@ import {
   passesEditorialFilter,
   looksLikeAdvertorial,
   applyDiversityCap,
+  UNIVERSAL_NEG,
+  POLITICAL_MARKERS,
 } from '../liveNews.js'
-import { normalizeCategory, canonicalizeCategory } from '../../lib/category.js'
+import {
+  normalizeCategory,
+  canonicalizeCategory,
+  refineCategoryByContent,
+} from '../../lib/category.js'
 import { feedStoryId } from '../../lib/story-id.js'
-import { injectStoryMeta } from '../storyMeta.js'
+import {
+  injectStoryMeta,
+  buildNewsArticleJsonLd,
+  buildArticleBodyHtml,
+} from '../storyMeta.js'
+import { buildNewsSitemap } from '../newsSitemap.js'
 import { composePostText, storyLink } from '../social.js'
+
+const SEO_STORY = {
+  title: 'Una cooperativa <crea> vint llocs de treball',
+  summary: 'La bona notícia arriba al poble amb un projecte replicable.',
+  category: 'Economia',
+  source: 'Diari Local',
+  url: 'https://exemple.cat/noticia-x',
+  imageUrl: 'https://exemple.cat/foto.jpg',
+  publishedAt: '2026-07-03T09:00:00Z',
+  kicker: 'Economia social',
+  body: ['Primer paràgraf.', 'Segon paràgraf.'],
+  language: 'ca',
+}
+
+describe('SEO — JSON-LD NewsArticle', () => {
+  it('genera un NewsArticle vàlid amb els camps clau', () => {
+    const ld = JSON.parse(
+      buildNewsArticleJsonLd(SEO_STORY, 'https://bondiari.com/noticia/x').replace(/\\u003c/g, '<'),
+    )
+    expect(ld['@type']).toBe('NewsArticle')
+    expect(ld.headline).toBe(SEO_STORY.title)
+    expect(ld.datePublished).toBe(SEO_STORY.publishedAt)
+    expect(ld.articleSection).toBe('Economia')
+    expect(ld.publisher.logo.url).toMatch(/logo-colibri\.png$/)
+  })
+
+  it('escapa "<" perquè no pugui tancar el <script>', () => {
+    expect(buildNewsArticleJsonLd(SEO_STORY, 'https://bondiari.com/x')).not.toContain('</')
+  })
+})
+
+describe('SEO — cos de l\'article per a crawlers', () => {
+  it('inclou h1, data i paràgrafs, i escapa el HTML', () => {
+    const body = buildArticleBodyHtml(SEO_STORY)
+    expect(body).toContain('<h1>')
+    expect(body).toContain('<time datetime="2026-07-03T09:00:00Z">')
+    expect(body).toContain('Primer paràgraf.')
+    expect(body).toContain('&lt;crea&gt;')
+    expect(body).not.toContain('<crea>')
+  })
+})
+
+describe('SEO — injectStoryMeta', () => {
+  const html =
+    '<!doctype html><html><head><title>El Bon Diari</title>' +
+    '<meta property="og:type" content="website" />' +
+    '<meta property="og:title" content="X" />' +
+    '<meta name="description" content="X" />' +
+    '<link rel="canonical" href="https://bondiari.com/" /></head>' +
+    '<body><div id="root"></div></body></html>'
+  const out = injectStoryMeta(html, SEO_STORY, 'https://bondiari.com/noticia/x')
+
+  it('posa og:type=article, dates, JSON-LD, canonical i cos a #root', () => {
+    expect(out).toContain('og:type" content="article"')
+    expect(out).toContain('article:published_time')
+    expect(out).toContain('application/ld+json')
+    expect(out).toContain('canonical" href="https://bondiari.com/noticia/x"')
+    expect(out).toMatch(/<div id="root"><article>/)
+  })
+})
+
+describe('SEO — news sitemap (Google News)', () => {
+  const now = Date.parse('2026-07-03T12:00:00Z')
+  const xml = buildNewsSitemap(
+    [
+      SEO_STORY,
+      { title: 'Vella', url: 'https://x.cat/vella', publishedAt: '2026-06-01T00:00:00Z', language: 'ca' },
+    ],
+    now,
+  )
+
+  it('inclou les peces de <48h amb tags news: i exclou les velles', () => {
+    expect(xml).toContain('sitemap-news/0.9')
+    expect(xml).toContain('<news:publication_date>')
+    expect(xml).toContain('cooperativa')
+    expect(xml).not.toContain('Vella')
+  })
+})
+
+describe('refineCategoryByContent — correcció per contingut', () => {
+  it('reubica una exposició de fotografia a Cultura (cas "Minor White")', () => {
+    expect(
+      refineCategoryByContent(
+        'Gastronomia',
+        'Minor White, dimensión espiritual de la fotografía',
+        'La Fundación Mapfre presenta en el KBr de Barcelona una retrospectiva del fotógrafo.',
+      ),
+    ).toBe('Cultura')
+  })
+
+  it('treu d\'Esports un tema de TV sense cap senyal esportiu (cas "El sótano club")', () => {
+    expect(
+      refineCategoryByContent(
+        'Esports',
+        "'El sótano club', de Alba Carrillo: Hablar sin el brazo en alto",
+        'Sarah Santaolalla estuvo en el programa de televisión.',
+      ),
+    ).toBe('Societat')
+  })
+
+  it('respecta Esports quan SÍ que hi ha senyal esportiu', () => {
+    expect(
+      refineCategoryByContent('Esports', 'El Barça guanya la lliga amb un gol al descompte', ''),
+    ).toBe('Esports')
+  })
+
+  it('no toca una categoria correcta sense senyals', () => {
+    expect(refineCategoryByContent('Ciència', 'Una nova iniciativa veïnal', '')).toBe('Ciència')
+  })
+})
+
+describe('UNIVERSAL_NEG — exclusió temàtica', () => {
+  it('bloqueja rècords de mercat (cas Nasdaq per volum)', () => {
+    expect(
+      UNIVERSAL_NEG.test(
+        'spacex lleva al nasdaq a registrar el mejor semestre de su historia en volumen de negociación',
+      ),
+    ).toBe(true)
+  })
+
+  it('bloqueja tertúlia i premsa del cor', () => {
+    expect(UNIVERSAL_NEG.test("'el sótano club', de alba carrillo")).toBe(true)
+    expect(UNIVERSAL_NEG.test('la tertulia de gran hermano')).toBe(true)
+  })
+
+  it('bloqueja el soroll de política de conflicte al voltant de Trump (colat el 07/07)', () => {
+    expect(
+      UNIVERSAL_NEG.test(
+        'l’annulation du carton rouge de balogun est-elle un cadeau d’infantino à trump ?',
+      ),
+    ).toBe(true)
+  })
+
+  it('no bloqueja una paraula que només conté "trump" per casualitat', () => {
+    // \\btrump\\b evita falsos positius com "trumpet" (trompeta).
+    expect(UNIVERSAL_NEG.test('un concert de trumpet solo al conservatori')).toBe(false)
+  })
+
+  it('no bloqueja una bona notícia normal', () => {
+    expect(
+      UNIVERSAL_NEG.test('una cooperativa crea vint llocs de treball al poble'),
+    ).toBe(false)
+  })
+})
+
+describe('POLITICAL_MARKERS — maniobra de partit', () => {
+  it('bloqueja el traspàs de culpes entre càrrecs (cas Cabezas/Argimon, 07/07)', () => {
+    // "vacunació" feia positiu el text; el marcador polític "desvincula" el cau.
+    expect(
+      POLITICAL_MARKERS.test(
+        'cabezas desvincula argimon del retard en la vacunació de policies espanyols',
+      ),
+    ).toBe(true)
+  })
+
+  it('no marca com a política una bona notícia de salut sense baralla', () => {
+    expect(
+      POLITICAL_MARKERS.test('comença la vacunació gratuïta contra la grip al barri'),
+    ).toBe(false)
+  })
+})
 
 describe('passesEditorialFilter — català', () => {
   it('deixa passar una notícia clarament positiva', () => {
@@ -264,6 +436,23 @@ describe('looksLikeAdvertorial — per patrons de títol', () => {
   it('detecta "presenta el nuevo", "lanza al mercado"', () => {
     expect(looksLikeAdvertorial({ url: '', title: 'Bosch presenta el nuevo modelo de lavadora', summary: '' })).toBe(true)
     expect(looksLikeAdvertorial({ url: '', title: 'BMW lanza al mercado el nuevo coupé', summary: '' })).toBe(true)
+  })
+
+  it('detecta fitxa tècnica d\'automòbil venuda com a notícia (colat el 07/07)', () => {
+    // El Dacia Sandero passava perquè "estrena" és paraula positiva i l'article
+    // era indefinit ("estrena UN nou"). El cacem per la fitxa tècnica (potència,
+    // consum), sense tocar les estrenes culturals.
+    expect(looksLikeAdvertorial({
+      url: 'https://exemple.cat/motor/dacia-sandero',
+      title: 'Dacia estrena un nou Sandero híbrid per 19.890 euros',
+      summary: 'La versió HEV té 155 CV i un consum homologat de 4,2 L/100 Km',
+    })).toBe(true)
+  })
+
+  it('NO marca com a publi les estrenes culturals amb article indefinit', () => {
+    expect(looksLikeAdvertorial({ url: '', title: 'El museu estrena una nova exposició sobre Miró', summary: 'Amb obres inèdites' })).toBe(false)
+    expect(looksLikeAdvertorial({ url: '', title: 'El Liceu estrena una nova òpera de Wagner', summary: 'Celebrada per la crítica' })).toBe(false)
+    expect(looksLikeAdvertorial({ url: '', title: 'La banda estrena un nou disc', summary: 'Torna als escenaris' })).toBe(false)
   })
 
   it('detecta Black Friday i Cyber Monday', () => {

@@ -3,7 +3,7 @@
 // editorials per idioma i guarda el resultat a Workers KV (env.LIVE_NEWS_KV).
 
 import { LIVE_EDITORIAL_VERSION } from '../lib/editorial-version.js'
-import { normalizeCategory } from '../lib/category.js'
+import { normalizeCategory, refineCategoryByContent } from '../lib/category.js'
 
 export const refreshIntervalMs = 4 * 60 * 60 * 1000
 
@@ -274,6 +274,11 @@ const editorialDictionaries = {
       // Clickbait de bellesa/dieta (paral·lel al castellà "celulitis").
       'cel·lulitis', 'aprimar', 'perdre pes', 'rejovenir', 'antiarrugues',
       'flaccidesa',
+      // Retallades de programes/ajuts i pujades de taxes: la notícia és una
+      // pèrdua encara que hi surti "projecte", "estudi" o "escola" (paral·lel a
+      // l'anglès "axed"/"soaring fees", colats el 04/07).
+      'retallada', 'retallades', 'retall pressupostari', 'tancament del programa',
+      'suprimeix el programa', 'pugen les taxes', 'taxes universitàries',
     ],
   },
   es: {
@@ -369,6 +374,11 @@ const editorialDictionaries = {
       // Clickbait de belleza/dieta (colat el 29/06: "La celulitis se puede eliminar").
       'celulitis', 'adelgazar', 'perder peso', 'rejuvenecer', 'antiarrugas',
       'flacidez',
+      // Recortes de programas/ayudas y subidas de tasas: la noticia es una
+      // pérdida aunque salga "proyecto", "estudio" o "escuela" (paralelo al
+      // inglés "axed"/"soaring fees", colados el 04/07).
+      'recorte', 'recortes', 'tijeretazo', 'cierre del programa',
+      'suprime el programa', 'suben las tasas', 'tasas universitarias',
     ],
   },
   en: {
@@ -427,6 +437,14 @@ const editorialDictionaries = {
       'topples government', 'government collapse',
       'lowest average', 'worst results', 'worst in a decade', 'school dropout',
       'dropout rate', 'failing grades', 'record low pass',
+      // Programes bons que es retallen/cancel·len i pujades de preus/taxes: la
+      // notícia és una PÈRDUA, encara que hi surti "project", "study" o "school"
+      // (colat el 04/07 amb "education project... axed by UK" i "Brexit... soaring
+      // student fees"). "study/project" són paraula positiva; sense aquests
+      // negatius, passaven el filtre i s'arrossegaven quatre dies.
+      'axed', 'scrapped', 'aid cut', 'aid cuts', 'funding cut', 'funding cuts',
+      'budget cut', 'budget cuts', 'priced out', 'soaring fees', 'soaring costs',
+      'soaring prices', 'student fees', 'tuition fees', 'fee rise', 'fee hike',
       // Sports transfers, advertising, sponsored podcast content
       'transfer', 'transfers', 'transfer market', 'transfer talk',
       'transfer rumours', 'transfer rumors', 'signs for', 'signs with',
@@ -615,8 +633,16 @@ const advertorialPhrasePatterns = [
   /\bmost\s+recommended\b/i, /\bhighly\s+recommended\b/i,
   /\bmust[\s-]?(have|see|try)\b/i, /\bimprescindible\b/i,
   /\bindispensable[s]?\b/i, /\bincontournable[s]?\b/i,
-  // "Presenta el nou / Llança el nou..."
+  // "Presenta el nou / Llança el nou..." (NOMÉS article definit: l'indefinit
+  // "estrena una nova exposició/òpera/disc" és cultura de bona fe i no s'ha de tocar).
   /\b(presenta|llan[çc]a|lanza|estrena|launches|unveils|d[ée]voile|pr[eé]sente)\s+(su|el|la|its|le|la|son|sa)\s+(nuevo|nueva|new|nouveau|nouvelle|nou|nova)/i,
+  // Fitxa tècnica d'automòbil venuda com a notícia (potència, consum, preu de
+  // sortida): és publicitat de producte, no una bona notícia (colat el 07/07 amb
+  // el Dacia Sandero: "155 CV", "4,2 L/100 Km", "consum homologat"). Aquest és el
+  // senyal precís, sense tocar les estrenes culturals.
+  /\b\d{2,3}\s*(cv|cavalls|caballos|ch|hp|kw)\b/i,
+  /\b\d[\d.,]*\s*l\s*\/\s*100\s*km\b/i,
+  /\bconsum(?:o|ption)?\s+(homologa|combina|mixt|mixto|wltp)/i,
   /\b(llega|arriba|arrive|hits|comes|lanza|llan[çc]a|presenta)\s+(al\s+mercado|al\s+mercat|to\s+market|sur\s+le\s+march[eé])/i,
   /\bnow\s+(in\s+stock|available)\b/i,
   // Bloomberg-style podcast titles "X on Y" o "X On Y Alpha"
@@ -848,7 +874,7 @@ function normalizeThreeCatStory(item, section) {
 
   return {
     title,
-    category: section.category,
+    category: refineCategoryByContent(section.category, title, description),
     location: detectLocation(fullText.toLowerCase()),
     summary: summarySnippet,
     impact:
@@ -964,7 +990,7 @@ function extractPrimaryCategory(block, fallback) {
 // li treuen el passi lliure: haurà de passar per la IA per sortir, en lloc de
 // colar-se per una paraula positiva incidental. S'eviten mots ambigus com "junts"
 // (=plegats) o "sumar" (=afegir); s'usen formes inequívoques.
-const POLITICAL_MARKERS = new RegExp(
+export const POLITICAL_MARKERS = new RegExp(
   [
     'psoe', '\\bvox\\b', '\\berc\\b', 'podemos', 'bildu', '\\bpnv\\b', 'ciudadanos',
     'alian[çc]a catalana', 'partit popular', 'partido popular', 'prim[àa]ries',
@@ -972,6 +998,11 @@ const POLITICAL_MARKERS = new RegExp(
     'escaño', 'bancada', 'electoral', 'eleccion', 'elecci[óo]ns', 'urnes',
     'portaveu del', 'portavoz del', 'posconvergent', 'retret',
     'reproche', 'dimissi', 'dimisi[óo]n', 'destituci', 'cessament',
+    // Maniobra de partit per esquivar responsabilitats (traspàs de culpes entre
+    // càrrecs): no és bona notícia (colat el 07/07 amb "Cabezas DESVINCULA
+    // Argimon del retard en la vacunació…").
+    'desvincula', 'desmarca', 'carrega les culpes', 'carga las culpas',
+    'traspassa la culpa', 'traspasa la culpa',
     '\\bpcp\\b', 'm[áa]s madrid', 'fratelli d', 'rassemblement national',
     // Eleccions i recompte de vots en QUALSEVOL llengua: un resultat electoral
     // no és classificable com a bona/mala notícia (política contestada). Es
@@ -988,7 +1019,7 @@ const POLITICAL_MARKERS = new RegExp(
 
 // Bloc dur UNIVERSAL (multilingüe): categories de mala notícia que el filtre de
 // paraules per idioma i el model petit deixaven passar. Es bloquegen en sec.
-const UNIVERSAL_NEG = new RegExp(
+export const UNIVERSAL_NEG = new RegExp(
   [
     // Calor extrema / desastre climàtic (ca/es/it/fr/pt/en).
     'onada de calor', 'ola de calor', 'onda de calor', 'ondata di calore',
@@ -1005,6 +1036,10 @@ const UNIVERSAL_NEG = new RegExp(
     'netanyahu', 'cisjord[àa]nia', 'cisjordania', 'west bank',
     'israel', '\\bgaza\\b', '\\bhamas\\b', 'hezbol', 'taliban', 'l[íi]bano',
     'l[íi]ban\\b', 'ucra[ïi]na', 'ucrania', 'ukraine', '\\bputin\\b', 'kremlin',
+    // Trump com a marcador de política de conflicte/favoritisme: a un radar de
+    // bones notícies gairebé sempre és soroll (colat el 07/07 amb "L'annulation
+    // du carton rouge de Balogun est-elle un cadeau d'Infantino à Trump ?").
+    '\\btrump\\b',
     '\\bir[áa]n', 'ir[ãa]o', 'ormuz', 'houthi', 'hut[íi]', '\\bsiria\\b',
     '\\bsyrie\\b', 'guerra', 'm[íi]ssil', 'misil', 'missile', 'bombarde',
     'retirada de tropes', 'retirada de tropas', 'alto el fuego', 'cessez-le-feu',
@@ -1044,6 +1079,17 @@ const UNIVERSAL_NEG = new RegExp(
     'migrant boat', 'small boat', 'channel crossing',
     'migraci[óo]n irregular', 'immigraci[óo] irregular', 'imigra[çc][ãa]o ilegal',
     'sin papeles', 'sense papers', 'salto a la valla', 'salt a la tanca',
+    // Mercats i especulació borsària: un rècord de mercat (Nasdaq, IBEX, volum
+    // de negociació…) no és una bona notícia per a tothom (cas Nasdaq, 2/07).
+    'nasdaq', 'wall street', '\\bibex\\b', 'dow jones', '\\bnikkei\\b',
+    'cotizaci[óo]n', 'cotitzaci[óo]', 'bolsa de valores', 'borsa de valors',
+    'mercado burs[áa]til', 'mercat borsari', 'volumen de negociaci',
+    'volum de negociaci', 'm[áa]xim[oa]s? hist[óo]ric[oa]s? en bolsa',
+    // Tertúlia, realities i premsa del cor (safareig, no és notícia
+    // constructiva; cas "'El sótano club', de Alba Carrillo").
+    'prensa rosa', 'premsa rosa', 'prensa del coraz[óo]n', 'reality show',
+    'gran hermano', 's[áa]lvame', 'tertuli', 'famoseo', 'concursant',
+    's[óo]tano club',
   ].join('|'),
   'i',
 )
@@ -1059,11 +1105,16 @@ function normalizeFeedItem(block, feed) {
     parseRfc822Date(extractTag(block, 'pubDate')) ||
     parseRfc822Date(extractTag(block, 'published')) ||
     parseRfc822Date(extractTag(block, 'updated'))
-  const imageUrl = pickImageForItem(block)
+  // Cal descodificar les entitats HTML de la URL de la imatge: molts feeds
+  // (The Guardian, entre d'altres) escriuen els ampersands com a "&amp;", cosa
+  // que trenca el paràmetre de signatura "s=" de la URL i fa que la imatge
+  // torni un 401. Sense això, la peça entrava amb una imatge que no carregava i
+  // el front hi posava el degradat genèric (perdent la foto real de la font).
+  const imageUrl = decodeHtmlEntities(pickImageForItem(block))
   // Per als feeds dedicats a una secció (forceCategory) confiem en la secció
   // del feed, no en l'etiqueta de l'article (que sovint la desvia a Espanya,
   // Salut…). Així Cultura/Tecnologia/Ciència s'omplen de debò.
-  const category = feed.forceCategory
+  const rawCategory = feed.forceCategory
     ? feed.defaultCategory
     : extractPrimaryCategory(block, feed.defaultCategory)
 
@@ -1071,6 +1122,10 @@ function normalizeFeedItem(block, feed) {
 
   const summarySource = subtitle || description || title
   const summarySnippet = `${summarySource.slice(0, 180)}${summarySource.length > 180 ? '...' : ''}`
+  // Correcció per contingut: si el títol/resum tenen un senyal temàtic clar,
+  // sobreescrivim la categoria heretada del feed (evita, p. ex., que un tema de
+  // TV etiquetat com a Esports o una exposició de fotografia surtin mal ubicats).
+  const category = refineCategoryByContent(rawCategory, title, summarySource)
   if (looksLikeAdvertorial({ url: link, title, summary: summarySnippet })) return null
   const fullText = `${title} ${summarySource}`
   const fullTextLower = fullText.toLowerCase()
@@ -1183,6 +1238,8 @@ const AI_SYSTEM_BATCH = [
   'eleccions, conflicte, retret o insult, tensió diplomàtica o comercial,',
   'sanció, alerta sanitària o alimentària, condemna o càstig, dòping, onada de',
   'calor o desastre climàtic, crisi o caiguda econòmica, acomiadaments,',
+  'retallades pressupostàries o d’ajuts, tancament de programes o serveis,',
+  'pujada de preus, taxes o impostos, un projecte o servei bo que es cancel·la,',
   'immigració irregular, pasteres, naufragis o rescats al mar,',
   'cotilleos o vida privada de famosos, luxe i excentricitats de rics,',
   'sortejos o bases legals de concursos, o',
