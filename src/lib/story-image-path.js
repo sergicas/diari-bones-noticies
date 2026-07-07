@@ -7,8 +7,15 @@
 // prompt sense consultar enlloc. Vegeu src/server/storyImage.js.
 import { feedStoryId } from './story-id.js'
 
-export function storyImagePath(url, { title, category } = {}) {
+// Preferim un "brief" visual concret per a la notícia (una escena en anglès que
+// descriu la peça: "a modern tram on a tree-lined avenue"). Si no n'hi ha (peça
+// antiga, IA caiguda, hemeroteca estàtica), caiem al format llegat categoria|títol
+// i la ruta hi aplica el motiu de secció. La ruta distingeix els dos casos pel "|".
+export function storyImagePath(url, { title, category, brief } = {}) {
   const id = feedStoryId(url)
-  const seed = `${category || ''}|${String(title || '').slice(0, 120)}`
+  const clean = String(brief || '').replace(/\|/g, ' ').trim()
+  const seed = clean
+    ? clean.slice(0, 200)
+    : `${category || ''}|${String(title || '').slice(0, 120)}`
   return `/api/story-image/${id}?s=${encodeURIComponent(seed)}`
 }

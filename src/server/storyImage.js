@@ -90,11 +90,22 @@ function seedHash(text) {
 // (argila / terracota / paper / tinta) perquè totes les peces siguin família.
 function buildPrompt(seed) {
   const clean = sanitizeSeed(seed)
-  const [category = '', title = ''] = clean.split('|')
-  const motif = CATEGORY_MOTIFS[normalizeKey(category)] || CATEGORY_MOTIFS.default
-  const variant = COMPOSITION_VARIANTS[seedHash(title || category) % COMPOSITION_VARIANTS.length]
+  // Cas preferit: el seed és una ESCENA concreta per a la notícia (sense "|"),
+  // generada per la IA a partir del titular. La fem servir tal qual (dibuix
+  // relacionat amb la peça). Cas llegat: "categoria|títol" → motiu de secció.
+  let scene
+  let variantKey
+  if (clean.includes('|')) {
+    const [category = '', title = ''] = clean.split('|')
+    scene = CATEGORY_MOTIFS[normalizeKey(category)] || CATEGORY_MOTIFS.default
+    variantKey = title || category
+  } else {
+    scene = clean || CATEGORY_MOTIFS.default
+    variantKey = clean
+  }
+  const variant = COMPOSITION_VARIANTS[seedHash(variantKey) % COMPOSITION_VARIANTS.length]
   return [
-    `Warm minimalist editorial illustration of ${motif}; ${variant}.`,
+    `Warm minimalist editorial illustration of ${scene}; ${variant}.`,
     'Symbolic and hopeful, clearly a hand-drawn illustration and NOT a photograph.',
     'Textured paper grain and soft ink linework; muted earthy palette of clay, terracotta, cream and deep ink blue.',
     'Calm, dignified mood, gentle balanced composition, editorial poster aesthetic.',
@@ -113,7 +124,10 @@ function base64ToBytes(b64) {
 // Targeta de reserva amb els colors de la marca, per si la IA no respon o s'ha
 // arribat al sostre diari. Sempre és una imatge pròpia: cap risc legal.
 function fallbackSvg(seed) {
-  const [category = ''] = sanitizeSeed(seed).split('|')
+  const clean = sanitizeSeed(seed)
+  // Amb seed llegat "categoria|títol" mostrem la categoria; amb un brief lliure,
+  // una etiqueta neutra (el brief seria massa llarg per a la targeta).
+  const category = clean.includes('|') ? clean.split('|')[0] : ''
   const label = (category || 'Bona notícia').replace(/&/g, '&amp;').replace(/</g, '&lt;')
   return `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="768" viewBox="0 0 1024 768" role="img">
   <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
