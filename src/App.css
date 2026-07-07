@@ -267,25 +267,11 @@
   color: var(--muted);
 }
 
-/* Avís de fase de proves: nota de precaució (groc suau + vora negra de la marca). */
-.masthead__beta {
-  margin: 18px 0 0;
-  max-width: 60ch;
-  padding: 9px 14px;
-  font-size: 0.85rem;
-  line-height: 1.45;
-  color: #1a1a1a;
-  background: #fff4c2;
-  border: 2px solid #000;
-}
-
-.masthead__beta span {
-  margin-right: 4px;
-}
-
 .site-main {
   display: grid;
   gap: 24px;
+  /* Regió que anima la transició nativa entre pàgines (View Transitions). */
+  view-transition-name: bondiari-main;
 }
 
 .sr-only {
@@ -1204,13 +1190,221 @@
   text-decoration-thickness: 2px;
 }
 
+.push-optin {
+  max-width: 720px;
+  margin: 8px auto 28px;
+  padding: 0 16px;
+  text-align: center;
+}
+.push-optin__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 22px;
+  border: 2px solid #000;
+  background: #000;
+  color: #ffffff;
+  font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: transform 160ms ease, opacity 160ms ease;
+}
+.push-optin__btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  opacity: 0.92;
+}
+.push-optin__btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.push-optin__ok,
+.push-optin__note {
+  font-size: 0.9rem;
+  color: var(--ink);
+  margin: 0;
+}
+.push-optin__note {
+  opacity: 0.75;
+}
+
+.share-block {
+  margin: 24px 0 8px;
+}
+.share-block__cta {
+  margin: 0 0 12px;
+  font-family: var(--display-font, Georgia, serif);
+  font-size: clamp(1.05rem, 2vw, 1.25rem);
+  line-height: 1.35;
+  color: var(--ink);
+}
+.share-block__primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  max-width: 420px;
+  padding: 13px 22px;
+  border: 2px solid var(--accent, #146356);
+  background: var(--accent, #146356);
+  color: #ffffff;
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: transform 160ms ease, opacity 160ms ease;
+}
+.share-block__primary:hover {
+  transform: translateY(-1px);
+  opacity: 0.94;
+}
+
+/* Desa per llegir després */
+.article-page__save {
+  margin: 20px 0 4px;
+}
+.save-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 11px 20px;
+  border: 2px solid var(--accent, #146356);
+  background: #ffffff;
+  color: var(--accent, #146356);
+  font-size: 0.98rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: transform 160ms ease, background 160ms ease, color 160ms ease;
+}
+.save-button:hover {
+  transform: translateY(-1px);
+}
+.save-button.is-saved {
+  background: var(--accent, #146356);
+  color: #ffffff;
+}
+
+.saved-empty {
+  max-width: 560px;
+  padding: 12px 0 8px;
+}
+.saved-empty h2 {
+  margin: 0 0 10px;
+  font-family: var(--display-font, Georgia, serif);
+}
+.saved-empty p {
+  margin: 0 0 18px;
+  color: var(--ink);
+  line-height: 1.55;
+}
+
+.saved-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 20px;
+}
+.saved-card {
+  display: grid;
+  grid-template-columns: 150px 1fr;
+  gap: 18px;
+  padding: 18px;
+  border: 1px solid rgba(20, 99, 86, 0.16);
+  border-radius: 14px;
+  background: #ffffff;
+}
+.saved-card__image {
+  width: 100%;
+  height: 110px;
+  object-fit: cover;
+  border-radius: 10px;
+}
+.saved-card__content {
+  min-width: 0;
+}
+.saved-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.saved-card__date {
+  font-size: 0.8rem;
+  color: rgba(20, 99, 86, 0.75);
+}
+.saved-card__title {
+  margin: 0 0 8px;
+  font-family: var(--display-font, Georgia, serif);
+  font-size: clamp(1.1rem, 2.4vw, 1.35rem);
+  line-height: 1.25;
+}
+.saved-card__summary {
+  margin: 0 0 8px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+.saved-card__impact {
+  margin: 0 0 10px;
+  font-size: 0.92rem;
+  color: rgba(0, 0, 0, 0.7);
+}
+.saved-card__full {
+  margin: 4px 0 12px;
+}
+.saved-card__full > summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: var(--accent, #146356);
+}
+.saved-card__full > p {
+  margin: 10px 0 0;
+  line-height: 1.6;
+}
+.saved-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+}
+.saved-card__link {
+  font-weight: 700;
+  color: var(--accent, #146356);
+}
+.saved-card__remove {
+  border: none;
+  background: none;
+  padding: 0;
+  color: rgba(0, 0, 0, 0.55);
+  font-size: 0.9rem;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.saved-card__remove:hover {
+  color: #a11;
+}
+@media (max-width: 560px) {
+  .saved-card {
+    grid-template-columns: 1fr;
+  }
+  .saved-card__image {
+    height: 160px;
+  }
+}
+
 .share-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 10px;
   padding: 18px 0;
-  margin: 24px 0 8px;
+  margin: 16px 0 8px;
   border-top: 1px solid rgba(20, 99, 86, 0.14);
   border-bottom: 1px solid rgba(20, 99, 86, 0.14);
 }
@@ -2485,11 +2679,127 @@
   color: #000;
   opacity: 0.78;
 }
+
+/* Variant COMPACTA: banda més estreta i visible, a mitja portada (després de
+   la peça destacada). Sense selector d'idioma ni nota; email + botó en línia. */
+.newsletter-block--compact {
+  margin: 28px 0;
+}
+.newsletter-block--compact .newsletter-block__inner {
+  padding: 20px 24px;
+}
+.newsletter-block--compact .newsletter-block h2,
+.newsletter-block--compact h2 {
+  font-size: clamp(1.3rem, 2.4vw, 1.6rem);
+  margin: 0 0 6px;
+}
+.newsletter-block--compact .newsletter-block__intro {
+  margin: 0 0 12px;
+}
+.newsletter-block--compact .newsletter-block__form {
+  grid-template-columns: 1fr auto;
+}
 @media (max-width: 640px) {
   .newsletter-block__form {
     grid-template-columns: 1fr;
   }
   .newsletter-block__inner {
     padding: 24px 20px;
+  }
+  .newsletter-block--compact .newsletter-block__form {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ============================================================
+   Estira per actualitzar (pull-to-refresh natiu)
+   ============================================================ */
+.ptr {
+  position: relative;
+}
+
+.ptr__indicator {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 72px;
+  pointer-events: none;
+  color: var(--ink, #1a1a1a);
+  font-weight: 800;
+  font-size: 0.82rem;
+  letter-spacing: 0.01em;
+}
+
+.ptr__label {
+  opacity: 0.75;
+}
+
+.ptr__spinner {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2.5px solid rgba(0, 0, 0, 0.18);
+  border-top-color: var(--accent, #d64545);
+  box-sizing: border-box;
+}
+
+.ptr__indicator.is-refreshing .ptr__spinner {
+  animation: ptr-spin 0.7s linear infinite;
+}
+
+.ptr__content {
+  will-change: transform;
+}
+
+/* Retorn elàstic quan NO s'està arrossegant amb el dit. */
+.ptr__content:not(.is-dragging) {
+  transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes ptr-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ptr__content:not(.is-dragging) {
+    transition: none;
+  }
+  .ptr__indicator.is-refreshing .ptr__spinner {
+    animation: none;
+  }
+}
+
+/* ============================================================
+   Transició nativa entre pàgines (View Transitions API)
+   Només anima la regió de contingut; capçalera i peu queden fixos.
+   ============================================================ */
+@media (prefers-reduced-motion: no-preference) {
+  ::view-transition-old(bondiari-main) {
+    animation: bondiari-page-out 160ms ease both;
+  }
+  ::view-transition-new(bondiari-main) {
+    animation: bondiari-page-in 240ms ease both;
+  }
+}
+
+@keyframes bondiari-page-out {
+  to {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+@keyframes bondiari-page-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
   }
 }

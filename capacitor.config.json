@@ -1,0 +1,14 @@
+{
+  "appId": "com.bondiari.app",
+  "appName": "El Bon Diari",
+  "webDir": "dist",
+  "server": {
+    "url": "https://bondiari.com",
+    "cleartext": false
+  },
+  "ios": {
+    "contentInset": "always",
+    "backgroundColor": "#ffffff",
+    "limitsNavigationsToAppBoundDomains": false
+  }
+}

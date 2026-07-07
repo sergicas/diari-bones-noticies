@@ -16,13 +16,23 @@
     "backup": "node scripts/backup-kv.mjs",
     "sitemap": "node scripts/generate-sitemap.mjs",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "ios:assets": "capacitor-assets generate --ios",
+    "ios:sync": "cap sync ios",
+    "ios:open": "cap open ios"
   },
   "dependencies": {
+    "@capacitor/core": "^7.0.0",
+    "@capacitor/haptics": "^7.0.0",
+    "@capacitor/ios": "^7.0.0",
+    "@capacitor/push-notifications": "^7.0.0",
+    "@capacitor/share": "^7.0.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4"
   },
   "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^7.0.0",
     "@eslint/js": "^9.39.4",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",

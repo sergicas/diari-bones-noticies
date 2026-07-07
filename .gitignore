@@ -47,3 +47,15 @@ kv-backups/
 # Builds locals i artefactes
 app-review-*/
 *.tgz
+
+# Còpies de seguretat i duplicats de Finder (cruft, no a git)
+*.bak
+* [0-9].xml
+* [0-9].podspec
+* [0-9].js
+
+# Artefactes natius iOS (Pods i build els gestiona ios/.gitignore de Capacitor)
+ios/App/App/public/
+ios/App/build/
+ios/DerivedData/
+**/xcuserdata/

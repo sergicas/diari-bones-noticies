@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { shareContent, haptic, isNativePlatform } from '../lib/native.js'
 
 const siteUrl = 'https://bondiari.com'
 
@@ -65,12 +66,17 @@ export default function ShareRow({ story }) {
   // copiem l'enllaç i avisem perquè l'enganxin a la bio o als Stories.
   async function shareInstagram(event) {
     event.preventDefault()
+    haptic('light')
+    if (isNativePlatform()) {
+      await shareContent({ title: text, text, url })
+      return
+    }
     if (typeof navigator !== 'undefined' && navigator.share) {
       try {
         await navigator.share({ title: text, text, url })
         return
       } catch {
-        // Si l'usuari cancel·la o el navegador no admet share, caiem al fallback.
+        // cancel·lat o no admès → fallback a copiar l'enllaç
       }
     }
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
@@ -84,9 +90,23 @@ export default function ShareRow({ story }) {
     }
   }
 
+  async function primaryShare(event) {
+    event.preventDefault()
+    // Feedback hàptic a l'app; full de compartir natiu d'iOS (o Web Share al web).
+    haptic('light')
+    await shareContent({ title: text, text, url })
+  }
+
   return (
-    <div className="share-row" aria-label="Compartir aquesta notícia">
-      <span className="share-row__label">Comparteix:</span>
+    <div className="share-block">
+      <p className="share-block__cta">
+        Coneixes algú que necessiti una bona notícia? Envia-l'hi.
+      </p>
+      <button type="button" className="share-block__primary" onClick={primaryShare}>
+        Comparteix aquesta bona notícia
+      </button>
+      <div className="share-row" aria-label="Compartir aquesta notícia">
+        <span className="share-row__label">Comparteix:</span>
       {targets.map((target) => (
         <a
           key={target.key}
@@ -113,6 +133,7 @@ export default function ShareRow({ story }) {
       >
         {copied ? 'Enllaç copiat ✓' : 'Copia enllaç'}
       </button>
+      </div>
     </div>
   )
 }

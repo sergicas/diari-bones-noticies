@@ -1,16 +1,21 @@
 import { useEffect, useState } from 'react'
+import { flushSync } from 'react-dom'
 import './App.css'
 import { editorialValues, seedArticles } from './data/articles'
 import { fetchLivePositiveNewsPayload } from './api/rssFeed'
 import { LIVE_EDITORIAL_VERSION } from './lib/editorial-version.js'
 import { feedStoryId } from './lib/story-id.js'
 import NewsletterForm from './components/NewsletterForm.jsx'
+import PushOptIn from './components/PushOptIn.jsx'
 import EditorialCounter from './components/EditorialCounter.jsx'
 import PageHero from './components/PageHero.jsx'
 import ManifestSection from './components/ManifestSection.jsx'
 import SourcesManifest from './components/SourcesManifest.jsx'
 import NotFoundPage from './components/NotFoundPage.jsx'
 import ShareRow from './components/ShareRow.jsx'
+import SaveButton from './components/SaveButton.jsx'
+import PullToRefresh from './components/PullToRefresh.jsx'
+import { getSaved, removeSaved, SAVED_EVENT } from './lib/saved.js'
 import {
   DEFAULT_STORY_IMAGE,
   classifyImage,
@@ -278,22 +283,6 @@ const editorialSections = [
     keywords: ['empresa', 'feina', 'ocupació', 'inversió', 'pime', 'startup', 'cooperativa', 'salari'],
   },
   {
-    id: 'gastronomia',
-    label: 'Gastronomia',
-    description:
-      'Cuina, productes i cellers: el plaer de la taula ben feta.',
-    categories: ['Gastronomia'],
-    keywords: ['gastronomia', 'restaurant', 'cuina', 'recepta', 'celler', 'tast', 'xef', 'vins'],
-  },
-  {
-    id: 'habitatge',
-    label: 'Habitatge i ciutat',
-    description:
-      'Urbanisme, mobilitat i habitatge quan milloren la vida als barris.',
-    categories: [],
-    keywords: ['habitatge', 'urbanisme', 'mobilitat', 'transport públic', 'carril bici', 'rehabilitació', 'pacificació'],
-  },
-  {
     id: 'salut',
     label: 'Salut',
     description:
@@ -407,6 +396,18 @@ function getRoute(path) {
     normalizedPath === '/qui-som'
   ) {
     return { page: 'about' }
+  }
+
+  if (
+    normalizedPath === '/privacitat' ||
+    normalizedPath === '/privacidad' ||
+    normalizedPath === '/privacy'
+  ) {
+    return { page: 'privacy' }
+  }
+
+  if (normalizedPath === '/desats' || normalizedPath === '/guardats') {
+    return { page: 'saved' }
   }
 
   if (normalizedPath.startsWith('/noticia/')) {
@@ -972,6 +973,7 @@ function SiteHeader({ currentPage, isRefreshing, onNavigate, onRefresh }) {
     { href: '/', label: 'Portada', page: 'home' },
     { href: '/manifest', label: 'Manifest', page: 'manifest' },
     { href: '/hemeroteca', label: 'Hemeroteca', page: 'archive' },
+    { href: '/desats', label: 'Desats', page: 'saved' },
   ]
   const [isOwner] = useState(readOwnerFlag)
 
@@ -1063,11 +1065,6 @@ function SiteHeader({ currentPage, isRefreshing, onNavigate, onRefresh }) {
         <p className="masthead__lead">
           El diari que només deixa passar històries que reparen el món, cuiden
           la gent o demostren que una idea bona es pot replicar.
-        </p>
-
-        <p className="masthead__beta" role="note">
-          <span aria-hidden="true">⚠️</span> El Bon Diari es troba en fase de
-          proves i, per error, encara s’hi pot colar alguna mala notícia.
         </p>
       </div>
     </header>
@@ -1181,7 +1178,19 @@ function FooterNote({ onNavigate }) {
             onNavigate('/sobre')
           }}
         >
-          Sobre · privacitat · llicència
+          Sobre · llicència
+        </a>
+        {' · '}
+        <a
+          className="footer-note__owner-link"
+          href="/privacitat"
+          onClick={(event) => {
+            if (!canInterceptNavigation(event) || !onNavigate) return
+            event.preventDefault()
+            onNavigate('/privacitat')
+          }}
+        >
+          Privacitat
         </a>
         .
       </p>
@@ -1322,6 +1331,279 @@ function AboutPage({ onNavigate }) {
           </p>
         </section>
       </article>
+    </>
+  )
+}
+
+function PrivacyPage({ onNavigate }) {
+  return (
+    <>
+      <PageHero
+        tag="Privacitat"
+        title="Política de privacitat"
+        description="Què recollim, per què i com pots controlar-ho. En resum: el mínim imprescindible, sense seguiment publicitari ni venda de dades."
+      />
+
+      <article className="section-block about-block">
+        <section className="about-block__section">
+          <p>
+            <strong>Última actualització: 4 de juliol de 2026.</strong>
+          </p>
+          <p>
+            El Bon Diari (bondiari.com) i l’app «El Bon Diari» són un projecte
+            editorial de <strong>Sergi Castillo</strong>, responsable del
+            tractament de dades. Per a qualsevol qüestió de privacitat pots
+            escriure a{' '}
+            <a href="mailto:sergicas@gmail.com">sergicas@gmail.com</a>. Aquesta
+            política s’aplica igual al web i a l’app d’iOS.
+          </p>
+        </section>
+
+        <section className="about-block__section">
+          <h2>Llegir no requereix cap dada</h2>
+          <p>
+            Pots llegir El Bon Diari, al web o a l’app, sense registrar-te ni
+            facilitar cap dada personal. No usem cookies de seguiment ni serveis
+            d’analítica de tercers: no hi ha Google Analytics, Meta Pixel,
+            AdSense ni similars, ni al web ni a l’app.
+          </p>
+        </section>
+
+        <section className="about-block__section">
+          <h2>Comptador de visites (anònim i agregat)</h2>
+          <p>
+            Comptem visites amb un comptador propi. Cada visita es converteix en
+            una xifra anònima al servidor (pàgina, tipus de dispositiu i origen
+            aproximat). <strong>No desem cap identificador, adreça IP ni perfil
+            de lector</strong>, i aquestes xifres no surten d’El Bon Diari ni es
+            venen a ningú. Per excloure’t al teu navegador, obre el{' '}
+            <a
+              href="/estadistiques"
+              onClick={(event) => {
+                if (!canInterceptNavigation(event) || !onNavigate) return
+                event.preventDefault()
+                onNavigate('/estadistiques')
+              }}
+            >
+              panell d’estadístiques
+            </a>{' '}
+            i prem «Exclou-me del comptador».
+          </p>
+        </section>
+
+        <section className="about-block__section">
+          <h2>Butlletí (newsletter)</h2>
+          <p>
+            Si t’hi subscrius voluntàriament, guardem la teva{' '}
+            <strong>adreça de correu</strong> i l’idioma escollit amb l’únic
+            objectiu d’enviar-te el recull de bones notícies. No la compartim ni
+            la venem. Pots donar-te de baixa en qualsevol moment amb l’enllaç del
+            peu de cada correu, o escrivint-nos. L’enviament el gestiona el
+            proveïdor de correu Resend i les adreces es desen xifrades a la
+            infraestructura de Cloudflare.
+          </p>
+        </section>
+
+        <section className="about-block__section">
+          <h2>Notificacions push</h2>
+          <p>
+            Si actives les notificacions (al web o a l’app), el teu dispositiu
+            genera un <strong>testimoni de subscripció</strong> —al web, una
+            subscripció Web Push; a l’app, un «device token» d’Apple (APNs)— que
+            desem per poder-te enviar la bona notícia del dia. Aquest testimoni{' '}
+            <strong>no ens identifica personalment</strong> i no s’associa a cap
+            altra dada teva. Pots desactivar les notificacions quan vulguis des
+            de la configuració del navegador o del dispositiu, i el testimoni
+            deixa d’usar-se (i s’elimina quan Apple o el navegador ens indiquen
+            que ja no és vàlid).
+          </p>
+        </section>
+
+        <section className="about-block__section">
+          <h2>Emmagatzematge local al dispositiu</h2>
+          <p>
+            Fem servir l’emmagatzematge local del navegador o de l’app només per
+            recordar preferències teves (per exemple, si t’has exclòs del
+            comptador o l’estat de la subscripció push). Aquesta informació es
+            queda al teu dispositiu i no s’envia enlloc.
+          </p>
+        </section>
+
+        <section className="about-block__section">
+          <h2>Amb qui es comparteix</h2>
+          <p>
+            Només amb els proveïdors tècnics imprescindibles per fer funcionar el
+            servei, com a encarregats del tractament:{' '}
+            <strong>Cloudflare</strong> (allotjament, base de dades i enviament de
+            notificacions), <strong>Resend</strong> (enviament del butlletí) i,
+            per a l’app, <strong>Apple</strong> (lliurament de les notificacions
+            push). No venem, lloguem ni cedim dades a tercers amb finalitats
+            publicitàries.
+          </p>
+        </section>
+
+        <section className="about-block__section">
+          <h2>Conservació</h2>
+          <p>
+            Conservem la teva adreça del butlletí mentre segueixis subscrit; si
+            et dones de baixa, la deixem d’utilitzar i l’eliminem. Els testimonis
+            de notificacions es conserven mentre estiguin actius i s’eliminen quan
+            caduquen o desactives les notificacions. Les xifres del comptador són
+            anònimes i agregades des de l’origen.
+          </p>
+        </section>
+
+        <section className="about-block__section">
+          <h2>Els teus drets</h2>
+          <p>
+            Pots demanar accés, rectificació o supressió de les teves dades, i
+            oposar-te’n al tractament, escrivint a{' '}
+            <a href="mailto:sergicas@gmail.com">sergicas@gmail.com</a>. Com que no
+            desem perfils ni identificadors dels lectors, la majoria de dades es
+            limiten al correu del butlletí i als testimonis de notificacions, que
+            pots eliminar tu mateix donant-te de baixa o desactivant-les.
+          </p>
+        </section>
+
+        <section className="about-block__section">
+          <h2>Menors</h2>
+          <p>
+            El Bon Diari és un servei de notícies d’interès general, no dirigit
+            específicament a menors, i no recull dades conscientment de menors
+            d’edat.
+          </p>
+        </section>
+
+        <section className="about-block__section">
+          <h2>Canvis en aquesta política</h2>
+          <p>
+            Si actualitzem aquesta política, en canviarem la data d’aquesta
+            pàgina. Els canvis rellevants es comunicaran pels canals habituals
+            d’El Bon Diari.
+          </p>
+        </section>
+      </article>
+    </>
+  )
+}
+
+function SavedPage({ onNavigate }) {
+  const [items, setItems] = useState(getSaved)
+
+  useEffect(() => {
+    function sync() {
+      setItems(getSaved())
+    }
+    window.addEventListener(SAVED_EVENT, sync)
+    return () => window.removeEventListener(SAVED_EVENT, sync)
+  }, [])
+
+  return (
+    <>
+      <PageHero
+        tag="La teva col·lecció"
+        title="Desats per llegir després"
+        description="Els articles que guardes es queden al teu dispositiu: els pots rellegir aquí quan vulguis, fins i tot sense connexió."
+      />
+
+      <section className="section-block">
+        {items.length === 0 ? (
+          <div className="saved-empty">
+            <h2>Encara no has desat cap notícia.</h2>
+            <p>
+              Quan trobis una bona notícia que vulguis rellegir, prem{' '}
+              <strong>«Desa per llegir després»</strong> i la tindràs aquí a mà,
+              també quan estiguis sense connexió.
+            </p>
+            <a
+              className="button button--primary"
+              href="/"
+              onClick={(event) => {
+                if (!canInterceptNavigation(event) || !onNavigate) return
+                event.preventDefault()
+                onNavigate('/')
+              }}
+            >
+              Explora la portada
+            </a>
+          </div>
+        ) : (
+          <ul className="saved-list">
+            {items.map((story) => (
+              <li key={story.id} className="saved-card">
+                {story.imageUrl ? (
+                  <img
+                    className="saved-card__image"
+                    src={story.imageUrl}
+                    alt={story.imageAlt}
+                    onError={handleImageError}
+                    loading="lazy"
+                  />
+                ) : null}
+                <div className="saved-card__content">
+                  <div className="saved-card__meta">
+                    {story.category ? (
+                      <span className="paper-chip">{story.category}</span>
+                    ) : null}
+                    {story.publishedAt ? (
+                      <span className="saved-card__date">
+                        {formatDate(story.publishedAt)}
+                      </span>
+                    ) : null}
+                  </div>
+                  <h2 className="saved-card__title">{story.title}</h2>
+                  {story.summary ? (
+                    <p className="saved-card__summary">{story.summary}</p>
+                  ) : null}
+                  {story.impact ? (
+                    <p className="saved-card__impact">
+                      <strong>Impacte:</strong> {story.impact}
+                    </p>
+                  ) : null}
+                  {story.body && story.body.length > 0 ? (
+                    <details className="saved-card__full">
+                      <summary>Llegeix l'article complet</summary>
+                      {story.body.map((paragraph, index) => (
+                        <p key={`${story.id}-${index}`}>{paragraph}</p>
+                      ))}
+                    </details>
+                  ) : null}
+                  <div className="saved-card__actions">
+                    <a
+                      className="saved-card__link"
+                      href={`/noticia/${encodeURIComponent(story.id)}`}
+                      onClick={(event) => {
+                        if (!canInterceptNavigation(event) || !onNavigate) return
+                        event.preventDefault()
+                        onNavigate(`/noticia/${encodeURIComponent(story.id)}`)
+                      }}
+                    >
+                      Obre la pàgina
+                    </a>
+                    {story.url ? (
+                      <a
+                        className="saved-card__link"
+                        href={story.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        Font original
+                      </a>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="saved-card__remove"
+                      onClick={() => removeSaved(story.id)}
+                    >
+                      Treu dels desats
+                    </button>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
     </>
   )
 }
@@ -1772,6 +2054,10 @@ function StoryPage({ story, sourceLink, imageLink, relatedStories, onNavigate })
           ))}
         </div>
 
+        <div className="article-page__save">
+          <SaveButton story={story} />
+        </div>
+
         <ShareRow story={story} />
 
         <div className="article-page__footer">
@@ -2122,7 +2408,7 @@ function App() {
       sectionFromArchive = true
     } else if (normalizedQuery === '') {
       // Últim recurs: la secció no té CAP notícia (ni recent ni a l'hemeroteca,
-      // p. ex. Gastronomia un dia fluix). Per no deixar mai una pàgina morta,
+      // p. ex. una secció temàtica un dia fluix). Per no deixar mai una pàgina morta,
       // ensenyem les bones notícies del dia amb un avís ben clar.
       const general = [...activeStories].sort(sortByDistanceAndDate)
       if (general.length > 0) {
@@ -2228,6 +2514,14 @@ function App() {
       nextTitle = `Sobre · ${siteName}`
       nextDescription =
         "Qui hi ha darrere d'El Bon Diari, criteri editorial, política de privacitat i llicència del contingut."
+    } else if (route.page === 'privacy') {
+      nextTitle = `Política de privacitat · ${siteName}`
+      nextDescription =
+        "Política de privacitat d'El Bon Diari: quines dades es recullen al web i a l'app, notificacions push, butlletí i els teus drets."
+    } else if (route.page === 'saved') {
+      nextTitle = `Desats · ${siteName}`
+      nextDescription =
+        'Els articles que has desat per llegir després, guardats al teu dispositiu i disponibles fins i tot sense connexió.'
     } else if (route.page === 'home' && activeCategory !== 'Totes') {
       nextTitle = `${activeCategory} | ${siteName}`
       nextDescription = `Bones notícies de la secció ${activeCategory}, filtrades amb criteri editorial i proximitat.`
@@ -2309,11 +2603,54 @@ function App() {
     const nextPath = normalizePath(path)
     const method = replace ? 'replaceState' : 'pushState'
 
-    window.history[method]({}, '', nextPath)
-    setCurrentPath(nextPath)
+    const commit = () => {
+      window.history[method]({}, '', nextPath)
+      setCurrentPath(nextPath)
+    }
+
+    // Transició nativa entre pàgines (View Transitions API). Només quan canvia
+    // de PÀGINA de debò (no en filtrar la portada, que només canvia la query) i
+    // si l'usuari no ha demanat menys moviment. On no hi ha suport, navega sec.
+    const pagePath = (p) => normalizePath(p).split('?')[0]
+    const changesPage = pagePath(nextPath) !== pagePath(currentPath)
+    const prefersReducedMotion =
+      typeof window !== 'undefined' &&
+      window.matchMedia &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+    if (
+      changesPage &&
+      !prefersReducedMotion &&
+      typeof document !== 'undefined' &&
+      document.startViewTransition
+    ) {
+      document.startViewTransition(() => flushSync(commit))
+    } else {
+      commit()
+    }
 
     if (scroll) {
       window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+  }
+
+  // Refresc lleuger per al gest "estira per actualitzar": refà el radar i
+  // fusiona sense navegar ni tocar filtres (a diferència de handleRefresh).
+  async function refreshRadar() {
+    try {
+      const payload = await fetchLivePositiveNewsPayload({ force: true })
+      setLiveStories((currentStories) =>
+        mergeLiveStories(currentStories, payload.stories).stories,
+      )
+      const updatedAt = payload.updatedAt || new Date().toISOString()
+      const nextAt =
+        payload.nextRefreshAt ||
+        new Date(Date.now() + autoRefreshIntervalMs).toISOString()
+      setLastRefreshAt(updatedAt)
+      setNextRefreshAt(nextAt)
+      saveRefreshMetadata(updatedAt, nextAt)
+    } catch (error) {
+      console.warn('No s’ha pogut actualitzar amb el gest de tibada.', error)
     }
   }
 
@@ -2404,6 +2741,7 @@ function App() {
       <a className="skip-link" href="#contingut">
         Saltar al contingut
       </a>
+      <PullToRefresh onRefresh={refreshRadar}>
       <div className="page-shell">
         <SiteHeader
           currentPage={route.page}
@@ -2579,6 +2917,8 @@ function App() {
 
             </section>
 
+            <NewsletterForm variant="compact" />
+
             <section className="section-block">
               <div className="section-heading">
                 <div>
@@ -2689,6 +3029,7 @@ function App() {
             </section>
             <EditorialCounter />
             <NewsletterForm />
+            <PushOptIn />
           </>
         ) : null}
 
@@ -2707,10 +3048,15 @@ function App() {
         {route.page === 'stats' ? <StatsPage allStories={allStories} /> : null}
 
         {route.page === 'about' ? <AboutPage onNavigate={navigate} /> : null}
+
+        {route.page === 'privacy' ? <PrivacyPage onNavigate={navigate} /> : null}
+
+        {route.page === 'saved' ? <SavedPage onNavigate={navigate} /> : null}
         </main>
 
         <FooterNote onNavigate={navigate} />
       </div>
+      </PullToRefresh>
     </div>
   )
 }

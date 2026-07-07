@@ -15,6 +15,10 @@ import {
   sendDailyDigest,
 } from './server/newsletter.js'
 import { renderStoryPage } from './server/storyMeta.js'
+import { handleNewsSitemap } from './server/newsSitemap.js'
+import { handlePushSubscribe, handlePushUnsubscribe, sendPushToAll } from './server/push.js'
+import { handleApnsRegister, sendApnsToAll } from './server/apns.js'
+import { feedStoryId } from './lib/story-id.js'
 import { announceFreshStories } from './server/social.js'
 
 function jsonResponse(body, init = {}) {
@@ -129,6 +133,14 @@ async function route(request, env) {
   if (path === '/api/newsletter/unsubscribe') return handleUnsubscribe(request, env)
   if (path === '/api/newsletter/stats') return handleNewsletterStats(request, env)
 
+  // Sitemap de Google News amb les peces vives del radar (últimes 48 h).
+  if (path === '/news-sitemap.xml') return handleNewsSitemap(env)
+
+  // Notificacions push (PWA).
+  if (path === '/api/push/subscribe') return handlePushSubscribe(request, env)
+  if (path === '/api/push/unsubscribe') return handlePushUnsubscribe(request, env)
+  if (path === '/api/push/register-apns') return handleApnsRegister(request, env)
+
   // Pàgina de notícia: servim l'HTML amb meta socials propis (títol, imatge)
   // perquè quan algú la comparteix surti la targeta de la peça, no la genèrica.
   if (path.startsWith('/noticia/')) {
@@ -153,9 +165,23 @@ export default {
     if (event.cron === '0 5 * * *') {
       ctx.waitUntil(
         getLiveNewsPayload(env.LIVE_NEWS_KV, { force: true, env })
-          .then(() => sendDailyDigest(env))
-          .then((r) => console.log(`[cron][newsletter] sent=${r.sent} failed=${r.failed} logged=${r.logged}`))
-          .catch((err) => console.error('[cron][newsletter] error', err)),
+          .then(async (p) => {
+            const digest = await sendDailyDigest(env)
+            console.log(`[cron][newsletter] sent=${digest.sent} failed=${digest.failed} logged=${digest.logged}`)
+            const top = (p.stories || [])[0]
+            if (top) {
+              const notif = {
+                title: 'La bona notícia del dia',
+                body: top.title,
+                url: `https://bondiari.com/noticia/${feedStoryId(top.url)}`,
+              }
+              const push = await sendPushToAll(env, notif)
+              console.log(`[cron][push] sent=${push.sent} failed=${push.failed} removed=${push.removed}`)
+              const apns = await sendApnsToAll(env, notif)
+              console.log(`[cron][apns] sent=${apns.sent} failed=${apns.failed} removed=${apns.removed}`)
+            }
+          })
+          .catch((err) => console.error('[cron][newsletter/push] error', err)),
       )
       return
     }
