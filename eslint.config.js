@@ -5,7 +5,9 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  // dist/ i ios/App/App/public/ són artefactes generats. Analitzar-los duplica
+  // el bundle minificat i converteix els errors de tercers en falsos positius.
+  globalIgnores(['dist', 'ios/App/App/public']),
   {
     files: ['**/*.{js,jsx}'],
     extends: [
@@ -23,7 +25,15 @@ export default defineConfig([
       },
     },
     rules: {
-      'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
+      'no-unused-vars': [
+        'error',
+        {
+          varsIgnorePattern: '^[A-Z_]',
+          argsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+          ignoreRestSiblings: true,
+        },
+      ],
     },
   },
 ])

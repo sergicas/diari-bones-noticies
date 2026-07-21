@@ -13,26 +13,34 @@ function urlBase64ToUint8Array(base64) {
   return out
 }
 
+function getInitialPushState() {
+  if (typeof window === 'undefined') return 'unsupported'
+  if (
+    !('serviceWorker' in navigator) ||
+    !('PushManager' in window) ||
+    !('Notification' in window)
+  ) {
+    return 'unsupported'
+  }
+  return Notification.permission === 'denied' ? 'denied' : 'idle'
+}
+
 export default function PushOptIn() {
   // idle | unsupported | subscribed | denied | working | error
-  const [state, setState] = useState('idle')
+  const [state, setState] = useState(getInitialPushState)
 
   useEffect(() => {
-    if (typeof window === 'undefined') return
-    if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
-      setState('unsupported')
-      return
-    }
-    if (Notification.permission === 'denied') {
-      setState('denied')
-      return
-    }
+    if (getInitialPushState() !== 'idle') return undefined
+    let cancelled = false
     navigator.serviceWorker.ready
       .then((reg) => reg.pushManager.getSubscription())
       .then((sub) => {
-        if (sub) setState('subscribed')
+        if (!cancelled && sub) setState('subscribed')
       })
       .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   async function subscribe() {
@@ -48,13 +56,14 @@ export default function PushOptIn() {
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
       })
-      await fetch('/api/push/subscribe', {
+      const response = await fetch('/api/push/subscribe', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(sub),
       })
+      if (!response.ok) throw new Error('push-subscription-rejected')
       setState('subscribed')
-    } catch (error) {
+    } catch {
       setState('error')
     }
   }

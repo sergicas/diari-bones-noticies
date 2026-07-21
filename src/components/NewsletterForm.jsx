@@ -53,7 +53,7 @@ export default function NewsletterForm({ defaultLanguage = 'ca', variant = 'full
       }
       setStatus(data.alreadySubscribed ? 'already' : 'ok')
       setEmail('')
-    } catch (error) {
+    } catch {
       setStatus('error')
       setErrorMsg('Hi ha hagut un problema de connexió. Torna-ho a provar.')
     }

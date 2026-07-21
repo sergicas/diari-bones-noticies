@@ -1,5 +1,6 @@
-// Regles compartides per garantir que cada notícia porta una imatge ORIGINAL
-// (foto real de la font), no una il·lustració genèrica.
+// Regles compartides per garantir que cada notícia porta una imatge ORIGINAL:
+// fotografia amb llicència/atribució o il·lustració editorial pròpia generada
+// per peça. Les il·lustracions genèriques i els placeholders no són vàlids.
 // L'usen el frontend (App.jsx), el CLI de validació i el script d'apply.
 
 export const DEFAULT_STORY_IMAGE = '/story-images/default-news.svg'
@@ -54,8 +55,8 @@ export function classifyImage(url) {
   return 'unknown'
 }
 
-// "Té imatge pròpia vàlida?": ara inclou les il·lustracions generades per IA
-// (originals, úniques per peça) a més de les fotografies pròpies.
+// Es conserva el nom per compatibilitat amb el frontend, però la comprovació
+// inclou també les il·lustracions generades, originals i úniques per peça.
 export function hasOriginalPhoto(story) {
   const kind = classifyImage(story?.imageUrl)
   return kind === 'photo' || kind === 'generated'
@@ -96,7 +97,7 @@ export function validateArticleImage(article) {
     warnings.push('imageCredit absent (recomanat per donar crèdit a la font)')
   }
 
-  if (!isNonEmptyString(article?.imageAttributionUrl)) {
+  if (kind === 'photo' && !isNonEmptyString(article?.imageAttributionUrl)) {
     warnings.push('imageAttributionUrl absent (recomanat per enllaçar el crèdit)')
   }
 

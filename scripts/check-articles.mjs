@@ -1,4 +1,4 @@
-// Comprovació editorial: cap article pot quedar sense imatge real.
+// Comprovació editorial: cap article pot quedar sense imatge original.
 // S'executa abans del build i pot llançar-se manualment amb `npm run check:articles`.
 
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -31,6 +31,7 @@ const results = seedArticles.map((article) => {
 
 const grouped = {
   photo: results.filter((r) => r.kind === 'photo'),
+  generated: results.filter((r) => r.kind === 'generated'),
   illustration: results.filter((r) => r.kind === 'illustration'),
   placeholder: results.filter((r) => r.kind === 'placeholder'),
   missing: results.filter((r) => r.kind === 'missing'),
@@ -50,14 +51,15 @@ function printGroup(title, items) {
 }
 
 const total = seedArticles.length
-const okCount = grouped.photo.length
+const okCount = results.filter((result) => result.errors.length === 0).length
 const failingCount = total - okCount
 
 console.log(`Total articles: ${total}`)
-console.log(`Amb fotografia original: ${okCount}`)
-console.log(`Sense fotografia original: ${failingCount}`)
+console.log(`Amb imatge original vàlida: ${okCount}`)
+console.log(`Sense imatge original vàlida: ${failingCount}`)
 
 printGroup('FOTOGRAFIA ORIGINAL', grouped.photo)
+printGroup('IL·LUSTRACIÓ EDITORIAL PRÒPIA', grouped.generated)
 printGroup('IL·LUSTRACIÓ INTERNA (cal substituir per foto real)', grouped.illustration)
 printGroup('PLACEHOLDER', grouped.placeholder)
 printGroup('IMAGEURL ABSENT', grouped.missing)
@@ -70,6 +72,6 @@ if (totalWarnings > 0) {
 
 if (failingCount > 0) {
   console.error('')
-  console.error(`La comprovació ha fallat: ${failingCount} article(s) sense fotografia original.`)
+  console.error(`La comprovació ha fallat: ${failingCount} article(s) sense imatge original vàlida.`)
   process.exit(1)
 }

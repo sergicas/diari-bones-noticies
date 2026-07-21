@@ -3,16 +3,19 @@
 //   envia un correu de confirmació. Només els confirmats reben el digest.
 // - Rate-limit: 5 subscripcions/hora per IP i 50/hora globals (a STATS_KV
 //   amb TTL d'una hora). Protegeix contra spammers i atacs distribuïts.
-// - Emmagatzematge: STATS_KV amb prefix `subscriber:<token>`.
+// - Emmagatzematge: STATS_KV amb una clau estable per correu i tokens d'acció
+//   aleatoris separats per confirmar o donar-se de baixa.
 // - Cron diari (configurat a wrangler.jsonc) que llegeix els subscriptors
 //   confirmats, composa el digest HTML i l'envia per Resend.
 
 const subscriberPrefix = 'subscriber:'
+const actionTokenPrefix = 'newsletter-action:'
 const rateLimitIpPrefix = 'rl:subscribe:ip:'
 const rateLimitGlobalPrefix = 'rl:subscribe:global:'
 const RATE_LIMIT_PER_IP = 5
 const RATE_LIMIT_GLOBAL = 50
 const RATE_LIMIT_WINDOW_SECONDS = 3600
+const PENDING_TTL_SECONDS = 7 * 24 * 60 * 60
 
 function jsonResponse(body, init = {}) {
   return new Response(JSON.stringify(body), {
@@ -42,16 +45,54 @@ function isValidEmail(value) {
   return /^[^\s@]+@[^\s@.]+\.[^\s@]+$/.test(value.trim())
 }
 
-// Token = SHA-256 truncat de l'adreça normalitzada. Determinista perquè
-// el mateix correu generi sempre la mateixa clau de KV (evita duplicats
-// per a l'eventual consistency del `list`), però no exposa l'adreça a
-// les URLs de baixa.
-async function tokenForEmail(email) {
+// Identificador intern determinista per evitar duplicats. No s'exposa mai a
+// URLs: els enllaços sensibles fan servir un token aleatori independent.
+async function subscriberIdForEmail(email) {
   const data = new TextEncoder().encode(email.trim().toLowerCase())
   const digest = await crypto.subtle.digest('SHA-256', data)
   return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0'))
     .join('')
     .slice(0, 36)
+}
+
+function createActionToken() {
+  const bytes = crypto.getRandomValues(new Uint8Array(32))
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
+}
+
+function isSecureActionToken(value) {
+  return typeof value === 'string' && /^[a-f0-9]{64}$/i.test(value)
+}
+
+async function persistSubscriber(kv, key, record, { pending = false } = {}) {
+  const actionToken = isSecureActionToken(record.actionToken)
+    ? record.actionToken
+    : createActionToken()
+  const next = { ...record, actionToken }
+  const options = pending ? { expirationTtl: PENDING_TTL_SECONDS } : undefined
+  await Promise.all([
+    kv.put(key, JSON.stringify(next), options),
+    kv.put(actionTokenPrefix + actionToken, key, options),
+  ])
+  return next
+}
+
+async function resolveSubscriber(kv, token) {
+  if (isSecureActionToken(token)) {
+    const key = await kv.get(actionTokenPrefix + token)
+    if (!key?.startsWith(subscriberPrefix)) return null
+    const record = await kv.get(key, 'json')
+    return record?.actionToken === token ? { key, record } : null
+  }
+
+  // Compatibilitat temporal amb enllaços creats abans dels tokens aleatoris.
+  // Deixen de funcionar tan bon punt el registre es migra al format segur.
+  if (/^[a-f0-9]{36}$/i.test(token)) {
+    const key = subscriberPrefix + token
+    const record = await kv.get(key, 'json')
+    if (record && !isSecureActionToken(record.actionToken)) return { key, record }
+  }
+  return null
 }
 
 // --- Rate limit ------------------------------------------------------------
@@ -86,15 +127,6 @@ export async function handleSubscribe(request, env) {
     return jsonResponse({ ok: false, error: 'method-not-allowed' }, { status: 405 })
   }
 
-  const ip = request.headers.get('CF-Connecting-IP') || ''
-  const rate = await passesRateLimit(env, ip)
-  if (!rate.ok) {
-    return jsonResponse(
-      { ok: false, error: 'rate-limited', reason: rate.reason },
-      { status: 429, headers: { 'retry-after': String(RATE_LIMIT_WINDOW_SECONDS) } },
-    )
-  }
-
   let payload
   try {
     payload = await request.json()
@@ -107,8 +139,17 @@ export async function handleSubscribe(request, env) {
     return jsonResponse({ ok: false, error: 'invalid-email' }, { status: 422 })
   }
 
-  const token = await tokenForEmail(email)
-  const key = subscriberPrefix + token
+  const ip = request.headers.get('CF-Connecting-IP') || ''
+  const rate = await passesRateLimit(env, ip)
+  if (!rate.ok) {
+    return jsonResponse(
+      { ok: false, error: 'rate-limited', reason: rate.reason },
+      { status: 429, headers: { 'retry-after': String(RATE_LIMIT_WINDOW_SECONDS) } },
+    )
+  }
+
+  const subscriberId = await subscriberIdForEmail(email)
+  const key = subscriberPrefix + subscriberId
   const existing = await env.STATS_KV.get(key, 'json')
 
   // Tractem els subscriptors legacy (sense camp `status`, anteriors al
@@ -120,7 +161,7 @@ export async function handleSubscribe(request, env) {
   }
 
   // Si era pendent, refresquem la data per allargar el termini de confirmació.
-  const record = {
+  const record = await persistSubscriber(env.STATS_KV, key, {
     email,
     language,
     status: 'pending',
@@ -128,15 +169,15 @@ export async function handleSubscribe(request, env) {
     lastPendingAt: new Date().toISOString(),
     confirmedAt: null,
     source: payload?.source || 'web',
-  }
-  await env.STATS_KV.put(key, JSON.stringify(record))
+    actionToken: existing?.actionToken,
+  }, { pending: true })
 
   // Enviem el correu de confirmació si la API key està configurada.
   const apiKey = env.RESEND_API_KEY
   let confirmationSent = false
   if (apiKey) {
-    const confirmUrl = `https://bondiari.com/api/newsletter/confirm?token=${token}`
-    const unsubscribeUrl = `https://bondiari.com/api/newsletter/unsubscribe?token=${token}`
+    const confirmUrl = `https://bondiari.com/api/newsletter/confirm?token=${record.actionToken}`
+    const unsubscribeUrl = `https://bondiari.com/api/newsletter/unsubscribe?token=${record.actionToken}`
     const html = renderConfirmationEmail({ language, confirmUrl, unsubscribeUrl })
     const text = renderConfirmationText({ language, confirmUrl, unsubscribeUrl })
     const fromEmail = env.NEWSLETTER_FROM_EMAIL || 'butlleti@bondiari.com'
@@ -145,7 +186,13 @@ export async function handleSubscribe(request, env) {
     const result = await sendWithResend({ apiKey, fromEmail, fromName, to: email, subject, html, text })
     confirmationSent = result.ok
     if (!result.ok) {
-      console.warn(`[newsletter] No s'ha pogut enviar la confirmació a ${email} (${result.status})`)
+      console.warn(
+        JSON.stringify({
+          message: 'newsletter confirmation failed',
+          subscriberId: subscriberId.slice(-8),
+          status: result.status,
+        }),
+      )
     }
   }
 
@@ -185,9 +232,8 @@ export async function handleConfirm(request, env) {
       { status: 400 },
     )
   }
-  const key = subscriberPrefix + token
-  const existing = await env.STATS_KV.get(key, 'json')
-  if (!existing) {
+  const resolved = await resolveSubscriber(env.STATS_KV, token)
+  if (!resolved) {
     return htmlResponse(
       confirmationPageHtml({
         title: 'No trobem la teva subscripció',
@@ -197,7 +243,9 @@ export async function handleConfirm(request, env) {
       { status: 404 },
     )
   }
+  const { key, record: existing } = resolved
   if (existing.status === 'confirmed') {
+    await persistSubscriber(env.STATS_KV, key, existing)
     return htmlResponse(
       confirmationPageHtml({
         title: 'Ja estàs confirmat',
@@ -205,12 +253,11 @@ export async function handleConfirm(request, env) {
       }),
     )
   }
-  const updated = {
+  const updated = await persistSubscriber(env.STATS_KV, key, {
     ...existing,
     status: 'confirmed',
     confirmedAt: new Date().toISOString(),
-  }
-  await env.STATS_KV.put(key, JSON.stringify(updated))
+  })
 
   // Correu de BENVINGUDA (best-effort): no bloqueja ni trenca la confirmació si
   // Resend falla. Fidelitza el nou subscriptor i el convida a compartir.
@@ -218,7 +265,7 @@ export async function handleConfirm(request, env) {
   if (apiKey && existing.email) {
     try {
       const language = existing.language || 'ca'
-      const unsubscribeUrl = `https://bondiari.com/api/newsletter/unsubscribe?token=${token}`
+      const unsubscribeUrl = `https://bondiari.com/api/newsletter/unsubscribe?token=${updated.actionToken}`
       const html = renderWelcomeEmail({ language, unsubscribeUrl })
       const text = renderWelcomeText({ language, unsubscribeUrl })
       const fromEmail = env.NEWSLETTER_FROM_EMAIL || 'butlleti@bondiari.com'
@@ -226,7 +273,13 @@ export async function handleConfirm(request, env) {
       const subject = subjectForLanguage(language, 'welcome')
       const result = await sendWithResend({ apiKey, fromEmail, fromName, to: existing.email, subject, html, text })
       if (!result.ok) {
-        console.warn(`[newsletter] No s'ha pogut enviar la benvinguda a ${existing.email} (${result.status})`)
+        console.warn(
+          JSON.stringify({
+            message: 'newsletter welcome failed',
+            subscriberId: key.slice(-8),
+            status: result.status,
+          }),
+        )
       }
     } catch (err) {
       console.warn('[newsletter] error enviant el correu de benvinguda', err)
@@ -283,15 +336,19 @@ export async function handleUnsubscribe(request, env) {
       { status: 400 },
     )
   }
-  const key = subscriberPrefix + token
-  const existed = await env.STATS_KV.get(key)
-  if (existed) {
-    await env.STATS_KV.delete(key)
+  const resolved = await resolveSubscriber(env.STATS_KV, token)
+  if (resolved) {
+    await Promise.all([
+      env.STATS_KV.delete(resolved.key),
+      isSecureActionToken(resolved.record.actionToken)
+        ? env.STATS_KV.delete(actionTokenPrefix + resolved.record.actionToken)
+        : Promise.resolve(),
+    ])
   }
   return htmlResponse(
     confirmationPageHtml({
-      title: existed ? 'Baixa confirmada' : 'Ja no estaves subscrit',
-      body: existed
+      title: resolved ? 'Baixa confirmada' : 'Ja no estaves subscrit',
+      body: resolved
         ? 'Hem esborrat la teva adreça del butlletí. No tornaràs a rebre cap correu de bondiari fins que no et tornis a subscriure.'
         : 'Aquesta adreça no consta a la nostra llista. Potser ja la vas donar de baixa en una altra ocasió.',
     }),
@@ -603,8 +660,11 @@ export async function sendDailyDigest(env) {
         skippedUnconfirmed += 1
         continue
       }
-      const token = key.name.slice(subscriberPrefix.length)
-      const unsubscribeUrl = `https://bondiari.com/api/newsletter/unsubscribe?token=${token}`
+      let subscriber = data
+      if (!isSecureActionToken(subscriber.actionToken)) {
+        subscriber = await persistSubscriber(env.STATS_KV, key.name, subscriber)
+      }
+      const unsubscribeUrl = `https://bondiari.com/api/newsletter/unsubscribe?token=${subscriber.actionToken}`
       const html = renderDigestEmail({
         language: data.language || 'ca',
         stories,
@@ -618,7 +678,6 @@ export async function sendDailyDigest(env) {
       const subject = subjectForLanguage(data.language || 'ca', 'digest')
 
       if (!apiKey) {
-        console.log(`[newsletter] (sense RESEND_API_KEY) hauria enviat a ${data.email}`)
         logged += 1
         continue
       }
@@ -626,7 +685,13 @@ export async function sendDailyDigest(env) {
       if (result.ok) sent += 1
       else {
         failed += 1
-        console.warn(`[newsletter] ${data.email} ha fallat (${result.status})`)
+        console.warn(
+          JSON.stringify({
+            message: 'newsletter digest failed',
+            subscriberId: key.name.slice(-8),
+            status: result.status,
+          }),
+        )
       }
     }
     cursor = list.list_complete ? null : list.cursor

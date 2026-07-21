@@ -11,12 +11,21 @@ createRoot(document.getElementById('root')).render(
 )
 
 // Push natiu d'iOS (només quan corre dins de l'app Capacitor).
-initNativePush()
+void initNativePush()
 
-if ('serviceWorker' in navigator) {
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker
       .register('/sw.js')
       .catch((error) => console.warn('[bondiari] No s’ha pogut registrar el service worker', error))
   })
+} else if ('serviceWorker' in navigator) {
+  // Un SW d'un preview anterior pot servir mòduls Vite antics i amagar canvis
+  // locals. En desenvolupament el retirem; només producció necessita la PWA.
+  navigator.serviceWorker
+    .getRegistrations()
+    .then((registrations) =>
+      Promise.all(registrations.map((registration) => registration.unregister())),
+    )
+    .catch(() => undefined)
 }

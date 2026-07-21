@@ -150,6 +150,13 @@ describe('UNIVERSAL_NEG — exclusió temàtica', () => {
     expect(UNIVERSAL_NEG.test('la tertulia de gran hermano')).toBe(true)
   })
 
+  it('bloqueja focs actius i rècords de calor locals', () => {
+    expect(UNIVERSAL_NEG.test('ensurt per un foc al parc forestal de mataró')).toBe(true)
+    expect(
+      UNIVERSAL_NEG.test('mataró frega els 38 graus en una jornada excepcional'),
+    ).toBe(true)
+  })
+
   it('bloqueja el soroll de política de conflicte al voltant de Trump (colat el 07/07)', () => {
     expect(
       UNIVERSAL_NEG.test(

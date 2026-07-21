@@ -12,6 +12,7 @@
 const endpoint = process.env.BONDIARI_REFRESH_URL
   || 'https://bondiari.sergicas.workers.dev/api/refresh-news'
 const liveNewsEndpoint = endpoint.replace('/api/refresh-news', '/api/live-news')
+const refreshToken = process.env.BONDIARI_REFRESH_TOKEN
 
 function formatDate(iso) {
   if (!iso) return '—'
@@ -24,10 +25,16 @@ function formatDate(iso) {
 }
 
 async function refresh() {
+  if (!refreshToken) {
+    throw new Error('Falta BONDIARI_REFRESH_TOKEN a l’entorn.')
+  }
   console.log(`→ Refrescant via ${endpoint} ...`)
   const startedAt = Date.now()
 
-  const refreshRes = await fetch(endpoint)
+  const refreshRes = await fetch(endpoint, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${refreshToken}` },
+  })
   if (!refreshRes.ok) {
     throw new Error(`Refresh ha retornat ${refreshRes.status}`)
   }

@@ -24,11 +24,12 @@
   // Workers AI: segona capa del filtre editorial (jutja les notícies neutres).
   "ai": { "binding": "AI" },
   "triggers": {
-    // 0 */4 * * * → refresc del radar cada 4h (02, 06, 10, 14, 18, 22 CEST)
-    // 0 6 * * *   → refresc matinal extra (08:00 CEST), per agafar les
-    //              actualitzacions de l'edició diària de redaccions catalanes.
-    // 0 5 * * *   → butlletí DIARI: cada matí a les 07:00 CEST (refresca el
-    //              radar i envia el correu amb les bones notícies del dia).
-    "crons": ["0 */4 * * *", "0 6 * * *", "0 5 * * *"]
+    // Portada principal: es renova cada 12h.
+    // 0 5 * * *  → edició de matí a les 07:00 CEST. Aquest cron també és el del
+    //             butlletí DIARI (refresca el radar i envia el correu del dia).
+    // 0 17 * * * → edició de tarda a les 19:00 CEST (només refresca el radar).
+    // La secció "En directe" (/api/live-ticker) es refresca a part, a demanda,
+    // amb una cache curta; no depèn d'aquests crons.
+    "crons": ["0 5 * * *", "0 17 * * *"]
   }
 }

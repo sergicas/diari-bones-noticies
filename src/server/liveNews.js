@@ -6,8 +6,14 @@ import { LIVE_EDITORIAL_VERSION } from '../lib/editorial-version.js'
 import { normalizeCategory, refineCategoryByContent } from '../lib/category.js'
 import { storyImagePath } from '../lib/story-image-path.js'
 import { applyOwnContent } from './storyText.js'
+import { feedStoryId } from '../lib/story-id.js'
 
-export const refreshIntervalMs = 4 * 60 * 60 * 1000
+// Les peces publicades es desen també sota una clau estable story:<id> perquè la
+// seva pàgina de detall es pugui resoldre encara que surtin de la portada (finestra
+// de 30 peces / 4 dies). Així els enllaços compartits o indexats no fan 404.
+const storyDetailTtlSeconds = 30 * 24 * 60 * 60
+
+export const refreshIntervalMs = 12 * 60 * 60 * 1000
 
 const cacheKey = 'latest'
 // El Bon Diari és un DIARI: el radar només manté notícies de pocs dies. Una
@@ -40,99 +46,69 @@ const sections = []
 // ROTEN: cada refresc n'agafa una finestra diferent (vegeu selectFeedsForRun).
 // Totes les URLs estan validades (responen RSS/Atom amb peces fresques).
 const rssFeeds = [
+  // NOTA: només fonts GRATUÏTES/obertes. S'han tret els mitjans amb subscripció
+  // o mur de pagament (ARA, El Punt Avui, Diari de Tarragona, El País, La
+  // Vanguardia, ABC, El Mundo, El Español, NYT, WaPo, WSJ, FT, Bloomberg, Le
+  // Monde, la Repubblica, Observador…). Vegeu l'historial de git per la llista
+  // completa del que s'ha retirat.
   // ===================== CATALÀ =====================
   { name: 'Vilaweb', url: 'https://www.vilaweb.cat/feed/', language: 'ca', defaultCategory: 'Actualitat', core: true },
-  { name: 'ARA', url: 'https://www.ara.cat/rss/', language: 'ca', defaultCategory: 'Actualitat' },
   { name: 'Nació Digital', url: 'https://www.naciodigital.cat/rss/', language: 'ca', defaultCategory: 'Actualitat', core: true },
   { name: 'El Món', url: 'https://elmon.cat/feed/', language: 'ca', defaultCategory: 'Actualitat' },
   // Local de Mataró i el Maresme (Capgròs). Categoria forçada a 'Local'.
   { name: 'Capgròs', url: 'https://capgros.elnacional.cat/uploads/feeds/feed_ca.xml', language: 'ca', defaultCategory: 'Local', forceCategory: true, lenient: true, core: true },
-  { name: 'El Punt Avui', url: 'https://www.elpuntavui.cat/?format=feed&type=rss', language: 'ca', defaultCategory: 'Actualitat' },
   { name: 'Betevé', url: 'https://beteve.cat/feed/', language: 'ca', defaultCategory: 'Barcelona' },
   { name: 'Crític', url: 'https://www.elcritic.cat/feed', language: 'ca', defaultCategory: 'Periodisme' },
-  { name: 'Diari de Tarragona', url: 'https://www.diaridetarragona.com/rss', language: 'ca', defaultCategory: 'Actualitat' },
-  { name: 'ARA Cultura', url: 'https://www.ara.cat/rss/cultura', language: 'ca', defaultCategory: 'Cultura', forceCategory: true },
-  { name: 'ARA Internacional', url: 'https://www.ara.cat/rss/internacional', language: 'ca', defaultCategory: 'Internacional', forceCategory: true },
 
-  // ===================== CASTELLÀ =====================
-  { name: 'El País', url: 'https://feeds.elpais.com/mrss-s/pages/ep/site/elpais.com/portada', language: 'es', defaultCategory: 'Espanya', core: true },
-  { name: 'La Vanguardia', url: 'https://www.lavanguardia.com/rss/home.xml', language: 'es', defaultCategory: 'Espanya' },
-  { name: 'elDiario', url: 'https://www.eldiario.es/rss/', language: 'es', defaultCategory: 'Espanya' },
-  { name: 'RTVE', url: 'https://www.rtve.es/rss/temas_noticias.xml', language: 'es', defaultCategory: 'Espanya' },
+  // ===================== CASTELLÀ (només obert/gratuït) =====================
+  { name: 'RTVE', url: 'https://www.rtve.es/rss/temas_noticias.xml', language: 'es', defaultCategory: 'Espanya', core: true },
   { name: '20minutos', url: 'https://www.20minutos.es/rss/', language: 'es', defaultCategory: 'Espanya' },
-  { name: 'ABC', url: 'https://www.abc.es/rss/2.0/portada/', language: 'es', defaultCategory: 'Espanya' },
-  { name: 'El Confidencial', url: 'https://rss.elconfidencial.com/espana/', language: 'es', defaultCategory: 'Espanya' },
-  { name: 'El Español', url: 'https://www.elespanol.com/rss/', language: 'es', defaultCategory: 'Espanya' },
-  { name: 'El Mundo', url: 'https://e00-elmundo.uecdn.es/elmundo/rss/portada.xml', language: 'es', defaultCategory: 'Espanya' },
-  { name: 'El País Sociedad', url: 'https://feeds.elpais.com/mrss-s/pages/ep/site/elpais.com/section/sociedad/portada', language: 'es', defaultCategory: 'Societat', forceCategory: true },
-  // Feeds temàtics per alimentar Cultura/Tecnologia/Ciència.
-  { name: 'El País Cultura', url: 'https://feeds.elpais.com/mrss-s/pages/ep/site/elpais.com/section/cultura/portada', language: 'es', defaultCategory: 'Cultura', forceCategory: true },
-  { name: 'El País Tecnologia', url: 'https://feeds.elpais.com/mrss-s/pages/ep/site/elpais.com/section/tecnologia/portada', language: 'es', defaultCategory: 'Tecnologia', forceCategory: true },
-  { name: 'El País Ciència', url: 'https://feeds.elpais.com/mrss-s/pages/ep/site/elpais.com/section/ciencia/portada', language: 'es', defaultCategory: 'Ciència', forceCategory: true },
-  { name: 'La Vanguardia Cultura', url: 'https://www.lavanguardia.com/rss/cultura.xml', language: 'es', defaultCategory: 'Cultura', forceCategory: true },
-  { name: 'La Vanguardia Ciència', url: 'https://www.lavanguardia.com/rss/ciencia.xml', language: 'es', defaultCategory: 'Ciència', forceCategory: true },
+  // Agències / serveis d'informació gratuïts (RSS oficial verificat).
+  { name: 'Europa Press', url: 'https://www.europapress.es/rss/rss.aspx', language: 'es', defaultCategory: 'Espanya' },
+  { name: 'UN News', url: 'https://news.un.org/feed/subscribe/es/news/all/rss.xml', language: 'es', defaultCategory: 'Món' },
 
   // ===================== ANGLÈS =====================
   { name: 'BBC', url: 'https://feeds.bbci.co.uk/news/world/rss.xml', language: 'en', defaultCategory: 'Món', core: true },
   // Diaris de bones notícies (ja curats: passen sense exigir paraula positiva).
-  { name: 'Positive News', url: 'https://www.positive.news/feed/', language: 'en', defaultCategory: 'Món', lenient: true, core: true },
-  { name: 'Good News Network', url: 'https://www.goodnewsnetwork.org/feed/', language: 'en', defaultCategory: 'Món', lenient: true },
-  { name: 'Reasons to be Cheerful', url: 'https://reasonstobecheerful.world/feed/', language: 'en', defaultCategory: 'Món', lenient: true },
+  { name: 'Positive News', url: 'https://www.positive.news/feed/', language: 'en', defaultCategory: 'Món', lenient: true, curated: true, core: true },
+  { name: 'Good News Network', url: 'https://www.goodnewsnetwork.org/feed/', language: 'en', defaultCategory: 'Món', lenient: true, curated: true },
+  { name: 'Reasons to be Cheerful', url: 'https://reasonstobecheerful.world/feed/', language: 'en', defaultCategory: 'Món', lenient: true, curated: true },
   { name: 'The Guardian', url: 'https://www.theguardian.com/world/rss', language: 'en', defaultCategory: 'Món' },
   { name: 'CNN', url: 'http://rss.cnn.com/rss/edition.rss', language: 'en', defaultCategory: 'Món' },
   { name: 'Al Jazeera', url: 'https://www.aljazeera.com/xml/rss/all.xml', language: 'en', defaultCategory: 'Món' },
-  { name: 'Washington Post', url: 'https://feeds.washingtonpost.com/rss/world', language: 'en', defaultCategory: 'Món' },
-  { name: 'New York Times', url: 'https://rss.nytimes.com/services/xml/rss/nyt/World.xml', language: 'en', defaultCategory: 'Món' },
   { name: 'NPR', url: 'https://feeds.npr.org/1001/rss.xml', language: 'en', defaultCategory: 'Món' },
   { name: 'Sky News', url: 'https://feeds.skynews.com/feeds/rss/world.xml', language: 'en', defaultCategory: 'Món' },
   { name: 'The Independent', url: 'https://www.independent.co.uk/news/world/rss', language: 'en', defaultCategory: 'Món' },
-  { name: 'Wall Street Journal', url: 'https://feeds.a.dj.com/rss/RSSWorldNews.xml', language: 'en', defaultCategory: 'Món' },
-  { name: 'Bloomberg', url: 'https://feeds.bloomberg.com/news.rss', language: 'en', defaultCategory: 'Economia' },
-  { name: 'Financial Times', url: 'https://www.ft.com/world?format=rss', language: 'en', defaultCategory: 'Economia' },
   { name: 'The Conversation', url: 'https://theconversation.com/articles.atom', language: 'en', defaultCategory: 'Coneixement' },
   { name: 'Science Daily', url: 'https://www.sciencedaily.com/rss/all.xml', language: 'en', defaultCategory: 'Ciència', forceCategory: true },
   { name: 'Phys.org', url: 'https://phys.org/rss-feed/', language: 'en', defaultCategory: 'Ciència', forceCategory: true },
   { name: 'BBC Science', url: 'https://feeds.bbci.co.uk/news/science_and_environment/rss.xml', language: 'en', defaultCategory: 'Ciència', forceCategory: true },
   { name: 'Guardian Science', url: 'https://www.theguardian.com/science/rss', language: 'en', defaultCategory: 'Ciència', forceCategory: true },
   { name: 'BBC Technology', url: 'https://feeds.bbci.co.uk/news/technology/rss.xml', language: 'en', defaultCategory: 'Tecnologia', forceCategory: true },
-  { name: 'MIT Technology Review', url: 'https://www.technologyreview.com/feed/', language: 'en', defaultCategory: 'Tecnologia', forceCategory: true },
   { name: 'TechCrunch', url: 'https://techcrunch.com/feed/', language: 'en', defaultCategory: 'Tecnologia', forceCategory: true },
   { name: 'The Verge', url: 'https://www.theverge.com/rss/index.xml', language: 'en', defaultCategory: 'Tecnologia', forceCategory: true },
   { name: 'Guardian Culture', url: 'https://www.theguardian.com/culture/rss', language: 'en', defaultCategory: 'Cultura', forceCategory: true },
   { name: 'Smithsonian', url: 'https://www.smithsonianmag.com/rss/latest_articles/', language: 'en', defaultCategory: 'Cultura', forceCategory: true },
   { name: 'Euronews', url: 'https://www.euronews.com/rss?level=theme&name=news', language: 'en', defaultCategory: 'Europa' },
 
-  // ===================== PORTUGUÈS =====================
-  { name: 'Observador', url: 'https://observador.pt/feed/', language: 'pt', defaultCategory: 'Món', core: true },
-  { name: 'RTP Notícias', url: 'https://www.rtp.pt/noticias/rss', language: 'pt', defaultCategory: 'Món' },
+  // ===================== PORTUGUÈS (només obert/gratuït) =====================
+  { name: 'RTP Notícias', url: 'https://www.rtp.pt/noticias/rss', language: 'pt', defaultCategory: 'Món', core: true },
   { name: 'CNN Portugal', url: 'https://cnnportugal.iol.pt/rss', language: 'pt', defaultCategory: 'Món' },
-  { name: 'Folha de S.Paulo', url: 'https://feeds.folha.uol.com.br/emcimadahora/rss091.xml', language: 'pt', defaultCategory: 'Món' },
   { name: 'G1', url: 'https://g1.globo.com/rss/g1/', language: 'pt', defaultCategory: 'Món' },
   { name: 'Agência Brasil', url: 'https://agenciabrasil.ebc.com.br/rss/ultimasnoticias/feed.xml', language: 'pt', defaultCategory: 'Món' },
 
-  // ===================== FRANCÈS =====================
-  { name: 'Le Monde', url: 'https://www.lemonde.fr/rss/une.xml', language: 'fr', defaultCategory: 'Europa', core: true },
-  { name: 'Positivr', url: 'https://positivr.fr/feed/', language: 'fr', defaultCategory: 'Europa', lenient: true },
-  { name: 'Le Figaro', url: 'https://www.lefigaro.fr/rss/figaro_actualites.xml', language: 'fr', defaultCategory: 'Europa' },
-  { name: 'Libération', url: 'https://www.liberation.fr/arc/outboundfeeds/rss/?outputType=xml', language: 'fr', defaultCategory: 'Europa' },
-  { name: 'France 24', url: 'https://www.france24.com/fr/rss', language: 'fr', defaultCategory: 'Europa' },
+  // ===================== FRANCÈS (només obert/gratuït) =====================
+  { name: 'France 24', url: 'https://www.france24.com/fr/rss', language: 'fr', defaultCategory: 'Europa', core: true },
+  { name: 'Positivr', url: 'https://positivr.fr/feed/', language: 'fr', defaultCategory: 'Europa', lenient: true, curated: true },
   { name: 'RFI', url: 'https://www.rfi.fr/fr/rss', language: 'fr', defaultCategory: 'Europa' },
   { name: '20 Minutes', url: 'https://www.20minutes.fr/feeds/rss-une.xml', language: 'fr', defaultCategory: 'Europa' },
-  { name: 'Ouest-France', url: 'https://www.ouest-france.fr/rss/une', language: 'fr', defaultCategory: 'Europa' },
   { name: 'Franceinfo', url: 'https://www.francetvinfo.fr/titres.rss', language: 'fr', defaultCategory: 'Europa' },
-  { name: 'Le Parisien', url: 'https://feeds.leparisien.fr/leparisien/rss', language: 'fr', defaultCategory: 'Europa' },
-  { name: 'Courrier International', url: 'https://www.courrierinternational.com/feed/all/rss.xml', language: 'fr', defaultCategory: 'Món' },
-  { name: 'Sciences et Avenir', url: 'https://www.sciencesetavenir.fr/rss.xml', language: 'fr', defaultCategory: 'Ciència', forceCategory: true },
 
-  // ===================== ITALIÀ =====================
-  { name: 'la Repubblica', url: 'https://www.repubblica.it/rss/homepage/rss2.0.xml', language: 'it', defaultCategory: 'Europa', core: true },
-  { name: 'ANSA', url: 'https://www.ansa.it/sito/ansait_rss.xml', language: 'it', defaultCategory: 'Europa' },
-  { name: 'La Stampa', url: 'https://www.lastampa.it/rss', language: 'it', defaultCategory: 'Europa' },
+  // ===================== ITALIÀ (només obert/gratuït) =====================
+  { name: 'ANSA', url: 'https://www.ansa.it/sito/ansait_rss.xml', language: 'it', defaultCategory: 'Europa', core: true },
   { name: 'Rai News', url: 'https://www.rainews.it/rss/tutti', language: 'it', defaultCategory: 'Europa' },
   { name: 'Il Fatto Quotidiano', url: 'https://www.ilfattoquotidiano.it/feed/', language: 'it', defaultCategory: 'Europa' },
   { name: 'Open', url: 'https://www.open.online/feed/', language: 'it', defaultCategory: 'Europa' },
-  { name: 'Internazionale', url: 'https://www.internazionale.it/sitemaps/rss.xml', language: 'it', defaultCategory: 'Món' },
-  { name: 'Il Sole 24 Ore', url: 'https://www.ilsole24ore.com/rss/italia.xml', language: 'it', defaultCategory: 'Economia' },
   { name: 'ANSA Cultura', url: 'https://www.ansa.it/sito/notizie/cultura/cultura_rss.xml', language: 'it', defaultCategory: 'Cultura', forceCategory: true },
 ]
 
@@ -149,6 +125,11 @@ const rssFeeds = [
 // El català en porta més (és la llengua de casa i ha de dominar la portada) i
 // l'anglès menys (ja té dues fonts core: BBC i Positive News).
 const rotatingPerLanguage = { ca: 5, es: 3, en: 2, fr: 1, it: 1, pt: 1 }
+
+// Noms de les fonts VIGENTS (totes gratuïtes). Serveix per purgar de seguida les
+// peces arrossegades ("carryover") d'una font que s'ha eliminat de la llista
+// (p. ex. en treure els mitjans de pagament), en lloc d'esperar que caduquin.
+const allowedSourceNames = new Set(rssFeeds.map((feed) => feed.name))
 
 function selectFeedsForRun(nowMs) {
   const core = rssFeeds.filter((feed) => feed.core)
@@ -1033,6 +1014,9 @@ export const UNIVERSAL_NEG = new RegExp(
     'd[íi][ae]s de calor', 'calor perill', 'calor peligros',
     'hottest day', 'jour le plus chaud', 'dia mais quente', 'devido ao calor',
     'cop de calor', 'golpe de calor', 'colpo di calore', 'dies de calor',
+    'r[èe]cord de calor', '\\b(?:3[5-9]|4\\d)\\s*(?:graus|grados|degrees|°\\s*c)',
+    // Incendis i focs actius, també quan una font local usa només "foc".
+    '\\bfoc\\b', '\\bfire\\b', 'wildfire', 'incendi', 'incendio', 'incendie',
     // Addicció a les pantalles / mòbil.
     'enganchados al m[óo]vil', 'enganxats al m[òo]bil', 'adicci[óo]n al m[óo]vil',
     'addicci[óo] al m[òo]bil', 'phone addiction', 'dipendenza da smartphone',
@@ -1138,7 +1122,7 @@ function normalizeFeedItem(block, feed) {
   if (isNegative) return null // clarament negativa (guerra, conflicte…): fora directament
   // Bloc dur universal (multilingüe) per a categories que el model petit deixa
   // passar: calor extrem/desastre climàtic i addicció a les pantalles.
-  if (!feed.lenient && UNIVERSAL_NEG.test(fullTextLower)) return null
+  if (UNIVERSAL_NEG.test(fullTextLower)) return null
 
   // Contingut POLÍTIC (maniobres de partit, eleccions, judicis, ultradreta…):
   // gairebé mai és bona notícia i el model petit l'aprova per error massa sovint.
@@ -1173,7 +1157,7 @@ function normalizeFeedItem(block, feed) {
     editorialScore,
     // Font ja curada de bones notícies (Positive News, Good News Network…): la
     // IA hi confia i no la veta (com el contingut Local).
-    curated: Boolean(feed.lenient),
+    curated: Boolean(feed.curated),
     editorialVersion: liveEditorialVersion,
     publishedAt,
   }
@@ -1273,7 +1257,7 @@ async function aiJudgeBatch(env, stories) {
   })
   const text = String(out?.response || '')
   const verdicts = new Array(stories.length).fill(null)
-  for (const m of text.matchAll(/(\d{1,2})\s*[:.)\-]?\s*(S[IÍ]|NO|YES)\b/gi)) {
+  for (const m of text.matchAll(/(\d{1,2})\s*[-:.)]?\s*(S[IÍ]|NO|YES)\b/gi)) {
     const idx = parseInt(m[1], 10) - 1
     if (idx >= 0 && idx < stories.length && verdicts[idx] === null) {
       verdicts[idx] = /^[SY]/i.test(m[2])
@@ -1289,9 +1273,11 @@ async function aiJudgeBatch(env, stories) {
 // notícia no jutjada (per pressupost o IA caiguda) es manté si ha passat per
 // paraula clau, de manera que una fallada de la IA mai no buida ni embruta el
 // diari. Els veredictes es guarden en UN sol registre KV (14 dies).
-async function aiReview(env, candidates) {
+async function aiReview(env, candidates, { failOpen = true } = {}) {
   if (!env?.AI) {
-    return candidates.filter((story) => (story.editorialScore ?? 1) > 0)
+    return failOpen
+      ? candidates.filter((story) => (story.editorialScore ?? 1) > 0)
+      : candidates.filter((story) => story.curated)
   }
   const kv = env.LIVE_NEWS_KV
   let store
@@ -1306,9 +1292,10 @@ async function aiReview(env, candidates) {
   let dirty = false
 
   for (const story of candidates) {
-    // Contingut Local (Mataró/Maresme) i fonts JA curades de bones notícies:
-    // s'hi confia, no passen per la IA (el model petit els vetaria per error).
-    if (story.category === 'Local' || story.curated) {
+    // Només les fonts dedicades íntegrament a bones notícies es consideren ja
+    // curades. El contingut local també passa el judici: proximitat no equival a
+    // positivitat i abans hi entraven incendis, calor extrema i successos.
+    if (story.curated) {
       verdict.set(story.url, true)
       continue
     }
@@ -1341,7 +1328,10 @@ async function aiReview(env, candidates) {
       if (v === null || v === undefined) {
         // No jutjada (o la crida ha fallat): paraula clau. Els blocs durs ja
         // n'han tret les clarament dolentes, així que és prou segur.
-        verdict.set(story.url, (story.editorialScore ?? 1) > 0)
+        verdict.set(
+          story.url,
+          failOpen && (story.editorialScore ?? 1) > 0,
+        )
       } else {
         verdict.set(story.url, v)
         store[story.url] = { v, at: now }
@@ -1357,7 +1347,10 @@ async function aiReview(env, candidates) {
   // categories dolentes; la IA neteja les subtils que SÍ que ha pogut jutjar.
   for (const story of toJudge) {
     if (verdict.has(story.url)) continue
-    verdict.set(story.url, (story.editorialScore ?? 1) > 0)
+    verdict.set(
+      story.url,
+      failOpen && (story.editorialScore ?? 1) > 0,
+    )
   }
 
   if (dirty) {
@@ -1532,7 +1525,7 @@ export async function readEditorialStats(kv) {
       published: current?.published || 0,
       lastUpdatedAt: current?.lastUpdatedAt || null,
     }
-  } catch (error) {
+  } catch {
     return { month: key.slice('editorial-stats:'.length), reviewed: 0, published: 0, lastUpdatedAt: null }
   }
 }
@@ -1623,6 +1616,9 @@ export async function getLiveNewsPayload(kv, { force = false, env } = {}) {
     // Revalidem contra el filtre editorial ACTUAL (si l'hem endurit, les velles
     // que ara no passen cauen aquí en lloc d'arrossegar-se).
     .filter((s) => passesEditorialFilter(`${s.title} ${s.summary || ''}`, s.language).passes)
+    // Descartem l'arrossegament de fonts que ja no són a la llista (p. ex. mitjans
+    // de pagament retirats): així desapareixen a la primera, sense esperar 4 dies.
+    .filter((s) => allowedSourceNames.has(s.source))
     .map(({ isFresh: _isFresh, ...rest }) => rest)
   const preDiversity = [...freshStories, ...carryover]
   // Acotem les llengües foranes ABANS de la diversitat per font, perquè el
@@ -1643,7 +1639,22 @@ export async function getLiveNewsPayload(kv, { force = false, env } = {}) {
   // il·lustració pròpia LLIGADA a la notícia (a partir d'una escena que genera la
   // IA) i sense resum copiat. applyOwnContent posa imatge pròpia a TOTES les
   // peces, així que cap foto de tercers pot colar-se. Vegeu src/server/storyText.js.
-  const publishedStories = await applyOwnContent(finalStories, env)
+  const enrichedStories = await applyOwnContent(finalStories, env)
+
+  // NO publiquem les peces sense contingut propi real (titular + cos generats per
+  // la IA). Abans, quan la IA encara no havia reescrit una peça (o s'exhauria la
+  // quota), sortia a portada amb el titular genèric "Una bona notícia · X" i una
+  // pàgina de detall buida. Ara es retenen fins que tenen contingut: com que
+  // s'arrosseguen entre refrescs i el contingut es cacheja (own:<id>), la portada
+  // s'omple igualment amb peces completes en comptes de mig-fetes.
+  const publishedStories = enrichedStories.filter((story) => story.ownContent)
+
+  // Xarxa de seguretat: si en aquesta passada cap peça no ha assolit contingut
+  // propi (p. ex. la IA no està disponible), mantenim el lot anterior en lloc de
+  // buidar la portada.
+  if (publishedStories.length === 0 && cached?.stories?.length) {
+    return { ...cached, cache: 'stale-incomplete' }
+  }
 
   // Marquem com a "vistes" NOMÉS les noves que de debò entren al lot. Una
   // notícia acceptada que avui queda fora (pel sostre d'una altra llengua o per
@@ -1663,9 +1674,20 @@ export async function getLiveNewsPayload(kv, { force = false, env } = {}) {
 
   try {
     const payload = await setCachedPayload(kv, publishedStories)
+    // Persistim cada peça publicada sota story:<id> (30 dies) perquè la seva
+    // pàgina de detall es pugui resoldre encara que surti de la portada.
+    await Promise.all(
+      publishedStories.map((story) =>
+        kv.put(`story:${feedStoryId(story.url)}`, JSON.stringify(story), {
+          expirationTtl: storyDetailTtlSeconds,
+        }),
+      ),
+    )
     await updateEditorialStats(kv, {
       reviewed: reviewedThisPass,
-      published: publishedStories.length,
+      // "published" compta peces NOVES úniques d'aquesta passada (no el total del
+      // lot a cada refresc), perquè el comptador mensual no s'infli artificialment.
+      published: shownFreshUrls.length,
     })
     const cacheLabel =
       freshStories.length >= minFreshStoriesForFullRefresh
@@ -1690,4 +1712,98 @@ export async function getLiveNewsPayload(kv, { force = false, env } = {}) {
       cache: 'transient',
     }
   }
+}
+
+// --- Secció "En directe" (ticker) ------------------------------------------
+// A diferència de la portada (que es renova cada 12h amb titular, cos i
+// il·lustració propis via IA), la tira "En directe" mostra els ÚLTIMS titulars
+// detectats i enllaça directament a la font, sense generar pàgina ni contingut
+// propi. Sí que passa pel MATEIX porter d'IA que la portada (aiReview) per triar
+// només els titulars constructius. Es cacheja pocs minuts a KV per no re-scrapejar
+// (ni re-jutjar) a cada visita.
+const tickerCacheKey = 'live-ticker'
+// Re-escaneig de fonts com a molt cada 90 s (prou "temps real" sense martellejar
+// les fonts: gràcies a la cache KV, cada finestra només fa UN scrape encara que
+// hi hagi molts visitants). El client sondeja cada 2 min.
+const tickerCacheTtlMs = 90 * 1000
+const tickerCacheTtlSeconds = 90
+// Un grapat de fonts catalanes GRATUÏTES i ràpides (poques subpeticions).
+const tickerFeedNames = ['Vilaweb', 'Nació Digital', 'Betevé', 'Capgròs', 'El Món', 'Crític']
+const tickerLimit = 12
+
+export async function getLiveTicker(env, { force = false } = {}) {
+  const kv = env?.LIVE_NEWS_KV
+  // 1) Cache curta: mentre sigui fresca, la retornem tal qual.
+  if (kv && !force) {
+    try {
+      const cached = await kv.get(tickerCacheKey, 'json')
+      if (
+        cached?.updatedAt &&
+        Date.now() - new Date(cached.updatedAt).getTime() < tickerCacheTtlMs
+      ) {
+        return { ...cached, cache: 'hit' }
+      }
+    } catch {
+      // Si el KV falla, regenerem.
+    }
+  }
+
+  // 2) Scrap ràpid d'un subconjunt de fonts.
+  const feeds = rssFeeds.filter((feed) => tickerFeedNames.includes(feed.name))
+  const results = await Promise.all(feeds.map((feed) => collectFeedStories(feed)))
+  const seen = new Set()
+  const candidates = []
+  for (const { stories } of results) {
+    for (const story of stories) {
+      if (!story.url || seen.has(story.url)) continue
+      seen.add(story.url)
+      candidates.push(story)
+    }
+  }
+
+  // 3) CONTROL D'IA: el mateix porter que la portada (aiReview) decideix quins
+  // titulars són realment constructius —no només per paraules clau—, de manera
+  // que titulars neutres o negatius (onades de calor…) que abans es colaven ara
+  // queden fora. Reutilitza el cau de veredictes (KV, 14 dies) compartit amb el
+  // radar, així que el cost és baix. Aquí fallem de manera tancada: com que el
+  // directe és opcional, si la IA no pot jutjar una peça és millor conservar la
+  // darrera cache que publicar successos o meteorologia extrema.
+  const approved = await aiReview(env, candidates, { failOpen: false })
+  approved.sort(
+    (a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime(),
+  )
+
+  const payload = {
+    updatedAt: new Date().toISOString(),
+    items: approved.slice(0, tickerLimit).map((story) => ({
+      title: story.title,
+      source: story.source,
+      url: story.url,
+      category: story.category,
+      location: story.location,
+      publishedAt: story.publishedAt,
+    })),
+  }
+
+  // 3) Si no hem pogut treure res (fonts caigudes), conservem l'última cache.
+  if (payload.items.length === 0 && kv) {
+    try {
+      const cached = await kv.get(tickerCacheKey, 'json')
+      if (cached?.items?.length) return { ...cached, cache: 'stale' }
+    } catch {
+      // continuem
+    }
+  }
+
+  if (kv && payload.items.length) {
+    try {
+      await kv.put(tickerCacheKey, JSON.stringify(payload), {
+        expirationTtl: tickerCacheTtlSeconds,
+      })
+    } catch {
+      // Si no es pot desar, igualment retornem el resultat.
+    }
+  }
+
+  return { ...payload, cache: 'refresh' }
 }

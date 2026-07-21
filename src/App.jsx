@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { flushSync } from 'react-dom'
 import './App.css'
-import { editorialValues, seedArticles } from './data/articles'
-import { fetchLivePositiveNewsPayload } from './api/rssFeed'
+import { seedArticles } from './data/articles'
+import { fetchLivePositiveNewsPayload, fetchLiveTicker } from './api/rssFeed'
 import { LIVE_EDITORIAL_VERSION } from './lib/editorial-version.js'
 import { feedStoryId } from './lib/story-id.js'
 import NewsletterForm from './components/NewsletterForm.jsx'
@@ -31,6 +31,8 @@ const nextRefreshStorageKey = 'bon-diari-next-refresh-at-v4'
 const defaultStoryImage = DEFAULT_STORY_IMAGE
 const currentLiveEditorialVersion = LIVE_EDITORIAL_VERSION
 const autoRefreshIntervalMs = 1 * 60 * 60 * 1000
+// La secció "En directe" es refresca contínuament (cada 2 minuts al client).
+const liveTickerIntervalMs = 2 * 60 * 1000
 const activeEditionLimit = 40
 // A la portada només hi ha les notícies de menys de 2 dies; les més velles
 // passen automàticament a la Hemeroteca.
@@ -38,9 +40,8 @@ const activeEditionMaxAgeMs = 2 * 24 * 60 * 60 * 1000
 // Terra de seguretat: la portada MAI no es buida. Si un dia no hi ha prou
 // notícies fresques (< 2 dies), ensenyem igualment les més noves disponibles
 // fins a aquest mínim, perquè el diari no quedi mai en blanc.
-const activeEditionFloor = 12
+const activeEditionFloor = 0
 const maxStoredFeedStories = 40
-const minStoriesPerSection = 5
 
 const dateFormatter = new Intl.DateTimeFormat('ca-ES', {
   day: 'numeric',
@@ -708,22 +709,6 @@ function getStorySection(story) {
   )
 }
 
-function getSectionGroups(filteredStories, remainingStories, featuredStory) {
-  return editorialSections
-    .map((section) => ({
-      ...section,
-      totalStories: filteredStories.filter(
-        (story) => getStorySection(story).id === section.id,
-      ).length,
-      stories: remainingStories
-        .filter((story) => getStorySection(story).id === section.id)
-        .sort(sortByDistanceAndDate),
-      hasFeaturedStory:
-        featuredStory && getStorySection(featuredStory).id === section.id,
-    }))
-    .filter((section) => section.totalStories >= minStoriesPerSection)
-}
-
 function estimateReadTime(summary, impact) {
   const totalWords = `${summary} ${impact}`
     .trim()
@@ -822,7 +807,14 @@ function createFeedStory(story) {
     imageAlt:
       story.imageAlt?.trim() ||
       `Imatge associada a la noticia ${story.title?.trim() || 'del radar en viu'}.`,
-    readTime: story.readTime || estimateReadTime(safeSummary, safeImpact),
+    readTime:
+      story.readTime ||
+      estimateReadTime(
+        [safeSummary, Array.isArray(story.body) ? story.body.join(' ') : '']
+          .join(' ')
+          .trim(),
+        safeImpact,
+      ),
     publishedAt: story.publishedAt || now.toISOString(),
     featured: false,
     origin: 'feed',
@@ -1014,7 +1006,7 @@ function SiteHeader({ currentPage, isRefreshing, onNavigate, onRefresh }) {
               onClick={onRefresh}
               disabled={isRefreshing}
             >
-              {isRefreshing ? 'Sincronitzant 3CatInfo...' : 'Refrescar de debò'}
+              {isRefreshing ? 'Recarregant…' : 'Recarregar portada'}
             </button>
           </div>
         ) : null}
@@ -1167,8 +1159,8 @@ function FooterNote({ onNavigate }) {
       </p>
       <p>
         Diari constructiu amb actualització automàtica, Hemeroteca i criteri
-        editorial propi. Les fonts citades són dels seus autors; les imatges,
-        dels mitjans que s'hi vinculen.{' '}
+        editorial propi. Les fonts citades són dels seus autors; les
+        il·lustracions editorials són pròpies i generades per a cada peça.{' '}
         <a
           className="footer-note__owner-link"
           href="/sobre"
@@ -1313,21 +1305,20 @@ function AboutPage({ onNavigate }) {
             comercial i compartides amb la mateixa llicència.
           </p>
           <p>
-            Les fonts i imatges enllaçades pertanyen als mitjans originals
-            (Generalitat de Catalunya, ONU, UNESCO, Nature, Wikimedia,
-            IEEE Spectrum, etc.) i mantenen la seva pròpia llicència. El Bon
-            Diari només n’enllaça els documents originals com a font verificable
-            de cada peça.
+            Les fonts enllaçades pertanyen als mitjans originals i mantenen la
+            seva pròpia llicència. Les il·lustracions de les peces són creacions
+            editorials pròpies generades per a El Bon Diari; no es reutilitzen
+            fotografies de premsa de tercers.
           </p>
         </section>
 
         <section className="about-block__section">
           <h2>Tecnologia</h2>
           <p>
-            Web feta amb React + Vite, allotjada a Netlify, publicada des de
-            Tarragona. Codi obert i editable: si trobes un error, una millora
-            d’accessibilitat o una bona notícia que ens hauria d’interessar,
-            escriu-nos.
+            Web feta amb React + Vite i executada a Cloudflare Workers, publicada
+            des de Tarragona. Codi obert i editable: si trobes un error, una
+            millora d’accessibilitat o una bona notícia que ens hauria
+            d’interessar, escriu-nos.
           </p>
         </section>
       </article>
@@ -1399,7 +1390,7 @@ function PrivacyPage({ onNavigate }) {
             objectiu d’enviar-te el recull de bones notícies. No la compartim ni
             la venem. Pots donar-te de baixa en qualsevol moment amb l’enllaç del
             peu de cada correu, o escrivint-nos. L’enviament el gestiona el
-            proveïdor de correu Resend i les adreces es desen xifrades a la
+            proveïdor de correu Resend i les adreces es desen a la
             infraestructura de Cloudflare.
           </p>
         </section>
@@ -1886,7 +1877,7 @@ function MostReadSection({ allStories, onNavigate }) {
           allStories.map((s) => [`/noticia/${encodeURIComponent(s.id)}`, s]),
         )
         const selected = []
-        for (const row of data.topPaths || []) {
+        for (const row of data.topPathsWeek || []) {
           const story = byPath.get(row.key)
           if (story) selected.push({ story, count: row.count })
           if (selected.length >= 3) break
@@ -1952,7 +1943,7 @@ function StoryPage({ story, sourceLink, imageLink, relatedStories, onNavigate })
   return (
     <>
       <PageHero
-        headingLevel="h2"
+        headingLevel="h1"
         tag="Pàgina d'article"
         title={story.title}
         description={story.summary || story.impact}
@@ -1996,7 +1987,6 @@ function StoryPage({ story, sourceLink, imageLink, relatedStories, onNavigate })
             </span>
           </div>
           <p className="article-page__kicker">{story.kicker}</p>
-          <h1 className="article-page__title">{story.title}</h1>
         </div>
 
         <div className="article-page__lead">
@@ -2036,10 +2026,12 @@ function StoryPage({ story, sourceLink, imageLink, relatedStories, onNavigate })
               <span>Temps de lectura</span>
               <strong>{story.readTime}</strong>
             </article>
-            <article className="story-modal__detail-card">
-              <span>Impacte</span>
-              <strong>{story.impact}</strong>
-            </article>
+            {story.impact ? (
+              <article className="story-modal__detail-card">
+                <span>Impacte</span>
+                <strong>{story.impact}</strong>
+              </article>
+            ) : null}
           </aside>
         </div>
 
@@ -2264,6 +2256,14 @@ function ArchivePage({ archiveStories, lastRefreshLabel, onNavigate }) {
 function App() {
   const initialFilterState = getFilterStateFromPath(getCurrentPath())
   const [liveStories, setLiveStories] = useState([])
+  // Peça carregada a demanda quan es visita /noticia/:id d'una notícia que ja no
+  // és a la portada (rotada fora de la finestra). Evita el 404 als enllaços vells.
+  const [fetchedStory, setFetchedStory] = useState(null)
+  const [isFetchingStory, setIsFetchingStory] = useState(
+    () => getRoute(getCurrentPath()).page === 'story',
+  )
+  // Secció "En directe": titulars lleugers que es refresquen contínuament.
+  const [liveTicker, setLiveTicker] = useState([])
   const [searchTerm, setSearchTerm] = useState(initialFilterState.search)
   const [activeCategory, setActiveCategory] = useState(
     initialFilterState.category,
@@ -2283,36 +2283,19 @@ function App() {
 
   useEffect(() => {
     const handlePopState = () => {
-      setCurrentPath(getCurrentPath())
+      const nextPath = getCurrentPath()
+      setCurrentPath(nextPath)
+      if (getRoute(nextPath).page === 'home') {
+        const nextFilters = getFilterStateFromPath(nextPath)
+        setSearchTerm(nextFilters.search)
+        setActiveCategory(nextFilters.category)
+        setActiveDistanceFilter(nextFilters.distanceFilter)
+      }
     }
 
     window.addEventListener('popstate', handlePopState)
     return () => window.removeEventListener('popstate', handlePopState)
   }, [])
-
-  useEffect(() => {
-    if (route.page !== 'home') {
-      return
-    }
-
-    const nextFilterState = getFilterStateFromPath(currentPath)
-
-    setSearchTerm((currentSearch) =>
-      currentSearch === nextFilterState.search
-        ? currentSearch
-        : nextFilterState.search,
-    )
-    setActiveCategory((currentCategory) =>
-      currentCategory === nextFilterState.category
-        ? currentCategory
-        : nextFilterState.category,
-    )
-    setActiveDistanceFilter((currentDistanceFilter) =>
-      currentDistanceFilter === nextFilterState.distanceFilter
-        ? currentDistanceFilter
-        : nextFilterState.distanceFilter,
-    )
-  }, [currentPath, route.page])
 
   useEffect(() => {
     let isCancelled = false
@@ -2351,6 +2334,76 @@ function App() {
       window.clearInterval(intervalId)
     }
   }, [])
+
+  // Secció "En directe": sondeja /api/live-ticker cada 2 minuts per mostrar els
+  // últims titulars detectats (enllacen a la font). Independent del radar de 12h.
+  useEffect(() => {
+    let isCancelled = false
+
+    async function updateTicker() {
+      try {
+        const { items } = await fetchLiveTicker()
+        if (!isCancelled) setLiveTicker(items)
+      } catch (error) {
+        console.warn('No s’ha pogut actualitzar el directe.', error)
+      }
+    }
+
+    updateTicker()
+    const tickerId = window.setInterval(updateTicker, liveTickerIntervalMs)
+
+    return () => {
+      isCancelled = true
+      window.clearInterval(tickerId)
+    }
+  }, [])
+
+  // Si es demana /noticia/:id d'una peça que no és a la memòria (ni al radar viu
+  // ni als editorials) —típicament perquè ja ha sortit de la portada—, la demanem
+  // al servidor (/api/story/:id, que la resol des de la còpia persistida) en lloc
+  // de mostrar un 404.
+  useEffect(() => {
+    if (route.page !== 'story' || !route.storyId) {
+      return undefined
+    }
+    const inMemory =
+      liveStories.some((story) => story.id === route.storyId) ||
+      validSeedArticles.some((story) => story.id === route.storyId) ||
+      fetchedStory?.id === route.storyId
+    if (inMemory) {
+      return undefined
+    }
+
+    let cancelled = false
+    ;(async () => {
+      setIsFetchingStory(true)
+      try {
+        const response = await fetch(
+          `/api/story/${encodeURIComponent(route.storyId)}`,
+        )
+        if (!response.ok) return
+        const data = await response.json()
+        if (cancelled || !data?.story) return
+        const normalized =
+          createFeedStory(data.story) ||
+          normalizeStory({
+            ...data.story,
+            id: route.storyId,
+            origin: data.story.origin || 'feed',
+            publishedAt: data.story.publishedAt || new Date().toISOString(),
+          })
+        if (normalized) setFetchedStory(normalized)
+      } catch {
+        // Si falla, es mostrarà el 404 habitual.
+      } finally {
+        if (!cancelled) setIsFetchingStory(false)
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [route.page, route.storyId, liveStories, fetchedStory?.id])
 
   const allStories = [...liveStories, ...validSeedArticles]
   const { activeStories, archiveStories } = splitEditionStories(allStories)
@@ -2431,18 +2484,14 @@ function App() {
   const remainingStories = filteredStories.filter(
     (story) => shouldShowFeaturedInResults || story.id !== featuredStory?.id,
   )
-  const sectionGroups = getSectionGroups(
-    filteredStories,
-    remainingStories,
-    featuredStory,
-  )
   // Portada "a cop d'ull": totes les notícies del dia en una sola graella,
   // ordenades per proximitat i recència, sense haver d'anar secció per secció.
   // (Cada targeta ja porta la seva etiqueta de secció, així el lector s'hi ubica.)
   const portadaStories = [...remainingStories].sort(sortByDistanceAndDate)
   const currentStory =
     route.page === 'story'
-      ? allStories.find((story) => story.id === route.storyId)
+      ? allStories.find((story) => story.id === route.storyId) ??
+        (fetchedStory && fetchedStory.id === route.storyId ? fetchedStory : null)
       : null
 
   const featuredSourceLink = featuredStory ? getSourceLink(featuredStory) : null
@@ -2472,10 +2521,7 @@ function App() {
     searchTerm.trim() !== '' ||
     activeCategory !== 'Totes' ||
     activeDistanceFilter !== 'progressiu'
-  const visibleSectionIds = new Set(sectionGroups.map((section) => section.id))
-  const headlineCount = filteredStories.filter((story) =>
-    visibleSectionIds.has(getStorySection(story).id),
-  ).length
+  const headlineCount = filteredStories.length
   const lastRefreshLabel = formatDateTime(lastRefreshAt)
 
   useEffect(() => {
@@ -2499,6 +2545,8 @@ function App() {
       nextImage = currentStory.imageUrl?.startsWith('http')
         ? currentStory.imageUrl
         : `${siteUrl}${currentStory.imageUrl}`
+    } else if (route.page === 'story' && isFetchingStory) {
+      nextTitle = `Carregant notícia | ${siteName}`
     } else if (route.page === 'story') {
       nextTitle = `Pàgina no trobada | ${siteName}`
     } else if (route.page === 'stats') {
@@ -2560,7 +2608,7 @@ function App() {
     } else if (robotsTag?.getAttribute('content') === 'noindex, nofollow') {
       robotsTag.remove()
     }
-  }, [activeCategory, currentPath, currentStory, route])
+  }, [activeCategory, currentPath, currentStory, isFetchingStory, route])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -2601,6 +2649,12 @@ function App() {
     const commit = () => {
       window.history[method]({}, '', nextPath)
       setCurrentPath(nextPath)
+      if (getRoute(nextPath).page === 'home') {
+        const nextFilters = getFilterStateFromPath(nextPath)
+        setSearchTerm(nextFilters.search)
+        setActiveCategory(nextFilters.category)
+        setActiveDistanceFilter(nextFilters.distanceFilter)
+      }
     }
 
     // Transició nativa entre pàgines (View Transitions API). Només quan canvia
@@ -2629,11 +2683,11 @@ function App() {
     }
   }
 
-  // Refresc lleuger per al gest "estira per actualitzar": refà el radar i
-  // fusiona sense navegar ni tocar filtres (a diferència de handleRefresh).
+  // Refresc lleuger per al gest "estira per actualitzar": torna a consultar el
+  // radar publicat i fusiona el resultat sense navegar ni tocar filtres.
   async function refreshRadar() {
     try {
-      const payload = await fetchLivePositiveNewsPayload({ force: true })
+      const payload = await fetchLivePositiveNewsPayload()
       setLiveStories((currentStories) =>
         mergeLiveStories(currentStories, payload.stories).stories,
       )
@@ -2707,7 +2761,7 @@ function App() {
     setIsRefreshing(true)
 
     try {
-      const payload = await fetchLivePositiveNewsPayload({ force: true })
+      const payload = await fetchLivePositiveNewsPayload()
 
       setLiveStories((currentStories) =>
         mergeLiveStories(currentStories, payload.stories).stories,
@@ -2755,6 +2809,12 @@ function App() {
               relatedStories={relatedStories}
               onNavigate={navigate}
             />
+          ) : isFetchingStory ? (
+            <section className="section-block not-found" role="status">
+              <p className="section-tag">Pàgina d'article</p>
+              <h1>Carregant la notícia…</h1>
+              <p>Estem recuperant aquesta peça de l’hemeroteca.</p>
+            </section>
           ) : (
             <NotFoundPage onNavigate={navigate} />
           )
@@ -2797,6 +2857,59 @@ function App() {
                 ))}
               </div>
             </section>
+            {liveTicker.length > 0 ? (
+              <section className="live-ticker" aria-label="En directe">
+                <div className="live-ticker__bar">
+                  <span className="live-ticker__badge">
+                    <span className="live-ticker__dot" aria-hidden="true" />
+                    En directe
+                  </span>
+                  <div className="live-ticker__marquee">
+                    {/* Cinta que llisca contínuament. Els titulars es dupliquen
+                        perquè el bucle sigui sense costures; la còpia és text
+                        decoratiu, no un segon conjunt d'enllaços buits. */}
+                    <div className="live-ticker__track">
+                      {liveTicker.map((item) => (
+                          <a
+                            key={item.url}
+                            className="live-ticker__tape-item"
+                            href={item.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            {item.category ? (
+                              <span className="paper-chip">{item.category}</span>
+                            ) : null}
+                            <span className="live-ticker__tape-title">
+                              {item.title}
+                            </span>
+                            <span className="live-ticker__tape-source">
+                              {item.source}
+                            </span>
+                          </a>
+                      ))}
+                      {liveTicker.map((item) => (
+                        <span
+                          key={`${item.url}-clone`}
+                          className="live-ticker__tape-item"
+                          aria-hidden="true"
+                        >
+                          {item.category ? (
+                            <span className="paper-chip">{item.category}</span>
+                          ) : null}
+                          <span className="live-ticker__tape-title">
+                            {item.title}
+                          </span>
+                          <span className="live-ticker__tape-source">
+                            {item.source}
+                          </span>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </section>
+            ) : null}
             <section className="hero-grid">
               {featuredStory ? (
                 <article className="featured-story">

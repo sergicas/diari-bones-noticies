@@ -8,6 +8,9 @@
 
 cd "$(dirname "$0")"
 
+# Claus API (BONDIARI_REFRESH_TOKEN)
+source "$HOME/.zshrc" 2>/dev/null >/dev/null
+
 echo "──────── $(date '+%d-%m-%Y %H:%M') ────────" >> renova-seccions.log
 node scripts/renova-seccions.mjs >> renova-seccions.log 2>&1
 echo "" >> renova-seccions.log

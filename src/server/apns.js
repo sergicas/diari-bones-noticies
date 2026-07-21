@@ -37,10 +37,16 @@ function tokenKey(token) {
 }
 
 export async function handleApnsRegister(request, env) {
+  if (request.method !== 'POST') {
+    return new Response(JSON.stringify({ ok: false, error: 'method-not-allowed' }), {
+      status: 405,
+      headers: { allow: 'POST', 'content-type': 'application/json' },
+    })
+  }
   try {
     const body = await request.json()
     const token = (body?.token || '').trim()
-    if (!token || token.length > 200) {
+    if (!/^[a-f0-9]{64}$/i.test(token)) {
       return new Response(JSON.stringify({ ok: false, error: 'bad-token' }), {
         status: 400,
         headers: { 'content-type': 'application/json' },

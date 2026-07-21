@@ -27,15 +27,19 @@ function decodeId(rawId) {
   }
 }
 
-// Busca la notícia que correspon a l'id de la ruta, primer al radar en viu
-// (KV) i després als articles editorials estàtics.
-async function findStory(id, env) {
+// Busca la notícia que correspon a l'id de la ruta: primer al radar en viu
+// (portada actual, KV 'latest'), després a la còpia persistida story:<id> (per a
+// peces que ja han sortit de la portada, així els enllaços no fan 404) i, per
+// últim, als articles editorials estàtics.
+export async function findStory(id, env) {
   try {
     const cached = await env.LIVE_NEWS_KV.get('latest', 'json')
     const liveStory = (cached?.stories || []).find(
       (story) => feedStoryId(story.url) === id,
     )
     if (liveStory) return liveStory
+    const stored = await env.LIVE_NEWS_KV.get(`story:${id}`, 'json')
+    if (stored) return stored
   } catch {
     // Si el KV falla, encara podem mirar els editorials.
   }

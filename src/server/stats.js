@@ -10,8 +10,24 @@ const totalKey = 'total'
 const maxDailyDays = 120
 const maxTopEntries = 200
 
+// Comptadors de lectures per dia (paths:YYYY-MM-DD). Es fusionen els últims
+// 7 dies per calcular "Les peces amb més lectures aquesta setmana".
+const weeklyWindowDays = 7
+// TTL de seguretat: KV esborra sol les claus diàries velles.
+const dailyPathsTtlSeconds = 60 * 60 * 24 * 10
+
 function todayKey() {
   return new Date().toISOString().slice(0, 10)
+}
+
+function dayKeyOffset(offset) {
+  const date = new Date()
+  date.setUTCDate(date.getUTCDate() - offset)
+  return date.toISOString().slice(0, 10)
+}
+
+function dailyPathsKey(day) {
+  return `paths:${day}`
 }
 
 function parseDevice(viewport) {
@@ -55,6 +71,29 @@ async function incrementCounter(kv, key, bucket) {
   current[bucket] = (current[bucket] || 0) + 1
   await setMap(kv, key, current)
   return current
+}
+
+async function incrementDailyPath(kv, day, path) {
+  const key = dailyPathsKey(day)
+  const current = await getMap(kv, key)
+  current[path] = (current[path] || 0) + 1
+  await kv.put(key, JSON.stringify(current), {
+    expirationTtl: dailyPathsTtlSeconds,
+  })
+}
+
+async function getWeeklyPaths(kv) {
+  const keys = Array.from({ length: weeklyWindowDays }, (_, i) =>
+    dailyPathsKey(dayKeyOffset(i)),
+  )
+  const maps = await Promise.all(keys.map((key) => kv.get(key, 'json')))
+  const merged = {}
+  for (const map of maps) {
+    for (const [path, count] of Object.entries(map || {})) {
+      merged[path] = (merged[path] || 0) + Number(count || 0)
+    }
+  }
+  return merged
 }
 
 async function trimMap(kv, key, max) {
@@ -111,6 +150,7 @@ export async function handleTrackVisit(request, env) {
 
     await incrementCounter(kv, dailyKey, day)
     await incrementCounter(kv, pathsKey, path)
+    await incrementDailyPath(kv, day, path)
     await incrementCounter(kv, referrersKey, referrer)
     await incrementCounter(kv, devicesKey, device)
 
@@ -137,13 +177,15 @@ export async function handleTrackVisit(request, env) {
 export async function handleStats(request, env) {
   const kv = env.STATS_KV
   try {
-    const [total, daily, paths, referrers, devices] = await Promise.all([
-      kv.get(totalKey, 'json'),
-      kv.get(dailyKey, 'json'),
-      kv.get(pathsKey, 'json'),
-      kv.get(referrersKey, 'json'),
-      kv.get(devicesKey, 'json'),
-    ])
+    const [total, daily, paths, referrers, devices, weeklyPaths] =
+      await Promise.all([
+        kv.get(totalKey, 'json'),
+        kv.get(dailyKey, 'json'),
+        kv.get(pathsKey, 'json'),
+        kv.get(referrersKey, 'json'),
+        kv.get(devicesKey, 'json'),
+        getWeeklyPaths(kv),
+      ])
 
     const sortedDaily = sortDaily(daily)
     const derivedTotal = sortedDaily.reduce(
@@ -155,6 +197,7 @@ export async function handleStats(request, env) {
       total: derivedTotal || Number(total || 0),
       daily: sortedDaily.slice(-30),
       topPaths: topN(paths, 12),
+      topPathsWeek: topN(weeklyPaths, 12),
       topReferrers: topN(referrers, 10),
       devices: devices || {},
       updatedAt: new Date().toISOString(),
@@ -176,6 +219,7 @@ export async function handleStats(request, env) {
         total: 0,
         daily: [],
         topPaths: [],
+        topPathsWeek: [],
         topReferrers: [],
         devices: {},
       }),

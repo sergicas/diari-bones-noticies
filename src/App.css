@@ -1811,15 +1811,6 @@
   text-transform: uppercase;
 }
 
-.article-page__title {
-  margin: 18px 0 14px;
-  font-family: var(--display-font);
-  font-size: clamp(3rem, 6vw, 5rem);
-  line-height: 0.94;
-  letter-spacing: -0.05em;
-  color: var(--ink);
-}
-
 .article-page__lead {
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) minmax(260px, 0.78fr);
@@ -2802,4 +2793,109 @@
     opacity: 0;
     transform: translateY(10px);
   }
+}
+
+/* ===================== Secció "En directe" (cinta) ===================== */
+.live-ticker {
+  margin: 20px 0;
+  background: var(--paper);
+  border: 1px solid var(--line-strong);
+  border-radius: 14px;
+  box-shadow: var(--soft-shadow);
+  overflow: hidden;
+}
+
+.live-ticker__bar {
+  display: flex;
+  align-items: stretch;
+}
+
+.live-ticker__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  padding: 0 16px;
+  background: #E72A30;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.live-ticker__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.7);
+  animation: live-ticker-pulse 1.6s infinite;
+}
+
+@keyframes live-ticker-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.7); }
+  70% { box-shadow: 0 0 0 7px rgba(255, 255, 255, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); }
+}
+
+.live-ticker__marquee {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  /* Difuminat als extrems perquè els titulars apareguin i desapareguin suaument. */
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 4%, #000 96%, transparent);
+  mask-image: linear-gradient(to right, transparent, #000 4%, #000 96%, transparent);
+}
+
+.live-ticker__track {
+  display: flex;
+  width: max-content;
+  /* Es mou cap a l'ESQUERRA (estil teletip): cada titular entra per la dreta
+     començant per la primera paraula. El contingut està duplicat, per això
+     translateX(-50%) equival a una còpia sencera i el bucle no té costures. */
+  animation: live-ticker-scroll 100s linear infinite;
+}
+
+.live-ticker__marquee:hover .live-ticker__track,
+.live-ticker__marquee:focus-within .live-ticker__track {
+  animation-play-state: paused;
+}
+
+@keyframes live-ticker-scroll {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+.live-ticker__tape-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 15px 28px;
+  white-space: nowrap;
+  text-decoration: none;
+  color: var(--ink);
+  border-left: 1px solid var(--line);
+}
+
+.live-ticker__tape-item:hover .live-ticker__tape-title {
+  text-decoration: underline;
+}
+
+.live-ticker__tape-title {
+  font-family: var(--display-font);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.live-ticker__tape-source {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-ticker__dot { animation: none; }
+  .live-ticker__track { animation: none; }
+  .live-ticker__marquee { overflow-x: auto; }
 }

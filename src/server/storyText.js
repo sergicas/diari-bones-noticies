@@ -23,14 +23,23 @@ const MAX_BATCHES = 5 // sostre: fins a 40 peces noves per refresc
 
 const REWRITE_SYSTEM = [
   "Ets l'editor d'El Bon Diari, un diari de bones notícies.",
-  'Et passo titulars de premsa numerats; cadascun du la seva llengua entre claudàtors.',
-  'Per a CADA número dona\'m DUES línies EXACTAMENT amb aquest format:',
+  'Et passo notícies numerades; cada número du la seva llengua entre claudàtors, el',
+  'titular original i, sota, una línia "resum:" amb els fets de la font (si n\'hi ha).',
+  "Per a CADA número dona'm QUATRE línies EXACTAMENT amb aquest format:",
   'N titular: <titular reescrit>',
+  'N cos: <cos reescrit>',
+  'N impacte: <per què és una bona notícia>',
   'N imatge: <escena>',
   'TITULAR: reescriu-lo amb paraules TEVES i originals, fidel als fets (mantén qui',
   'i què, sense inventar xifres, dades ni noms), to serè. Ha de ser una frase',
   'natural i llegible (no telegràfica ni tallada), de 6 a 16 paraules, sense',
   'cometes ni símbols, i EXACTAMENT en la llengua indicada (no el tradueixis).',
+  'COS: de 2 a 4 frases amb paraules TEVES que expliquin la notícia a partir NOMÉS',
+  "dels fets del titular i del resum donat. NO inventis xifres, dades, cites, llocs",
+  'ni noms que no apareguin al material; si hi ha poca informació, sigues sobri i',
+  'general en lloc d\'inventar. Mateixa llengua que el titular. Sense cometes.',
+  'IMPACTE: una sola frase breu que expliqui per què és constructiva o què millora.',
+  'Mateixa llengua, sense cometes.',
   'IMATGE: una escena visual concreta EN ANGLÈS per dibuixar la notícia; descriu',
   'objectes i entorn (exemple: "a modern tram on a tree-lined city avenue at',
   'sunrise"). Sense noms propis, sense marques, sense persones reals identificables',
@@ -79,30 +88,62 @@ function cleanBrief(raw) {
     .slice(0, 200)
 }
 
+// Neteja per al cos i l'impacte: manté puntuació i apòstrofs (a diferència de
+// cleanBrief, que és per a l'escena d'imatge en anglès), només treu cometes,
+// guillemots i separadors sobrants.
+function cleanProse(raw, max) {
+  return String(raw || '')
+    .replace(/[«»"“”]/g, '')
+    .replace(/\s+/g, ' ')
+    .replace(/^[\s|·:—–-]+/, '')
+    .replace(/[\s|·]+$/, '')
+    .trim()
+    .slice(0, max)
+}
+
 async function aiOwnContentBatch(env, items) {
   const list = items
     .map((it, i) => {
       const lang = LANG_NAMES[it.language] || 'català'
-      return `${i + 1}. [${lang}] ${String(it.title || '').replace(/\s+/g, ' ').slice(0, 160)}`
+      const title = String(it.title || '').replace(/\s+/g, ' ').slice(0, 160)
+      // El resum de la font s'aporta NOMÉS com a context de fets perquè el cos
+      // sigui verídic; el model l'ha de reescriure amb paraules pròpies (no es
+      // publica mai copiat).
+      const summary = String(it.summary || '').replace(/\s+/g, ' ').slice(0, 320)
+      return summary
+        ? `${i + 1}. [${lang}] ${title}\n   resum: ${summary}`
+        : `${i + 1}. [${lang}] ${title}`
     })
     .join('\n')
   const out = await env.AI.run(AI_MODEL, {
-    max_tokens: 900,
+    max_tokens: 2200,
     messages: [
       { role: 'system', content: REWRITE_SYSTEM },
-      { role: 'user', content: `Titulars:\n${list}` },
+      { role: 'user', content: `Notícies:\n${list}` },
     ],
   })
   const text = String(out?.response || '')
-  const result = items.map(() => ({ title: null, brief: null }))
+  const result = items.map(() => ({ title: null, brief: null, body: null, impact: null }))
   for (const line of text.split('\n')) {
-    const mt = line.match(/^\s*(\d{1,2})\s*[.)]?\s*titular\s*[:\-]\s*(.+?)\s*$/i)
+    const mt = line.match(/^\s*(\d{1,2})\s*[.)]?\s*titular\s*[:-]\s*(.+?)\s*$/i)
     if (mt) {
       const idx = parseInt(mt[1], 10) - 1
       if (idx >= 0 && idx < result.length && !result[idx].title) result[idx].title = cleanTitle(mt[2])
       continue
     }
-    const mi = line.match(/^\s*(\d{1,2})\s*[.)]?\s*imatge\s*[:\-]\s*(.+?)\s*$/i)
+    const mc = line.match(/^\s*(\d{1,2})\s*[.)]?\s*cos\s*[:-]\s*(.+?)\s*$/i)
+    if (mc) {
+      const idx = parseInt(mc[1], 10) - 1
+      if (idx >= 0 && idx < result.length && !result[idx].body) result[idx].body = cleanProse(mc[2], 600)
+      continue
+    }
+    const mp = line.match(/^\s*(\d{1,2})\s*[.)]?\s*impacte\s*[:-]\s*(.+?)\s*$/i)
+    if (mp) {
+      const idx = parseInt(mp[1], 10) - 1
+      if (idx >= 0 && idx < result.length && !result[idx].impact) result[idx].impact = cleanProse(mp[2], 200)
+      continue
+    }
+    const mi = line.match(/^\s*(\d{1,2})\s*[.)]?\s*imatge\s*[:-]\s*(.+?)\s*$/i)
     if (mi) {
       const idx = parseInt(mi[1], 10) - 1
       if (idx >= 0 && idx < result.length && !result[idx].brief) result[idx].brief = cleanBrief(mi[2])
@@ -131,21 +172,31 @@ export async function applyOwnContent(stories, env) {
     })
   }
 
-  // 2) Generem el que falta, en lots (si hi ha IA)
-  const misses = entries.filter((e) => !e.own || !e.own.title)
+  // 2) Generem el que falta, en lots (si hi ha IA). Regenerem també les entrades
+  //    antigues que només tenien titular (cache pre-cos) perquè guanyin el cos.
+  const misses = entries.filter((e) => !e.own || !e.own.title || !e.own.body)
   if (env?.AI && misses.length > 0) {
     for (let b = 0; b < misses.length && b / BATCH_SIZE < MAX_BATCHES; b += BATCH_SIZE) {
       const group = misses.slice(b, b + BATCH_SIZE)
       try {
         const generated = await aiOwnContentBatch(
           env,
-          group.map((e) => ({ title: e.story.title, language: e.story.language })),
+          group.map((e) => ({
+            title: e.story.title,
+            language: e.story.language,
+            summary: e.story.summary,
+          })),
         )
         await Promise.all(
           group.map((e, j) => {
             const g = generated[j]
             if (!g || !g.title) return null
-            e.own = { title: g.title, brief: g.brief || '' }
+            e.own = {
+              title: g.title,
+              brief: g.brief || '',
+              body: g.body || '',
+              impact: g.impact || '',
+            }
             return kv
               ? kv.put(KV_PREFIX + e.id, JSON.stringify(e.own), { expirationTtl: CACHE_TTL_SECONDS })
               : null
@@ -157,11 +208,15 @@ export async function applyOwnContent(stories, env) {
     }
   }
 
-  // 3) Muntem el resultat: titular propi, imatge lligada a la notícia (o motiu de
-  // secció si no hi ha escena) i SENSE resum copiat.
+  // 3) Muntem el resultat: titular propi, cos propi (reescrit dels fets de la
+  //    font), impacte propi, imatge lligada a la notícia i SENSE resum copiat.
+  //    ownContent marca si la peça té contingut propi real; getLiveNewsPayload
+  //    NO publica les que no en tenen (evita targetes buides "Una bona notícia · X").
   return entries.map((e) => {
     const own = e.own || {}
+    const hasOwnContent = Boolean(own.title && own.body)
     const title = own.title || genericTitle(e.story)
+    const body = own.body ? [own.body] : []
     const imageUrl = own.brief
       ? storyImagePath(e.story.url, { brief: own.brief })
       : storyImagePath(e.story.url, { title: e.story.title, category: e.story.category })
@@ -169,9 +224,12 @@ export async function applyOwnContent(stories, env) {
       ...e.story,
       title,
       summary: '',
+      body,
+      impact: own.impact || '',
       imageUrl,
       imageCredit: 'El Bon Diari (il·lustració IA)',
       imageAttributionUrl: '',
+      ownContent: hasOwnContent,
     }
   })
 }

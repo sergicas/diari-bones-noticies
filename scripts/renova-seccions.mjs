@@ -11,6 +11,7 @@
 // Ús: node scripts/renova-seccions.mjs   (o: npm run seccions)
 
 const BASE = process.env.BONDIARI_URL || 'https://bondiari.sergicas.workers.dev'
+const REFRESH_TOKEN = process.env.BONDIARI_REFRESH_TOKEN
 
 // Seccions editorials de la portada i les categories que hi cauen (mirall de
 // src/App.jsx → editorialSections).
@@ -39,11 +40,19 @@ function hores(iso) {
 }
 
 async function main() {
+  if (!REFRESH_TOKEN) {
+    console.error('✗ Falta BONDIARI_REFRESH_TOKEN a l’entorn.')
+    process.exit(1)
+  }
   console.log(`→ Forçant renovació de seccions (${new Date().toLocaleString('ca-ES', { timeZone: 'Europe/Madrid' })})`)
 
   // 1. Força el refresc complet de tots els feeds.
   try {
-    const r = await fetch(`${BASE}/api/refresh-news`)
+    const r = await fetch(`${BASE}/api/refresh-news`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${REFRESH_TOKEN}` },
+    })
+    if (!r.ok) throw new Error(`HTTP ${r.status}`)
     const j = await r.json()
     console.log(`✓ Radar refrescat: ${j.count} notícies al lot.`)
   } catch (e) {

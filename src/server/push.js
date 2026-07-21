@@ -48,11 +48,36 @@ function subKey(endpoint) {
   return PUSH_PREFIX + bytesToB64url(utf8(endpoint)).slice(0, 200)
 }
 
+function isValidSubscription(sub) {
+  if (
+    typeof sub?.endpoint !== 'string' ||
+    sub.endpoint.length > 2048 ||
+    typeof sub?.keys?.p256dh !== 'string' ||
+    typeof sub?.keys?.auth !== 'string' ||
+    !/^[A-Za-z0-9_-]{80,120}={0,2}$/.test(sub.keys.p256dh) ||
+    !/^[A-Za-z0-9_-]{16,64}={0,2}$/.test(sub.keys.auth)
+  ) {
+    return false
+  }
+  try {
+    const endpoint = new URL(sub.endpoint)
+    return endpoint.protocol === 'https:' && !endpoint.username && !endpoint.password
+  } catch {
+    return false
+  }
+}
+
 export async function handlePushSubscribe(request, env) {
+  if (request.method !== 'POST') {
+    return new Response(JSON.stringify({ ok: false, error: 'method-not-allowed' }), {
+      status: 405,
+      headers: { allow: 'POST', 'content-type': 'application/json' },
+    })
+  }
   try {
     const body = await request.json()
     const sub = body?.subscription || body
-    if (!sub?.endpoint || !sub?.keys?.p256dh || !sub?.keys?.auth) {
+    if (!isValidSubscription(sub)) {
       return new Response(JSON.stringify({ ok: false, error: 'bad-subscription' }), {
         status: 400,
         headers: { 'content-type': 'application/json' },
@@ -77,6 +102,12 @@ export async function handlePushSubscribe(request, env) {
 }
 
 export async function handlePushUnsubscribe(request, env) {
+  if (request.method !== 'POST') {
+    return new Response(JSON.stringify({ ok: false, error: 'method-not-allowed' }), {
+      status: 405,
+      headers: { allow: 'POST', 'content-type': 'application/json' },
+    })
+  }
   try {
     const body = await request.json()
     const endpoint = body?.endpoint || body?.subscription?.endpoint

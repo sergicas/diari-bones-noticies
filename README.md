@@ -1,93 +1,79 @@
 # El Bon Diari
 
-Una app conceptual d'un diari que només publica bones notícies.
-
-## Què inclou ara mateix
-
-- Portada editorial amb una història destacada
-- Filtres per categoria i cerca per text
-- Col·lecció de notícies positives de mostra
-- Pàgines pròpies per a cada notícia amb URL
-- Secció de manifest editorial
-- Pàgina per publicar noves peces
-- Formulari per publicar noves peces
-- Persistència local al navegador amb `localStorage`
+Diari constructiu en català amb portada React, radar de notícies, hemeroteca,
+butlletí, notificacions web/iOS i backend a Cloudflare Workers.
 
 ## Stack
 
-- React 19
-- Vite 8
-- CSS custom, sense llibreries d'UI
+- React 19 i Vite 8
+- Cloudflare Workers, Static Assets, KV i Workers AI
+- Capacitor 7 per a l’app iOS
+- Vitest i ESLint
 
 ## Desenvolupament
 
 ```bash
-npm install
+npm ci
 npm run dev
 ```
+
+El servidor de Vite envia `/api/*` al Worker desplegat. Per provar també el
+backend localment, usa `npm run dev:worker` després d’haver configurat els
+bindings i secrets de desenvolupament.
 
 ## Verificació
 
 ```bash
 npm run lint
+npm test
 npm run check:articles
 npm run build
 ```
 
-`npm run check:articles` comprova que cada notícia editorial té imatge real
-(`imageUrl` + `imageAlt`). S'executa automàticament abans de cada `npm run build`.
+`npm run check:articles` comprova que cada peça editorial tingui `imageUrl` i
+`imageAlt`, i que la imatge sigui una d’aquestes opcions:
 
-## Regla editorial: cap notícia sense fotografia original
+- una fotografia vàlida amb crèdit i enllaç d’atribució;
+- una il·lustració editorial pròpia generada a `/api/story-image/:id`.
 
-Tota notícia que s'afegeixi a `src/data/articles.js` (i als JSON
-`scripts/new-articles-*.json` que llegeix `scripts/apply-new-articles.mjs`) ha
-d'incloure una **fotografia original** de la font:
+No s’accepten placeholders ni SVG genèrics de categoria. La font de veritat de
+aquestes regles és `src/lib/imageRules.js`.
 
-- `imageUrl`: URL externa (gencat, UNESCO, etc.) o fitxer `.jpg|.jpeg|.png|.webp|.avif|.gif` a `/story-images/editorial/`.
-- **NO val**: SVGs sota `/story-images/` (il·lustracions de categoria o per article), ni `/story-images/default-news.svg` (placeholder).
-- `imageAlt`: text alternatiu per a accessibilitat.
-- `imageCredit` + `imageAttributionUrl`: recomanats per donar crèdit a la font.
+## Publicació
 
-La lògica única viu a [`src/lib/imageRules.js`](src/lib/imageRules.js) i s'usa
-des de tres llocs:
+```bash
+npm run deploy
+```
 
-1. `scripts/apply-new-articles.mjs` — bloqueja l'alta si un article nou no porta foto.
-2. `npm run check:articles` — auditoria manual: classifica cada article com a `photo` / `illustration` / `placeholder` / `missing` / `unknown` i imprimeix el llistat.
-3. `src/App.jsx` — al carregar, filtra els articles editorials i del radar en viu i només deixa veure els que tenen `classifyImage === 'photo'`. Els altres queden ocultats i marcats amb un avís a la consola.
+El build genera els HTML estàtics de les notícies, `sitemap.xml`, `feed.xml` i
+el service worker versionat. Wrangler publica el Worker i els assets de `dist/`
+segons `wrangler.jsonc`.
 
-El build no falla per als 36 articles existents amb il·lustració; senzillament
-no es renderitzen fins que tinguin foto real.
+Els secrets (Resend, xarxes socials, VAPID, APNs i refresc manual) no han d’anar
+mai al repositori. Es configuren amb `wrangler secret put`.
 
-## Publicació amb domini propi
+## Refresc manual protegit
 
-Per publicar `El Bon Diari` en un domini com `bondiari.com`, primer cal pujar la web a un hosting públic. El domini no es pot apuntar a `127.0.0.1`, perquè això només funciona al teu ordinador.
+L’endpoint `/api/refresh-news` només accepta `POST` amb un Bearer token. Crea el
+secret al Worker i exposa el mateix valor només a la sessió local des d’on
+executis l’script:
 
-### Cas senzill: Netlify + domini a Piensa Solutions
+```bash
+npx wrangler secret put BONDIARI_REFRESH_TOKEN
+BONDIARI_REFRESH_TOKEN="..." npm run refresh
+```
 
-Si ja tens compte a Netlify, fes això:
+`npm run seccions` fa servir el mateix secret. El navegador només rellegeix
+l’edició publicada; les passades cares de fonts i IA queden limitades als crons
+i als scripts autenticats.
 
-1. Executa `npm run build`
-2. A Netlify, crea un site nou i puja la carpeta `dist/`, o connecta aquest projecte amb el repositori
-3. A Netlify, ves a `Domain management` i afegeix `bondiari.com`
-4. Netlify et dirà quins registres DNS has de posar a Piensa Solutions
-5. A Piensa Solutions, obre el gestor DNS del domini i copia exactament els valors que t’hagi donat Netlify
+## App iOS
 
-Notes útils:
+```bash
+npm run ios:assets
+npm run ios:sync
+npm run ios:open
+```
 
-- Aquest projecte ja inclou `_redirects` per a Netlify i `.htaccess` per a Apache
-- També inclou `netlify.toml` amb `build = "npm run build"` i `publish = "dist"`
-- Això fa que rutes com `/noticia/...`, `/manifest` i `/publicar` funcionin bé quan la web estigui publicada
-
-### Fonts oficials
-
-- Netlify: [Assign a domain to your site or app](https://docs.netlify.com/manage/domains/manage-domains/assign-a-domain-to-your-site-app/)
-- Netlify: [Configure external DNS for a custom domain](https://docs.netlify.com/domains/configure-domains/configure-external-dns/)
-- Netlify: [Redirects and rewrites](https://docs.netlify.com/manage/routing/redirects/overview/)
-
-## Properes passes naturals
-
-- Afegir autenticació i perfils d'editors
-- Connectar fonts reals o un CMS
-- Moderació abans de publicar aportacions
-- Guardar imatges i adjunts
-- Crear una vista d'article completa amb rutes
+Els fitxers de `ios/App/App/public/` són generats per Capacitor i no s’han
+d’editar ni analitzar amb ESLint directament.

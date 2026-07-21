@@ -16,26 +16,31 @@ export async function initNativePush() {
     if (perm.receive !== 'granted') return
     await PushNotifications.register()
 
-    PushNotifications.addListener('registration', async (token) => {
-      try {
-        await fetch('/api/push/register-apns', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ token: token.value }),
-        })
-      } catch (error) {
-        // silenci: reintentarà en el proper arrencament
-      }
-    })
-
-    PushNotifications.addListener('registrationError', (error) => {
-      console.warn('[push] error de registre APNs', error)
-    })
-
-    PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
-      const url = action && action.notification && action.notification.data && action.notification.data.url
-      if (url) window.location.href = url
-    })
+    await Promise.all([
+      PushNotifications.addListener('registration', async (token) => {
+        try {
+          const response = await fetch('/api/push/register-apns', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ token: token.value }),
+          })
+          if (!response.ok) throw new Error('apns-registration-rejected')
+        } catch {
+          // silenci: reintentarà en el proper arrencament
+        }
+      }),
+      PushNotifications.addListener('registrationError', (error) => {
+        console.warn('[push] error de registre APNs', error)
+      }),
+      PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
+        const url =
+          action &&
+          action.notification &&
+          action.notification.data &&
+          action.notification.data.url
+        if (url) window.location.href = url
+      }),
+    ])
   } catch (error) {
     console.warn('[push] no s\'ha pogut inicialitzar el push natiu', error)
   }
