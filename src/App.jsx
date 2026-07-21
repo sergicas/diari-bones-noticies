@@ -2223,15 +2223,33 @@ function ArchivePage({ archiveStories, lastRefreshLabel, onNavigate }) {
               {hasFilters ? `${filtered.length} de ${archiveStories.length} peces` : `${archiveStories.length} peces`}
             </p>
             {filtered.length > 0 ? (
-              <div className="news-grid">
-                {filtered.map((story) => (
-                  <StoryCard
-                    key={story.id}
-                    story={story}
-                    onNavigate={onNavigate}
-                  />
-                ))}
-              </div>
+              editorialSections
+                .map((section) => ({
+                  section,
+                  stories: filtered.filter(
+                    (story) => getStorySection(story).id === section.id,
+                  ),
+                }))
+                .filter((group) => group.stories.length > 0)
+                .map(({ section, stories }) => (
+                  <div className="archive-topic" key={section.id}>
+                    <div className="section-heading">
+                      <div>
+                        <p className="section-tag">{section.label}</p>
+                        <h3>{stories.length} {stories.length === 1 ? 'peça' : 'peces'}</h3>
+                      </div>
+                    </div>
+                    <div className="news-grid">
+                      {stories.map((story) => (
+                        <StoryCard
+                          key={story.id}
+                          story={story}
+                          onNavigate={onNavigate}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))
             ) : (
               <div className="empty-state">
                 <h3>Cap peça coincideix amb la cerca.</h3>
