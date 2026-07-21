@@ -46,6 +46,39 @@ const sections = []
 // ROTEN: cada refresc n'agafa una finestra diferent (vegeu selectFeedsForRun).
 // Totes les URLs estan validades (responen RSS/Atom amb peces fresques).
 const rssFeeds = [
+  // ===== FONTS AMPLIADES (jul. 2026): proximitat CAT, estatal i europeu =====
+  { name: 'ARA', url: 'https://www.ara.cat/rss/latest/', language: 'ca', defaultCategory: 'Actualitat', core: true },
+  { name: 'ARA Internacional', url: 'https://www.ara.cat/rss/internacional/', language: 'ca', defaultCategory: 'Internacional' },
+  { name: 'ARA Cultura', url: 'https://www.ara.cat/rss/cultura/', language: 'ca', defaultCategory: 'Cultura' },
+  { name: 'ARA Societat', url: 'https://www.ara.cat/rss/societat/', language: 'ca', defaultCategory: 'Societat' },
+  { name: 'ARA Economia', url: 'https://www.ara.cat/rss/economia/', language: 'ca', defaultCategory: 'Economia' },
+  { name: 'El 9 Nou Osona', url: 'https://el9nou.cat/feed/?post_type=post&edicio=osona-ripolles', language: 'ca', defaultCategory: 'Comarcal' },
+  { name: 'El 9 Nou Valles', url: 'https://el9nou.cat/feed/?post_type=post&edicio=valles-oriental', language: 'ca', defaultCategory: 'Comarcal' },
+  { name: 'AnoiaDiari', url: 'https://www.anoiadiari.cat/rss', language: 'ca', defaultCategory: 'Comarcal' },
+  { name: "La Veu de l'Anoia", url: 'https://veuanoia.cat/feed/', language: 'ca', defaultCategory: 'Comarcal' },
+  { name: "L'Independent de Gracia", url: 'https://www.independent.cat/rss', language: 'ca', defaultCategory: 'Local' },
+  { name: 'Diari Mes', url: 'https://www.diarimes.com/ca/rss.html', language: 'ca', defaultCategory: 'Comarcal' },
+  { name: 'Aguaita', url: 'https://www.aguaita.cat/rss', language: 'ca', defaultCategory: 'Comarcal' },
+  { name: 'Regio7', url: 'https://www.regio7.cat/rss/portada/rss.xml', language: 'ca', defaultCategory: 'Comarcal' },
+  { name: 'Diari de Girona', url: 'https://www.diaridegirona.cat/rss/portada/rss.xml', language: 'ca', defaultCategory: 'Comarcal' },
+  { name: 'Emporda', url: 'https://www.emporda.info/rss/portada/rss.xml', language: 'ca', defaultCategory: 'Comarcal' },
+  { name: 'Segre', url: 'https://www.segre.com/ca/rss.html', language: 'ca', defaultCategory: 'Comarcal' },
+  { name: 'La Directa', url: 'https://directa.cat/feed/', language: 'ca', defaultCategory: 'Societat' },
+  { name: 'El Periodico (cat)', url: 'https://www.elperiodico.cat/ca/rss/portada/rss.xml', language: 'ca', defaultCategory: 'Actualitat' },
+  { name: 'La Vanguardia Catalunya', url: 'https://www.lavanguardia.com/rss/local/catalunya.xml', language: 'es', defaultCategory: 'Actualitat' },
+  { name: 'La Vanguardia Girona', url: 'https://www.lavanguardia.com/rss/local/girona.xml', language: 'es', defaultCategory: 'Local' },
+  { name: 'La Vanguardia Tarragona', url: 'https://www.lavanguardia.com/rss/local/tarragona.xml', language: 'es', defaultCategory: 'Local' },
+  { name: 'La Vanguardia Lleida', url: 'https://www.lavanguardia.com/rss/local/lleida.xml', language: 'es', defaultCategory: 'Local' },
+  { name: 'elDiario.es', url: 'https://www.eldiario.es/rss/', language: 'es', defaultCategory: 'Actualitat' },
+  { name: 'La Vanguardia', url: 'https://www.lavanguardia.com/rss/home.xml', language: 'es', defaultCategory: 'Actualitat' },
+  { name: 'El Periodico', url: 'https://www.elperiodico.com/es/rss/portada/rss.xml', language: 'es', defaultCategory: 'Actualitat' },
+  { name: 'Publico', url: 'https://www.publico.es/rss', language: 'es', defaultCategory: 'Actualitat' },
+  { name: 'Newtral', url: 'https://www.newtral.es/feed/', language: 'es', defaultCategory: 'Societat' },
+  { name: 'The Local Spain', url: 'https://feeds.thelocal.com/rss/es', language: 'en', defaultCategory: 'Actualitat' },
+  { name: 'POLITICO Europe', url: 'https://www.politico.eu/feed/', language: 'en', defaultCategory: 'Politica' },
+  { name: 'VoxEurop', url: 'https://voxeurop.eu/es/feed/', language: 'es', defaultCategory: 'Internacional' },
+  { name: 'Deutsche Welle', url: 'https://rss.dw.com/rdf/rss-es-all', language: 'es', defaultCategory: 'Internacional' },
+
   // NOTA: només fonts GRATUÏTES/obertes. S'han tret els mitjans amb subscripció
   // o mur de pagament (ARA, El Punt Avui, Diari de Tarragona, El País, La
   // Vanguardia, ABC, El Mundo, El Español, NYT, WaPo, WSJ, FT, Bloomberg, Le
