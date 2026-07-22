@@ -23,11 +23,11 @@ const cacheKey = 'latest'
 // les de < 2 dies; la resta van a l'Hemeroteca.
 const maxLiveStoryAgeMs = 4 * 24 * 60 * 60 * 1000
 const liveEditorialVersion = LIVE_EDITORIAL_VERSION
-const targetStoryLimit = 30
-const maxStoriesPerSource = 5
+const targetStoryLimit = 50
+const maxStoriesPerSource = 8
 const collectionPoolSize = 80
 // Bondiari és un diari de Catalunya. Proporcions OBJECTIU sobre el lot
-// (targetStoryLimit = 30): català ~60% (sense sostre: omple la resta de la
+// (targetStoryLimit = 50): català ~60% (sense sostre: omple la resta de la
 // portada), castellà ~20% (6), anglès ~10% (3) i la resta de llengües ~10% en
 // conjunt (francès/italià/portuguès, una cadascuna). Així el català domina la
 // portada i cap llengua forana no la pot inundar.
