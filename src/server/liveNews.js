@@ -22,6 +22,25 @@ const cacheKey = 'latest'
 // (ciència, cultura) sense fossilitzar-se. La portada del web encara n'ensenya
 // les de < 2 dies; la resta van a l'Hemeroteca.
 const maxLiveStoryAgeMs = 4 * 24 * 60 * 60 * 1000
+export function isStoryWithinLiveWindow(story, now = Date.now()) {
+  if (story?.expiresAt) {
+    const rawExpiry = String(story.expiresAt)
+    const parsedExpiry = new Date(rawExpiry).getTime()
+    if (!Number.isNaN(parsedExpiry)) {
+      // Els datasets oficials solen representar el termini com les 00:00 del
+      // dia indicat. Editorialment és vigent fins al final d'aquell dia.
+      const endOfListedDay = /T00:00:00(?:\.000)?(?:Z)?$/.test(rawExpiry)
+        ? parsedExpiry + 24 * 60 * 60 * 1000 - 1
+        : parsedExpiry
+      return endOfListedDay >= now
+    }
+  }
+  const publishedAt = new Date(story?.publishedAt).getTime()
+  return (
+    !Number.isNaN(publishedAt) &&
+    now - publishedAt <= maxLiveStoryAgeMs
+  )
+}
 const liveEditorialVersion = LIVE_EDITORIAL_VERSION
 const targetStoryLimit = 50
 const maxStoriesPerSource = 8
@@ -85,6 +104,19 @@ const rssFeeds = [
   { name: 'Capgròs', url: 'https://capgros.elnacional.cat/uploads/feeds/feed_ca.xml', language: 'ca', defaultCategory: 'Local', forceCategory: true, lenient: true, core: true },
   { name: 'Betevé', url: 'https://beteve.cat/feed/', language: 'ca', defaultCategory: 'Barcelona' },
   { name: 'Crític', url: 'https://www.elcritic.cat/feed', language: 'ca', defaultCategory: 'Periodisme' },
+  // Primer format de servei que amplia Bondiari més enllà de la notícia
+  // positiva. És un feed íntegrament dedicat a verificacions: no passa pel
+  // filtre de "bondat", sinó per la confiança editorial de la font.
+  {
+    name: 'Verificat',
+    url: 'https://www.verificat.cat/feed/',
+    language: 'ca',
+    defaultCategory: 'Verificació',
+    forceCategory: true,
+    editorialMode: 'verification',
+    sourceTier: 'B',
+    core: true,
+  },
 
   // ===================== CASTELLÀ (només obert/gratuït) =====================
   { name: 'RTVE', url: 'https://www.rtve.es/rss/temas_noticias.xml', language: 'es', defaultCategory: 'Espanya', core: true },
@@ -155,7 +187,15 @@ const rotatingPerLanguage = { ca: 5, es: 3, en: 2, fr: 1, it: 1, pt: 1 }
 // Noms de les fonts VIGENTS (totes gratuïtes). Serveix per purgar de seguida les
 // peces arrossegades ("carryover") d'una font que s'ha eliminat de la llista
 // (p. ex. en treure els mitjans de pagament), en lloc d'esperar que caduquin.
-const allowedSourceNames = new Set(rssFeeds.map((feed) => feed.name))
+const serviceSourceNames = [
+  'Agenda Cultural',
+  'Dades Obertes de Catalunya · RAISC',
+  'Idescat',
+]
+const allowedSourceNames = new Set([
+  ...rssFeeds.map((feed) => feed.name),
+  ...serviceSourceNames,
+])
 
 function selectFeedsForRun(nowMs) {
   const core = rssFeeds.filter((feed) => feed.core)
@@ -1109,7 +1149,7 @@ export const UNIVERSAL_NEG = new RegExp(
   'i',
 )
 
-function normalizeFeedItem(block, feed) {
+export function normalizeFeedItem(block, feed) {
   const title = decodeHtmlEntities(stripHtml(extractTag(block, 'title')))
   const linkTag = extractTag(block, 'link')
   const link = decodeHtmlEntities(linkTag || extractAtomLink(block))
@@ -1140,25 +1180,41 @@ function normalizeFeedItem(block, feed) {
   // Correcció per contingut: si el títol/resum tenen un senyal temàtic clar,
   // sobreescrivim la categoria heretada del feed (evita, p. ex., que un tema de
   // TV etiquetat com a Esports o una exposició de fotografia surtin mal ubicats).
-  const category = refineCategoryByContent(rawCategory, title, summarySource)
+  const editorialFormat = feed.editorialMode || 'constructive'
+  const isTrustedService = editorialFormat !== 'constructive'
+  const category = isTrustedService
+    ? rawCategory
+    : refineCategoryByContent(rawCategory, title, summarySource)
   if (looksLikeAdvertorial({ url: link, title, summary: summarySnippet })) return null
   const fullText = `${title} ${summarySource}`
   const fullTextLower = fullText.toLowerCase()
-  const { isPositive, isNegative } = passesEditorialFilter(fullText, feed.language)
-  if (isNegative) return null // clarament negativa (guerra, conflicte…): fora directament
-  // Bloc dur universal (multilingüe) per a categories que el model petit deixa
-  // passar: calor extrem/desastre climàtic i addicció a les pantalles.
-  if (UNIVERSAL_NEG.test(fullTextLower)) return null
+  let isPositive = false
+  if (!isTrustedService) {
+    const editorialResult = passesEditorialFilter(fullText, feed.language)
+    isPositive = editorialResult.isPositive
+    if (editorialResult.isNegative) return null
+    // Bloc dur universal (multilingüe) per a categories que el model petit
+    // deixa passar. No s'aplica als formats de verificació: el titular ha de
+    // poder citar precisament el rumor, conflicte o engany que desmenteix.
+    if (UNIVERSAL_NEG.test(fullTextLower)) return null
 
-  // Contingut POLÍTIC (maniobres de partit, eleccions, judicis, ultradreta…):
-  // gairebé mai és bona notícia i el model petit l'aprova per error massa sovint.
-  // El BLOQUEGEM en sec, com les negatives. Els feeds locals queden exempts (el
-  // plenari de Mataró sí que hi té cabuda).
-  const isPolitical =
-    !feed.lenient &&
-    (category === 'Política' || POLITICAL_MARKERS.test(fullTextLower))
-  if (isPolitical) return null
-  const editorialScore = isPositive || feed.lenient ? 1 : 0
+    // Contingut POLÍTIC tens: gairebé mai és una bona notícia. Els formats de
+    // verificació en queden exempts perquè comprovar el discurs polític és la
+    // seva funció editorial.
+    const isPolitical =
+      !feed.lenient &&
+      (category === 'Política' || POLITICAL_MARKERS.test(fullTextLower))
+    if (isPolitical) return null
+  }
+  const editorialScore = isTrustedService || isPositive || feed.lenient ? 1 : 0
+  const impactByFormat = {
+    verification:
+      'Aporta una comprovació documentada per separar els fets del soroll.',
+    agenda:
+      'Ofereix una activitat concreta que el lector pot aprofitar.',
+    opportunity:
+      'Converteix informació pública en una oportunitat accionable.',
+  }
 
   const story = {
     title,
@@ -1166,8 +1222,11 @@ function normalizeFeedItem(block, feed) {
     location: detectLocation(fullText.toLowerCase()),
     summary: summarySnippet,
     impact:
+      impactByFormat[editorialFormat] ||
       'El radar automàtic l’ha detectada com a notícia constructiva.',
     source: feed.name,
+    sourceTier: feed.sourceTier || 'B',
+    editorialFormat,
     language: feed.language,
     url: link,
     // La foto del mitjà (imageUrl) només s'ha fet servir amunt com a senyal de
@@ -1181,9 +1240,10 @@ function normalizeFeedItem(block, feed) {
     // editorialScore calculat a dalt: 0 = neutre/polític (només surt si la IA
     // l'aprova) · 1 = bo (paraula clau positiva o feed local).
     editorialScore,
-    // Font ja curada de bones notícies (Positive News, Good News Network…): la
-    // IA hi confia i no la veta (com el contingut Local).
-    curated: Boolean(feed.curated),
+    // Una font constructiva curada o un canal de servei de confiança no torna
+    // a passar pel porter de positivitat. Manté, igualment, el crèdit i
+    // l'enllaç a l'original.
+    curated: Boolean(feed.curated || isTrustedService),
     editorialVersion: liveEditorialVersion,
     publishedAt,
   }
@@ -1224,6 +1284,276 @@ async function collectFeedStories(feed) {
     return { stories, candidates }
   } catch (error) {
     console.warn(`[radar] Ha fallat el feed ${feed.name}`, error)
+    return { stories: [], candidates: 0 }
+  }
+}
+
+// --- Fonts de servei estructurades -----------------------------------------
+
+const agendaMataroFeedUrl =
+  'https://agenda.cultura.gencat.cat/content/agenda/ca/rss/resultats.html?' +
+  [
+  'comarcaMunicipiTagId=agenda:ubicacions/barcelona/maresme/mataro',
+  'ambitIds=agenda:ambits/arts-visuals',
+  'ambitIds=agenda:ambits/cinema',
+  'ambitIds=agenda:ambits/divulgacio',
+  'ambitIds=agenda:ambits/espectacles',
+  'ambitIds=agenda:ambits/gastronomia',
+  'ambitIds=agenda:ambits/llibres-i-lletres',
+  'ambitIds=agenda:ambits/musica',
+  'ambitIds=agenda:ambits/tradicional-i-popular',
+  'ambitIds=agenda:ambits/zz-altres-ambits',
+  ].join('&')
+
+const raiscApiUrl =
+  'https://analisi.transparenciacatalunya.cat/resource/khxn-nv6a.json'
+const idescatMataroApiUrl =
+  'https://api.idescat.cat/emex/v1/dades.json?id=081213'
+
+function serviceStory({
+  title,
+  category,
+  summary,
+  impact,
+  source,
+  url,
+  publishedAt,
+  editorialFormat,
+  expiresAt,
+  location = 'Catalunya',
+}) {
+  if (!title || !url || !publishedAt) return null
+  return {
+    title,
+    category,
+    location,
+    summary,
+    impact,
+    source,
+    sourceTier: 'A',
+    editorialFormat,
+    language: 'ca',
+    url,
+    imageUrl: storyImagePath(url, { title, category }),
+    imageAlt: `Il·lustració editorial per a ${title}.`,
+    imageCredit: 'El Bon Diari (il·lustració IA)',
+    imageAttributionUrl: '',
+    editorialScore: 1,
+    curated: true,
+    editorialVersion: liveEditorialVersion,
+    publishedAt,
+    ...(expiresAt ? { expiresAt } : {}),
+  }
+}
+
+export function normalizeAgendaItem(block, publishedAt = new Date().toISOString()) {
+  const title = decodeHtmlEntities(stripHtml(extractTag(block, 'title')))
+  const url = decodeHtmlEntities(extractTag(block, 'link')).replace(
+    'agenda.cultura.gencat.cat:443',
+    'agenda.cultura.gencat.cat',
+  )
+  const description = decodeHtmlEntities(
+    stripHtml(extractTag(block, 'description')),
+  )
+  return serviceStory({
+    title,
+    category: 'Agenda',
+    summary: description.slice(0, 320),
+    impact:
+      'Afegeix una proposta cultural de proximitat a l’agenda del lector.',
+    source: 'Agenda Cultural',
+    url,
+    publishedAt,
+    editorialFormat: 'agenda',
+    location: 'Mataró, Maresme',
+  })
+}
+
+async function collectAgendaStories() {
+  try {
+    const response = await fetch(agendaMataroFeedUrl, {
+      headers: {
+        accept: 'application/rss+xml, application/xml, text/xml',
+        'user-agent': 'El Bon Diari/1.0 (+https://bondiari.com)',
+      },
+    })
+    if (!response.ok) return { stories: [], candidates: 0 }
+    const xml = await response.text()
+    if (xml.length > 250_000 || !/<rss[\s>]/i.test(xml)) {
+      console.warn(`[servei] Agenda ha retornat una resposta invàlida (${xml.length} bytes)`)
+      return { stories: [], candidates: 0 }
+    }
+    const itemRegex = /<item\b[^>]*>([\s\S]*?)<\/item>/gi
+    const stories = []
+    let candidates = 0
+    let match
+    const snapshotAt = new Date().toISOString()
+    while ((match = itemRegex.exec(xml)) !== null && stories.length < 6) {
+      candidates += 1
+      const story = normalizeAgendaItem(match[1], snapshotAt)
+      if (story) stories.push(story)
+    }
+    return { stories, candidates }
+  } catch (error) {
+    console.warn('[servei] Ha fallat l’Agenda Cultural', error)
+    return { stories: [], candidates: 0 }
+  }
+}
+
+function formatEuros(value) {
+  const amount = Number(value)
+  if (!Number.isFinite(amount)) return ''
+  return new Intl.NumberFormat('ca-ES', {
+    style: 'currency',
+    currency: 'EUR',
+    maximumFractionDigits: 0,
+  }).format(amount)
+}
+
+export function normalizeRaiscOpportunity(record) {
+  const title =
+    record.objecte_de_la_convocat_ria ||
+    record.t_tol_convocat_ria_catal ||
+    ''
+  const url = record.seu_electr_nica || record.url_diari_oficial || ''
+  const deadline = record.data_fi_termini_presentaci_sol_licitud || ''
+  const parts = [
+    record.tipus_de_beneficiaris
+      ? `Destinataris: ${record.tipus_de_beneficiaris}`
+      : '',
+    deadline
+      ? `Termini: ${new Date(deadline).toLocaleDateString('ca-ES')}`
+      : '',
+    record.import_total_convocat_ria
+      ? `Dotació: ${formatEuros(record.import_total_convocat_ria)}`
+      : '',
+  ].filter(Boolean)
+  return serviceStory({
+    title,
+    category: 'Oportunitats',
+    summary: parts.join(' · '),
+    impact:
+      'Resumeix una convocatòria oberta amb termini, destinataris i document oficial.',
+    source: 'Dades Obertes de Catalunya · RAISC',
+    url,
+    publishedAt:
+      record.data_diari_oficial || new Date().toISOString(),
+    editorialFormat: 'opportunity',
+    expiresAt: deadline,
+    location: record.regio_apli || 'Catalunya',
+  })
+}
+
+async function collectRaiscOpportunities() {
+  try {
+    const today = new Date()
+    const horizon = new Date(today.getTime() + 45 * 24 * 60 * 60 * 1000)
+    const start = `${today.toISOString().slice(0, 10)}T00:00:00.000`
+    const end = `${horizon.toISOString().slice(0, 10)}T23:59:59.999`
+    const fields = [
+      'codi_raisc',
+      't_tol_convocat_ria_catal',
+      'entitat_oo_aa_o_departament_1',
+      'data_diari_oficial',
+      'url_diari_oficial',
+      'tipus_de_beneficiaris',
+      'import_total_convocat_ria',
+      'data_fi_termini_presentaci_sol_licitud',
+      'seu_electr_nica',
+      'objecte_de_la_convocat_ria',
+      'finalitat_publica',
+      'regio_apli',
+    ].join(',')
+    const query = new URLSearchParams({
+      $select: fields,
+      $where:
+        `data_fi_termini_presentaci_sol_licitud >= '${start}' ` +
+        `AND data_fi_termini_presentaci_sol_licitud <= '${end}'`,
+      $order: 'data_fi_termini_presentaci_sol_licitud ASC',
+      $limit: '12',
+    })
+    const response = await fetch(`${raiscApiUrl}?${query}`, {
+      headers: {
+        accept: 'application/json',
+        'user-agent': 'El Bon Diari/1.0 (+https://bondiari.com)',
+      },
+    })
+    if (!response.ok) return { stories: [], candidates: 0 }
+    const records = await response.json()
+    if (!Array.isArray(records)) return { stories: [], candidates: 0 }
+    return {
+      stories: records.map(normalizeRaiscOpportunity).filter(Boolean),
+      candidates: records.length,
+    }
+  } catch (error) {
+    console.warn('[servei] Ha fallat el registre RAISC', error)
+    return { stories: [], candidates: 0 }
+  }
+}
+
+function collectObjects(value, predicate, result = []) {
+  if (!value || typeof value !== 'object') return result
+  if (predicate(value)) result.push(value)
+  for (const child of Object.values(value)) {
+    collectObjects(child, predicate, result)
+  }
+  return result
+}
+
+export function normalizeIdescatUpdate(table) {
+  const rows = asArray(table?.ff?.f)
+    .filter((row) => row?.c && row?.v)
+    .slice(0, 4)
+  if (!table?.c || !table?.updated || !table?.l || rows.length === 0) {
+    return null
+  }
+  const facts = rows.map((row) => {
+    const localValue = String(row.v).split(',')[0]
+    return `${row.c}: ${localValue}${row.u ? ` ${row.u}` : ''}`
+  })
+  const title = `Idescat actualitza ${table.c} a Mataró`
+  const versionUrl = `${table.l}#actualitzacio-${table.updated.slice(0, 10)}`
+  return serviceStory({
+    title,
+    category: 'Dades',
+    summary: `${table.c}${table.r ? ` (${table.r})` : ''}: ${facts.join(' · ')}`,
+    impact:
+      'Actualitza un indicador públic de Mataró amb període, xifra i font originals.',
+    source: 'Idescat',
+    url: versionUrl,
+    publishedAt: table.updated,
+    editorialFormat: 'data',
+    location: 'Mataró, Maresme',
+  })
+}
+
+async function collectIdescatUpdates() {
+  try {
+    const response = await fetch(idescatMataroApiUrl, {
+      headers: {
+        accept: 'application/json',
+        'user-agent': 'El Bon Diari/1.0 (+https://bondiari.com)',
+      },
+    })
+    if (!response.ok) return { stories: [], candidates: 0 }
+    const payload = await response.json()
+    const cutoff = Date.now() - maxLiveStoryAgeMs
+    const tables = collectObjects(
+      payload,
+      (value) =>
+        /^t\d+$/.test(value?.id || '') &&
+        value.updated &&
+        new Date(value.updated).getTime() >= cutoff,
+    ).sort(
+      (left, right) =>
+        new Date(right.updated).getTime() - new Date(left.updated).getTime(),
+    )
+    return {
+      stories: tables.slice(0, 4).map(normalizeIdescatUpdate).filter(Boolean),
+      candidates: tables.length,
+    }
+  } catch (error) {
+    console.warn('[servei] Ha fallat Idescat', error)
     return { stories: [], candidates: 0 }
   }
 }
@@ -1400,9 +1730,14 @@ export async function collectLivePositiveNews(env) {
   // Només la finestra de fonts d'aquest refresc (core + rotatòries), per no
   // petar el límit de subpeticions. La rotació avança sola amb el temps.
   const feedsThisRun = selectFeedsForRun(Date.now())
-  const [sectionResults, feedResults] = await Promise.all([
+  const [sectionResults, feedResults, serviceResults] = await Promise.all([
     Promise.all(sections.map(collectSectionStories)),
     Promise.all(feedsThisRun.map(collectFeedStories)),
+    Promise.all([
+      collectAgendaStories(),
+      collectRaiscOpportunities(),
+      collectIdescatUpdates(),
+    ]),
   ])
 
   const stories = []
@@ -1412,6 +1747,10 @@ export async function collectLivePositiveNews(env) {
     reviewedCount += result.candidates
   }
   for (const result of feedResults) {
+    stories.push(...result.stories)
+    reviewedCount += result.candidates
+  }
+  for (const result of serviceResults) {
     stories.push(...result.stories)
     reviewedCount += result.candidates
   }
@@ -1427,10 +1766,7 @@ export async function collectLivePositiveNews(env) {
   // paraula clau primer), perquè la IA gasti el pressupost de crides en les més
   // probables de sortir.
   const recents = [...uniqueStories.values()]
-    .filter(
-      (story) =>
-        Date.now() - new Date(story.publishedAt).getTime() <= maxLiveStoryAgeMs,
-    )
+    .filter((story) => isStoryWithinLiveWindow(story))
     .sort((left, right) => {
       // Un DIARI lidera amb el dia d'avui. Ordenem per DIA (el més nou primer)
       // i, dins del mateix dia, per com de prometedora és (paraula clau primer),
@@ -1559,7 +1895,8 @@ export async function readEditorialStats(kv) {
 // Seccions editorials de poc volum que abans es quedaven seques perquè les
 // categories grans (Espanya, Societat…) s'enduien totes les places.
 const guaranteedCategories = [
-  'Local', 'Cultura', 'Tecnologia', 'Ciència', 'Salut', 'Medi ambient', 'Educació',
+  'Local', 'Verificació', 'Dades', 'Oportunitats', 'Agenda', 'Cultura',
+  'Tecnologia', 'Ciència', 'Salut', 'Medi ambient', 'Educació',
 ]
 
 // Garanteix que cada secció de la llista, si té alguna peça disponible al
@@ -1636,12 +1973,14 @@ export async function getLiveNewsPayload(kv, { force = false, env } = {}) {
     .filter((s) => !freshUrlSet.has(s.url))
     // CADUCITAT: les notícies surten del lot quan passen de la finestra (4 dies),
     // perquè no s'arrosseguin eternament i fossilitzin la portada.
-    .filter(
-      (s) => Date.now() - new Date(s.publishedAt).getTime() <= maxLiveStoryAgeMs,
-    )
+    .filter((s) => isStoryWithinLiveWindow(s))
     // Revalidem contra el filtre editorial ACTUAL (si l'hem endurit, les velles
     // que ara no passen cauen aquí en lloc d'arrossegar-se).
-    .filter((s) => passesEditorialFilter(`${s.title} ${s.summary || ''}`, s.language).passes)
+    .filter(
+      (s) =>
+        (s.editorialFormat && s.editorialFormat !== 'constructive') ||
+        passesEditorialFilter(`${s.title} ${s.summary || ''}`, s.language).passes,
+    )
     // Descartem l'arrossegament de fonts que ja no són a la llista (p. ex. mitjans
     // de pagament retirats): així desapareixen a la primera, sense esperar 4 dies.
     .filter((s) => allowedSourceNames.has(s.source))
@@ -1700,10 +2039,11 @@ export async function getLiveNewsPayload(kv, { force = false, env } = {}) {
 
   try {
     const payload = await setCachedPayload(kv, publishedStories)
-    // Persistim cada peça publicada sota story:<id> (30 dies) perquè la seva
-    // pàgina de detall es pugui resoldre encara que surti de la portada.
+    // Persistim sota story:<id> només les peces que entren per primer cop.
+    // Les peces arrossegades ja tenen aquesta còpia i reescriure fins a 50 claus
+    // a cada refresc consumia quota de KV sense canviar-ne el contingut.
     await Promise.all(
-      publishedStories.map((story) =>
+      storiesRequiringDetailPersistence(publishedStories, shownFreshUrls).map((story) =>
         kv.put(`story:${feedStoryId(story.url)}`, JSON.stringify(story), {
           expirationTtl: storyDetailTtlSeconds,
         }),
@@ -1748,14 +2088,25 @@ export async function getLiveNewsPayload(kv, { force = false, env } = {}) {
 // només els titulars constructius. Es cacheja pocs minuts a KV per no re-scrapejar
 // (ni re-jutjar) a cada visita.
 const tickerCacheKey = 'live-ticker'
-// Re-escaneig de fonts com a molt cada 90 s (prou "temps real" sense martellejar
-// les fonts: gràcies a la cache KV, cada finestra només fa UN scrape encara que
-// hi hagi molts visitants). El client sondeja cada 2 min.
-const tickerCacheTtlMs = 90 * 1000
-const tickerCacheTtlSeconds = 90
+// Un ticker constructiu no necessita reescriure KV cada 90 segons. Quinze minuts
+// el manté actual i redueix el sostre teòric de 960 a 96 escriptures/dia. La clau
+// es conserva una hora perquè continuï disponible com a fallback si fallen fonts
+// o IA; la frescor es decideix amb updatedAt.
+const tickerFreshnessMs = 15 * 60 * 1000
+const tickerStorageTtlSeconds = 60 * 60
 // Un grapat de fonts catalanes GRATUÏTES i ràpides (poques subpeticions).
 const tickerFeedNames = ['Vilaweb', 'Nació Digital', 'Betevé', 'Capgròs', 'El Món', 'Crític']
 const tickerLimit = 12
+
+export function storiesRequiringDetailPersistence(publishedStories, shownFreshUrls) {
+  const freshUrls = new Set(shownFreshUrls)
+  return publishedStories.filter((story) => freshUrls.has(story.url))
+}
+
+export function isTickerCacheFresh(cached, now = Date.now()) {
+  const updatedAt = cached?.updatedAt ? new Date(cached.updatedAt).getTime() : 0
+  return Boolean(updatedAt && now - updatedAt < tickerFreshnessMs)
+}
 
 export async function getLiveTicker(env, { force = false } = {}) {
   const kv = env?.LIVE_NEWS_KV
@@ -1763,10 +2114,7 @@ export async function getLiveTicker(env, { force = false } = {}) {
   if (kv && !force) {
     try {
       const cached = await kv.get(tickerCacheKey, 'json')
-      if (
-        cached?.updatedAt &&
-        Date.now() - new Date(cached.updatedAt).getTime() < tickerCacheTtlMs
-      ) {
+      if (isTickerCacheFresh(cached)) {
         return { ...cached, cache: 'hit' }
       }
     } catch {
@@ -1824,7 +2172,7 @@ export async function getLiveTicker(env, { force = false } = {}) {
   if (kv && payload.items.length) {
     try {
       await kv.put(tickerCacheKey, JSON.stringify(payload), {
-        expirationTtl: tickerCacheTtlSeconds,
+        expirationTtl: tickerStorageTtlSeconds,
       })
     } catch {
       // Si no es pot desar, igualment retornem el resultat.

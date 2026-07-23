@@ -2495,16 +2495,28 @@
   margin: 0;
   padding: 0;
   list-style: none;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  display: grid;
+  gap: 8px;
 }
 .sources-manifest__group li {
-  font-size: 0.8rem;
-  font-weight: 700;
   border: 1px solid #000;
-  padding: 3px 8px;
+  padding: 7px 9px;
   background: #F4F1EA;
+}
+.sources-manifest__group a {
+  color: inherit;
+  font-size: 0.84rem;
+  font-weight: 800;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+.sources-manifest__meta {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted, #666);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
 }
 .sources-manifest__note {
   margin: 0;

@@ -22,13 +22,13 @@ const distDir = resolve(rootDir, 'dist')
 const baseUrl = 'https://bondiari.com'
 const siteName = 'El Bon Diari'
 const defaultDescription =
-  'Diari constructiu en català amb bones notícies verificables, organitzades per proximitat i secció.'
+  'Periodisme constructiu en català: solucions, verificacions i informació útil amb fonts transparents.'
 const defaultImage = `${baseUrl}/og-image.png`
 
 const staticPages = [
   {
     path: '/',
-    title: `${siteName} | Bones notícies`,
+    title: `${siteName} | Periodisme constructiu`,
     description: defaultDescription,
     priority: '1.0',
     changefreq: 'daily',
@@ -45,7 +45,7 @@ const staticPages = [
     path: '/hemeroteca',
     title: `Hemeroteca | ${siteName}`,
     description:
-      "La Hemeroteca d'El Bon Diari conserva les bones notícies que ja han passat per portada.",
+      "La Hemeroteca d'El Bon Diari conserva les peces que ja han passat per portada.",
     priority: '0.7',
     changefreq: 'daily',
   },

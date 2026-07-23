@@ -19,6 +19,10 @@ export const CANONICAL_CATEGORIES = [
   'Espanya',
   'Catalunya',
   'Educació',
+  'Verificació',
+  'Agenda',
+  'Oportunitats',
+  'Dades',
   'Barcelona',
   'Opinió',
   'Actualitat',
@@ -95,6 +99,16 @@ const CATEGORY_MAP = {
   'educació': 'Educació', 'educación': 'Educació', 'education': 'Educació',
   'éducation': 'Educació', 'universitats': 'Educació', 'universidades': 'Educació',
   'estudiants': 'Educació', 'students': 'Educació', 'selectivitat': 'Educació',
+
+  // Formats de servei editorial
+  'verificació': 'Verificació', 'verificacion': 'Verificació',
+  'verificación': 'Verificació', 'fact-check': 'Verificació',
+  'fact check': 'Verificació',
+  'agenda': 'Agenda', 'activitats': 'Agenda', 'events': 'Agenda',
+  'oportunitats': 'Oportunitats', 'oportunidades': 'Oportunitats',
+  'ajuts': 'Oportunitats', 'subvencions': 'Oportunitats',
+  'dades': 'Dades', 'estadística': 'Dades', 'estadistiques': 'Dades',
+  'estadístiques': 'Dades', 'data': 'Dades',
 
   // Barcelona (Betevé)
   'barcelona': 'Barcelona', 'bcn': 'Barcelona',

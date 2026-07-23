@@ -74,7 +74,7 @@ export default function PushOptIn() {
     <div className="push-optin">
       {state === 'subscribed' ? (
         <p className="push-optin__ok">
-          Fet. Rebràs la bona notícia del dia com a avís al teu dispositiu.
+          Fet. Rebràs la peça destacada del dia com a avís al teu dispositiu.
         </p>
       ) : state === 'denied' ? (
         <p className="push-optin__note">
@@ -88,7 +88,7 @@ export default function PushOptIn() {
             onClick={subscribe}
             disabled={state === 'working'}
           >
-            {state === 'working' ? 'Activant…' : 'Rebre la bona notícia del dia al mòbil'}
+            {state === 'working' ? 'Activant…' : 'Rebre la peça destacada del dia al mòbil'}
           </button>
           {state === 'error' ? (
             <p className="push-optin__note">No s'ha pogut activar. Torna-ho a provar.</p>

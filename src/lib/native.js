@@ -21,7 +21,7 @@ export async function shareContent({ title, text, url }) {
         title,
         text,
         url,
-        dialogTitle: 'Comparteix aquesta bona notícia',
+        dialogTitle: 'Comparteix aquesta peça',
       })
       return true
     } catch {

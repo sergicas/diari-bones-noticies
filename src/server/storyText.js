@@ -22,13 +22,13 @@ const BATCH_SIZE = 8
 const MAX_BATCHES = 5 // sostre: fins a 40 peces noves per refresc
 
 const REWRITE_SYSTEM = [
-  "Ets l'editor d'El Bon Diari, un diari de bones notícies.",
-  'Et passo notícies numerades; cada número du la seva llengua entre claudàtors, el',
+  "Ets l'editor d'El Bon Diari, un mitjà de periodisme constructiu i de servei.",
+  'Et passo peces numerades; cada número du la llengua i el tipus entre claudàtors, el',
   'titular original i, sota, una línia "resum:" amb els fets de la font (si n\'hi ha).',
   "Per a CADA número dona'm QUATRE línies EXACTAMENT amb aquest format:",
   'N titular: <titular reescrit>',
   'N cos: <cos reescrit>',
-  'N impacte: <per què és una bona notícia>',
+  'N impacte: <per què és útil, constructiva o verificadora>',
   'N imatge: <escena>',
   'TITULAR: reescriu-lo amb paraules TEVES i originals, fidel als fets (mantén qui',
   'i què, sense inventar xifres, dades ni noms), to serè. Ha de ser una frase',
@@ -38,7 +38,11 @@ const REWRITE_SYSTEM = [
   "dels fets del titular i del resum donat. NO inventis xifres, dades, cites, llocs",
   'ni noms que no apareguin al material; si hi ha poca informació, sigues sobri i',
   'general en lloc d\'inventar. Mateixa llengua que el titular. Sense cometes.',
-  'IMPACTE: una sola frase breu que expliqui per què és constructiva o què millora.',
+  'Si el tipus és VERIFICACIÓ, conserva amb precisió la negació i no presentis',
+  'el rumor desmentit com un fet. Si és AGENDA o OPORTUNITAT, prioritza què pot',
+  'fer el lector i no ho converteixis artificialment en una bona notícia.',
+  'Si és DADES, conserva exactament les xifres, unitats i períodes de referència.',
+  'IMPACTE: una sola frase breu que expliqui què permet entendre, comprovar o fer.',
   'Mateixa llengua, sense cometes.',
   'IMATGE: una escena visual concreta EN ANGLÈS per dibuixar la notícia; descriu',
   'objectes i entorn (exemple: "a modern tram on a tree-lined city avenue at',
@@ -65,6 +69,10 @@ const GENERIC_BY_LANG = {
 }
 
 function genericTitle(story) {
+  if (story.editorialFormat === 'verification') return 'Una verificació pendent de resum'
+  if (story.editorialFormat === 'agenda') return 'Una proposta de l’agenda'
+  if (story.editorialFormat === 'opportunity') return 'Una oportunitat útil'
+  if (story.editorialFormat === 'data') return 'Una dada pública actualitzada'
   const base = GENERIC_BY_LANG[story.language] || GENERIC_BY_LANG.ca
   return story.category ? `${base} · ${story.category}` : base
 }
@@ -102,17 +110,25 @@ function cleanProse(raw, max) {
 }
 
 async function aiOwnContentBatch(env, items) {
+  const typeLabels = {
+    constructive: 'CONSTRUCTIVA',
+    verification: 'VERIFICACIÓ',
+    agenda: 'AGENDA',
+    opportunity: 'OPORTUNITAT',
+    data: 'DADES',
+  }
   const list = items
     .map((it, i) => {
       const lang = LANG_NAMES[it.language] || 'català'
+      const type = typeLabels[it.editorialFormat] || typeLabels.constructive
       const title = String(it.title || '').replace(/\s+/g, ' ').slice(0, 160)
       // El resum de la font s'aporta NOMÉS com a context de fets perquè el cos
       // sigui verídic; el model l'ha de reescriure amb paraules pròpies (no es
       // publica mai copiat).
       const summary = String(it.summary || '').replace(/\s+/g, ' ').slice(0, 320)
       return summary
-        ? `${i + 1}. [${lang}] ${title}\n   resum: ${summary}`
-        : `${i + 1}. [${lang}] ${title}`
+        ? `${i + 1}. [${lang}; ${type}] ${title}\n   resum: ${summary}`
+        : `${i + 1}. [${lang}; ${type}] ${title}`
     })
     .join('\n')
   const out = await env.AI.run(AI_MODEL, {
@@ -184,6 +200,7 @@ export async function applyOwnContent(stories, env) {
           group.map((e) => ({
             title: e.story.title,
             language: e.story.language,
+            editorialFormat: e.story.editorialFormat,
             summary: e.story.summary,
           })),
         )

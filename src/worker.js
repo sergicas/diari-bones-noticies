@@ -291,7 +291,7 @@ export default {
             const top = (p.stories || [])[0]
             if (top) {
               const notif = {
-                title: 'La bona notícia del dia',
+                title: 'La peça destacada del dia',
                 body: top.title,
                 url: `https://bondiari.com/noticia/${feedStoryId(top.url)}`,
               }

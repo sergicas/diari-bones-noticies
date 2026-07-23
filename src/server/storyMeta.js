@@ -51,7 +51,7 @@ function buildMeta(story) {
   const description =
     (story.summary && story.summary.trim()) ||
     (story.impact && story.impact.trim()) ||
-    `Una bona notícia verificable a ${siteName}.`
+    `Una peça constructiva i verificable a ${siteName}.`
   const rawImage = (story.imageUrl && story.imageUrl.trim()) || defaultImage
   // La il·lustració es serveix des d'una ruta pròpia i relativa
   // (/api/story-image/...). Els robots de xarxes necessiten URL absoluta.

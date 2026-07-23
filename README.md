@@ -1,7 +1,8 @@
 # El Bon Diari
 
-Diari constructiu en català amb portada React, radar de notícies, hemeroteca,
-butlletí, notificacions web/iOS i backend a Cloudflare Workers.
+Mitjà constructiu en català amb portada React, radar de notícies, verificacions,
+dades públiques, oportunitats, agenda local, hemeroteca, butlletí,
+notificacions web/iOS i backend a Cloudflare Workers.
 
 ## Stack
 

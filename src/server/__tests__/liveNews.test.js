@@ -11,6 +11,13 @@ import {
   applyDiversityCap,
   UNIVERSAL_NEG,
   POLITICAL_MARKERS,
+  normalizeFeedItem,
+  normalizeAgendaItem,
+  normalizeRaiscOpportunity,
+  normalizeIdescatUpdate,
+  isStoryWithinLiveWindow,
+  isTickerCacheFresh,
+  storiesRequiringDetailPersistence,
 } from '../liveNews.js'
 import {
   normalizeCategory,
@@ -38,6 +45,28 @@ const SEO_STORY = {
   body: ['Primer paràgraf.', 'Segon paràgraf.'],
   language: 'ca',
 }
+
+describe('quota KV — escriptures acotades', () => {
+  it('manté el ticker fresc durant quinze minuts', () => {
+    const now = Date.parse('2026-07-23T08:00:00Z')
+    expect(
+      isTickerCacheFresh({ updatedAt: '2026-07-23T07:46:00Z' }, now),
+    ).toBe(true)
+    expect(
+      isTickerCacheFresh({ updatedAt: '2026-07-23T07:44:59Z' }, now),
+    ).toBe(false)
+  })
+
+  it('només persisteix el detall de les peces noves', () => {
+    const stories = [
+      { url: 'https://bondiari.com/nova' },
+      { url: 'https://bondiari.com/arrossegada' },
+    ]
+    expect(
+      storiesRequiringDetailPersistence(stories, ['https://bondiari.com/nova']),
+    ).toEqual([{ url: 'https://bondiari.com/nova' }])
+  })
+})
 
 describe('SEO — JSON-LD NewsArticle', () => {
   it('genera un NewsArticle vàlid amb els camps clau', () => {
@@ -190,6 +219,120 @@ describe('POLITICAL_MARKERS — maniobra de partit', () => {
   it('no marca com a política una bona notícia de salut sense baralla', () => {
     expect(
       POLITICAL_MARKERS.test('comença la vacunació gratuïta contra la grip al barri'),
+    ).toBe(false)
+  })
+})
+
+describe('formats editorials de servei', () => {
+  const verificationItem = `
+    <title><![CDATA[No, aquesta imatge de Trump durant la guerra no és real]]></title>
+    <link>https://www.verificat.cat/comprovacio-exemple/</link>
+    <description><![CDATA[La fotografia viral ha estat generada amb intel·ligència artificial.]]></description>
+    <pubDate>Thu, 23 Jul 2026 08:00:00 +0000</pubDate>
+    <media:thumbnail url="https://www.verificat.cat/imatge.jpg" />
+  `
+
+  it('admet una verificació fiable encara que citi el rumor que desmenteix', () => {
+    const story = normalizeFeedItem(verificationItem, {
+      name: 'Verificat',
+      language: 'ca',
+      defaultCategory: 'Verificació',
+      forceCategory: true,
+      editorialMode: 'verification',
+      sourceTier: 'B',
+    })
+
+    expect(story).toMatchObject({
+      category: 'Verificació',
+      editorialFormat: 'verification',
+      source: 'Verificat',
+      sourceTier: 'B',
+      curated: true,
+    })
+  })
+
+  it('manté el mateix contingut fora del radar positiu si no és una verificació', () => {
+    const story = normalizeFeedItem(verificationItem, {
+      name: 'Mitjà generalista',
+      language: 'ca',
+      defaultCategory: 'Actualitat',
+    })
+
+    expect(story).toBeNull()
+  })
+
+  it('normalitza l’Agenda Cultural com a proposta local accionable', () => {
+    const story = normalizeAgendaItem(
+      `
+        <title>Les Santes de Mataró</title>
+        <link>https://agenda.cultura.gencat.cat:443/activitat</link>
+        <description>Programa de la festa major del 25 al 29 de juliol.</description>
+      `,
+      '2026-07-23T08:00:00.000Z',
+    )
+
+    expect(story).toMatchObject({
+      category: 'Agenda',
+      editorialFormat: 'agenda',
+      location: 'Mataró, Maresme',
+      sourceTier: 'A',
+    })
+    expect(story.url).not.toContain(':443')
+  })
+
+  it('converteix una convocatòria RAISC oberta en una oportunitat', () => {
+    const story = normalizeRaiscOpportunity({
+      objecte_de_la_convocat_ria: 'Ajuts per a projectes culturals',
+      url_diari_oficial: 'https://dogc.gencat.cat/ajut',
+      data_diari_oficial: '2026-07-20T00:00:00.000',
+      data_fi_termini_presentaci_sol_licitud: '2026-07-31T00:00:00.000',
+      tipus_de_beneficiaris: 'Entitats sense ànim de lucre',
+      import_total_convocat_ria: '400000',
+      regio_apli: 'CATALUNYA',
+    })
+
+    expect(story).toMatchObject({
+      category: 'Oportunitats',
+      editorialFormat: 'opportunity',
+      expiresAt: '2026-07-31T00:00:00.000',
+      source: 'Dades Obertes de Catalunya · RAISC',
+    })
+    expect(story.summary).toContain('400.000')
+  })
+
+  it('converteix una actualització d’Idescat en una peça d’El marcador', () => {
+    const story = normalizeIdescatUpdate({
+      id: 't12',
+      c: "Construcció d'habitatges",
+      r: '2025',
+      updated: '2026-07-20T10:00:00+00:00',
+      l: 'https://www.idescat.cat/pub/?id=habit',
+      ff: {
+        f: [
+          { c: 'Habitatges protegits iniciats', v: '34,188,3128' },
+          { c: 'Habitatges iniciats', v: '187,840,15589' },
+        ],
+      },
+    })
+
+    expect(story).toMatchObject({
+      category: 'Dades',
+      editorialFormat: 'data',
+      source: 'Idescat',
+    })
+    expect(story.summary).toContain('Habitatges iniciats: 187')
+  })
+
+  it('manté una oportunitat a portada fins al final del dia del termini', () => {
+    const story = {
+      publishedAt: '2026-07-01T00:00:00.000Z',
+      expiresAt: '2026-07-23T00:00:00.000Z',
+    }
+    expect(
+      isStoryWithinLiveWindow(story, Date.parse('2026-07-23T20:00:00.000Z')),
+    ).toBe(true)
+    expect(
+      isStoryWithinLiveWindow(story, Date.parse('2026-07-24T00:00:00.000Z')),
     ).toBe(false)
   })
 })

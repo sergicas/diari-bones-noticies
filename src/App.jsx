@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { flushSync } from 'react-dom'
 import './App.css'
-import { seedArticles } from './data/articles'
 import { fetchLivePositiveNewsPayload, fetchLiveTicker } from './api/rssFeed'
 import { LIVE_EDITORIAL_VERSION } from './lib/editorial-version.js'
 import { feedStoryId } from './lib/story-id.js'
@@ -25,7 +24,7 @@ import {
 const siteName = 'El Bon Diari'
 const siteUrl = 'https://bondiari.com'
 const defaultDescription =
-  "El diari que només publica bones notícies verificables, útils i amb impacte real."
+  "Periodisme constructiu en català: solucions, verificacions i informació útil amb fonts transparents."
 const refreshStorageKey = 'bon-diari-last-refresh-at-v4'
 const nextRefreshStorageKey = 'bon-diari-next-refresh-at-v4'
 const defaultStoryImage = DEFAULT_STORY_IMAGE
@@ -218,6 +217,38 @@ const editorialSections = [
     keywords: ['mataró', 'maresme', 'argentona', 'arenys', 'premià', 'vilassar', 'cabrera de mar', 'masnou', 'canet de mar', 'calella', 'pineda de mar', 'malgrat de mar', 'tordera', 'llavaneres', 'alella', 'montgat'],
   },
   {
+    id: 'verificacio',
+    label: 'Ho comprovem',
+    description:
+      'Rumors i afirmacions contrastats amb metodologia i fonts visibles.',
+    categories: ['Verificació'],
+    keywords: ['verificació', 'verificat', 'desmentim', 'comprovem'],
+  },
+  {
+    id: 'marcador',
+    label: 'El marcador',
+    description:
+      'Indicadors públics explicats amb referència temporal i font original.',
+    categories: ['Dades'],
+    keywords: ['idescat', 'estadística', 'indicador', 'dades'],
+  },
+  {
+    id: 'et-pot-servir',
+    label: 'Et pot servir',
+    description:
+      'Ajuts i convocatòries obertes amb termini, destinataris i enllaç oficial.',
+    categories: ['Oportunitats'],
+    keywords: ['ajut', 'subvenció', 'convocatòria', 'termini'],
+  },
+  {
+    id: 'agenda',
+    label: 'Agenda',
+    description:
+      'Activitats culturals de proximitat seleccionades des de la font oficial.',
+    categories: ['Agenda'],
+    keywords: ['agenda', 'activitat', 'exposició', 'concert'],
+  },
+  {
     id: 'politica',
     label: 'Política',
     description:
@@ -322,7 +353,7 @@ const editorialSections = [
     id: 'internacional',
     label: 'Internacional',
     description:
-      'Acords, processos i bones notícies de fora que també ens afecten.',
+      'Acords, processos i respostes de fora que també ens afecten.',
     categories: ['Internacional', 'Món', 'Europa'],
     keywords: ['onu', 'unió europea', 'internacional'],
   },
@@ -550,17 +581,26 @@ function normalizeStory(story) {
   }
 }
 
-const validSeedArticles = seedArticles.filter((story) => {
-  if (hasOriginalPhoto(story)) return true
-  if (typeof console !== 'undefined') {
-    const kind = classifyImage(story?.imageUrl)
-    console.warn(
-      `[bondiari] Article editorial «${story.id || story.title}» descartat: imatge ${kind} ` +
-        `(${story?.imageUrl || 'sense URL'}). Cal una fotografia original de la font.`,
-    )
-  }
-  return false
-})
+function validateSeedArticles(seedArticles) {
+  return seedArticles.filter((story) => {
+    if (hasOriginalPhoto(story)) return true
+    if (typeof console !== 'undefined') {
+      const kind = classifyImage(story?.imageUrl)
+      console.warn(
+        `[bondiari] Article editorial «${story.id || story.title}» descartat: imatge ${kind} ` +
+          `(${story?.imageUrl || 'sense URL'}). Cal una fotografia original de la font.`,
+      )
+    }
+    return false
+  })
+}
+
+// El catàleg editorial pesa més que tota la resta del client. El carreguem en
+// un chunk separat perquè la capçalera i l'esquelet del diari es puguin pintar
+// sense haver de descarregar i analitzar abans totes les peces d'hemeroteca.
+const seedArticlesPromise = import('./data/articles.js').then(({ seedArticles }) =>
+  validateSeedArticles(seedArticles),
+)
 
 function loadStoredTimestamp(key) {
   if (typeof window === 'undefined') {
@@ -752,7 +792,19 @@ function getImageLink(story, fallbackLink) {
   return fallbackLink.href
 }
 
-function getOriginLabel(origin) {
+function getOriginLabel(origin, editorialFormat) {
+  if (editorialFormat === 'verification') {
+    return 'Verificació'
+  }
+  if (editorialFormat === 'agenda') {
+    return 'Agenda útil'
+  }
+  if (editorialFormat === 'opportunity') {
+    return 'Et pot servir'
+  }
+  if (editorialFormat === 'data') {
+    return 'El marcador'
+  }
   if (origin === 'feed') {
     return 'Radar en viu'
   }
@@ -760,7 +812,19 @@ function getOriginLabel(origin) {
   return 'Redacció'
 }
 
-function getOriginBadge(origin) {
+function getOriginBadge(origin, editorialFormat) {
+  if (editorialFormat === 'verification') {
+    return 'Verificació'
+  }
+  if (editorialFormat === 'agenda') {
+    return 'Agenda útil'
+  }
+  if (editorialFormat === 'opportunity') {
+    return 'Et pot servir'
+  }
+  if (editorialFormat === 'data') {
+    return 'El marcador'
+  }
   if (origin === 'feed') {
     return 'Radar en viu'
   }
@@ -793,6 +857,12 @@ function createFeedStory(story) {
   const safeImpact = (story.impact || '').trim()
   const safeImageUrl = (story.imageUrl || '').trim()
   const safeUrl = (story.url || '').trim()
+  const kickerByFormat = {
+    verification: 'Ho hem comprovat',
+    agenda: 'Agenda útil',
+    opportunity: 'Et pot servir',
+    data: 'El marcador',
+  }
 
   if (!hasOriginalPhoto({ imageUrl: safeImageUrl })) {
     return null
@@ -819,7 +889,9 @@ function createFeedStory(story) {
     featured: false,
     origin: 'feed',
     isFresh: story.isFresh === true,
-    kicker: 'Seleccionada del radar en viu',
+    kicker:
+      kickerByFormat[story.editorialFormat] ||
+      'Seleccionada del radar en viu',
   })
 }
 
@@ -849,13 +921,13 @@ function getStoryKey(story) {
   return `title:${normalizeStoryTitle(story.title)}`
 }
 
-function mergeLiveStories(currentStories, liveArticles) {
+function mergeLiveStories(currentStories, liveArticles, seedStories = []) {
   const submittedStories = currentStories.filter((story) => story.origin !== 'feed')
   const liveEditorialVersion =
     liveArticles.find((story) => story.editorialVersion)?.editorialVersion ??
     currentLiveEditorialVersion
   const protectedKeys = new Set(
-    [...submittedStories, ...validSeedArticles].map((story) => getStoryKey(story)),
+    [...submittedStories, ...seedStories].map((story) => getStoryKey(story)),
   )
   const currentKeys = new Set(currentStories.map((story) => getStoryKey(story)))
   const freshFeedStories = []
@@ -907,9 +979,25 @@ function splitEditionStories(stories) {
   const now = Date.now()
   const sortedByAge = [...stories].sort(sortByPublishedAtDesc)
   // Només poden ser a la portada les notícies de menys de 2 dies. Les més
-  // velles van sempre a l'hemeroteca, encara que hi hagi lloc a la portada.
+  // velles van a l'hemeroteca. Les oportunitats són l'excepció: es mantenen
+  // actives fins al termini oficial, encara que la convocatòria sigui anterior.
   const recent = sortedByAge.filter(
-    (story) => now - new Date(story.publishedAt).getTime() <= activeEditionMaxAgeMs,
+    (story) => {
+      if (story.expiresAt) {
+        const rawExpiry = String(story.expiresAt)
+        const parsedExpiry = new Date(rawExpiry).getTime()
+        if (!Number.isNaN(parsedExpiry)) {
+          const endOfListedDay = /T00:00:00(?:\.000)?(?:Z)?$/.test(rawExpiry)
+            ? parsedExpiry + 24 * 60 * 60 * 1000 - 1
+            : parsedExpiry
+          return endOfListedDay >= now
+        }
+      }
+      return (
+        now - new Date(story.publishedAt).getTime() <=
+        activeEditionMaxAgeMs
+      )
+    },
   )
   // Si hi ha prou notícies fresques, la portada són només aquestes (les velles
   // van a la Hemeroteca). Però si avui n'hi ha poques o cap de < 2 dies, no
@@ -1013,7 +1101,7 @@ function SiteHeader({ currentPage, isRefreshing, onNavigate, onRefresh }) {
       </div>
 
       <div className="masthead__brand masthead__brand--graphis">
-        <p className="section-tag">Diari constructiu i optimista</p>
+        <p className="section-tag">Periodisme constructiu i de servei</p>
 
         <a
           className="graphis-title-band"
@@ -1029,7 +1117,13 @@ function SiteHeader({ currentPage, isRefreshing, onNavigate, onRefresh }) {
         >
           <span className="graphis-title">EL BON DIARI</span>
           <span className="graphis-title-bird" aria-hidden="true">
-            <img src="/logo-colibri.png?v=4" alt="" />
+            <img
+              src="/logo-colibri.png?v=4"
+              alt=""
+              width="977"
+              height="829"
+              decoding="async"
+            />
           </span>
         </a>
 
@@ -1041,7 +1135,13 @@ function SiteHeader({ currentPage, isRefreshing, onNavigate, onRefresh }) {
 
           <span className="m-cell m-black"></span>
           <span className="m-cell m-center">
-            <img src="/logo-colibri.png?v=4" alt="" />
+            <img
+              src="/logo-colibri.png?v=4"
+              alt=""
+              width="977"
+              height="829"
+              decoding="async"
+            />
           </span>
           <span className="m-cell m-yellow"></span>
 
@@ -1055,8 +1155,8 @@ function SiteHeader({ currentPage, isRefreshing, onNavigate, onRefresh }) {
         </div>
 
         <p className="masthead__lead">
-          El diari que només deixa passar històries que reparen el món, cuiden
-          la gent o demostren que una idea bona es pot replicar.
+          Històries que expliquen què funciona, comprovacions que separen els
+          fets del soroll i informació que pots convertir en una acció.
         </p>
       </div>
     </header>
@@ -1065,7 +1165,7 @@ function SiteHeader({ currentPage, isRefreshing, onNavigate, onRefresh }) {
 
 function StoryCard({ story, onNavigate }) {
   const storyPath = getStoryPath(story.id)
-  const originBadge = getOriginBadge(story.origin)
+  const originBadge = getOriginBadge(story.origin, story.editorialFormat)
   const distanceBand = getDistanceBand(story)
   const storySection = getStorySection(story)
 
@@ -1087,7 +1187,10 @@ function StoryCard({ story, onNavigate }) {
           className="story-card__image"
           src={story.imageUrl}
           alt=""
+          width="1600"
+          height="1000"
           loading="lazy"
+          decoding="async"
           onError={handleImageError}
         />
       </div>
@@ -1240,9 +1343,10 @@ function AboutPage({ onNavigate }) {
         <section className="about-block__section">
           <h2>Quin criteri segueix</h2>
           <p>
-            Aquí només entren bones notícies verificables: històries amb font,
-            impacte mesurable i utilitat per a qui les llegeix. No hi ha optimisme
-            buit ni opinió per opinar. Si vols veure el marc complet, llegeix el{' '}
+            Aquí entren històries constructives, verificacions i informació
+            pràctica amb fonts transparents. Cada peça ha d’aportar evidència,
+            context o una acció útil; no hi ha optimisme buit ni opinió per
+            opinar. Si vols veure el marc complet, llegeix el{' '}
             <a
               href="/manifest"
               onClick={(event) => {
@@ -1317,7 +1421,7 @@ function AboutPage({ onNavigate }) {
           <p>
             Web feta amb React + Vite i executada a Cloudflare Workers, publicada
             des de Tarragona. Codi obert i editable: si trobes un error, una
-            millora d’accessibilitat o una bona notícia que ens hauria
+            millora d’accessibilitat o una peça que ens hauria
             d’interessar, escriu-nos.
           </p>
         </section>
@@ -1387,7 +1491,7 @@ function PrivacyPage({ onNavigate }) {
           <p>
             Si t’hi subscrius voluntàriament, guardem la teva{' '}
             <strong>adreça de correu</strong> i l’idioma escollit amb l’únic
-            objectiu d’enviar-te el recull de bones notícies. No la compartim ni
+            objectiu d’enviar-te la selecció editorial. No la compartim ni
             la venem. Pots donar-te de baixa en qualsevol moment amb l’enllaç del
             peu de cada correu, o escrivint-nos. L’enviament el gestiona el
             proveïdor de correu Resend i les adreces es desen a la
@@ -1401,7 +1505,7 @@ function PrivacyPage({ onNavigate }) {
             Si actives les notificacions (al web o a l’app), el teu dispositiu
             genera un <strong>testimoni de subscripció</strong> —al web, una
             subscripció Web Push; a l’app, un «device token» d’Apple (APNs)— que
-            desem per poder-te enviar la bona notícia del dia. Aquest testimoni{' '}
+            desem per poder-te enviar la peça destacada del dia. Aquest testimoni{' '}
             <strong>no ens identifica personalment</strong> i no s’associa a cap
             altra dada teva. Pots desactivar les notificacions quan vulguis des
             de la configuració del navegador o del dispositiu, i el testimoni
@@ -1502,7 +1606,7 @@ function SavedPage({ onNavigate }) {
           <div className="saved-empty">
             <h2>Encara no has desat cap notícia.</h2>
             <p>
-              Quan trobis una bona notícia que vulguis rellegir, prem{' '}
+              Quan trobis una peça que vulguis rellegir, prem{' '}
               <strong>«Desa per llegir després»</strong> i la tindràs aquí a mà,
               també quan estiguis sense connexió.
             </p>
@@ -1527,8 +1631,11 @@ function SavedPage({ onNavigate }) {
                     className="saved-card__image"
                     src={story.imageUrl}
                     alt={story.imageAlt}
+                    width="750"
+                    height="550"
                     onError={handleImageError}
                     loading="lazy"
+                    decoding="async"
                   />
                 ) : null}
                 <div className="saved-card__content">
@@ -1983,7 +2090,7 @@ function StoryPage({ story, sourceLink, imageLink, relatedStories, onNavigate })
               {distanceBand.label}
             </span>
             <span className="paper-chip paper-chip--subtle">
-              {getOriginLabel(story.origin)}
+              {getOriginLabel(story.origin, story.editorialFormat)}
             </span>
           </div>
           <p className="article-page__kicker">{story.kicker}</p>
@@ -2001,6 +2108,10 @@ function StoryPage({ story, sourceLink, imageLink, relatedStories, onNavigate })
                 className="article-page__image"
                 src={story.imageUrl}
                 alt={story.imageAlt}
+                width="1600"
+                height="900"
+                fetchPriority="high"
+                decoding="async"
                 onError={handleImageError}
               />
             </a>
@@ -2150,7 +2261,7 @@ function ArchivePage({ archiveStories, lastRefreshLabel, onNavigate }) {
     <>
       <PageHero
         tag="Hemeroteca"
-        title="Les bones notícies no desapareixen: queden guardades per tornar-hi."
+        title="Les peces útils no desapareixen: queden guardades per tornar-hi."
         description={`Les notícies de més de 2 dies surten de la portada i es guarden aquí. Ara mateix hi ha ${archiveStories.length} històries ordenades de més recent a més llunyana.`}
         actions={
           <a
@@ -2274,6 +2385,7 @@ function ArchivePage({ archiveStories, lastRefreshLabel, onNavigate }) {
 function App() {
   const initialFilterState = getFilterStateFromPath(getCurrentPath())
   const [liveStories, setLiveStories] = useState([])
+  const [seedStories, setSeedStories] = useState([])
   // Peça carregada a demanda quan es visita /noticia/:id d'una notícia que ja no
   // és a la portada (rotada fora de la finestra). Evita el 404 als enllaços vells.
   const [fetchedStory, setFetchedStory] = useState(null)
@@ -2300,6 +2412,22 @@ function App() {
   const route = getRoute(currentPath)
 
   useEffect(() => {
+    let isCancelled = false
+
+    seedArticlesPromise
+      .then((articles) => {
+        if (!isCancelled) setSeedStories(articles)
+      })
+      .catch((error) => {
+        console.warn('No s’ha pogut carregar el catàleg editorial.', error)
+      })
+
+    return () => {
+      isCancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
     const handlePopState = () => {
       const nextPath = getCurrentPath()
       setCurrentPath(nextPath)
@@ -2320,14 +2448,18 @@ function App() {
 
     async function updateFromRadar() {
       try {
-        const payload = await fetchLivePositiveNewsPayload()
+        const [payload, editorialStories] = await Promise.all([
+          fetchLivePositiveNewsPayload(),
+          seedArticlesPromise,
+        ])
 
         if (isCancelled) {
           return
         }
 
         setLiveStories((currentStories) =>
-          mergeLiveStories(currentStories, payload.stories).stories,
+          mergeLiveStories(currentStories, payload.stories, editorialStories)
+            .stories,
         )
 
         const updatedAt = payload.updatedAt || new Date().toISOString()
@@ -2386,7 +2518,7 @@ function App() {
     }
     const inMemory =
       liveStories.some((story) => story.id === route.storyId) ||
-      validSeedArticles.some((story) => story.id === route.storyId) ||
+      seedStories.some((story) => story.id === route.storyId) ||
       fetchedStory?.id === route.storyId
     if (inMemory) {
       return undefined
@@ -2421,9 +2553,9 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [route.page, route.storyId, liveStories, fetchedStory?.id])
+  }, [route.page, route.storyId, liveStories, seedStories, fetchedStory?.id])
 
-  const allStories = [...liveStories, ...validSeedArticles]
+  const allStories = [...liveStories, ...seedStories]
   const { activeStories, archiveStories } = splitEditionStories(allStories)
   const normalizedQuery = searchTerm.trim().toLowerCase()
   const activeDistanceOption =
@@ -2543,7 +2675,7 @@ function App() {
   const lastRefreshLabel = formatDateTime(lastRefreshAt)
 
   useEffect(() => {
-    let nextTitle = `${siteName} | Bones notícies`
+    let nextTitle = `${siteName} | Periodisme constructiu`
     let nextDescription = defaultDescription
     let nextType = 'website'
     let nextImage = `${siteUrl}/og-image.svg`
@@ -2555,7 +2687,7 @@ function App() {
     } else if (route.page === 'archive') {
       nextTitle = `Hemeroteca | ${siteName}`
       nextDescription =
-        "La Hemeroteca d'El Bon Diari conserva les bones notícies que ja han passat per portada."
+        "La Hemeroteca d'El Bon Diari conserva les peces que ja han passat per portada."
     } else if (route.page === 'story' && currentStory) {
       nextTitle = `${currentStory.title} | ${siteName}`
       nextDescription = currentStory.summary || currentStory.impact
@@ -2585,7 +2717,7 @@ function App() {
         'Els articles que has desat per llegir després, guardats al teu dispositiu i disponibles fins i tot sense connexió.'
     } else if (route.page === 'home' && activeCategory !== 'Totes') {
       nextTitle = `${activeCategory} | ${siteName}`
-      nextDescription = `Bones notícies de la secció ${activeCategory}, filtrades amb criteri editorial i proximitat.`
+      nextDescription = `Peces de la secció ${activeCategory}, filtrades amb criteri editorial i proximitat.`
     }
 
     document.title = nextTitle
@@ -2705,9 +2837,13 @@ function App() {
   // radar publicat i fusiona el resultat sense navegar ni tocar filtres.
   async function refreshRadar() {
     try {
-      const payload = await fetchLivePositiveNewsPayload()
+      const [payload, editorialStories] = await Promise.all([
+        fetchLivePositiveNewsPayload(),
+        seedArticlesPromise,
+      ])
       setLiveStories((currentStories) =>
-        mergeLiveStories(currentStories, payload.stories).stories,
+        mergeLiveStories(currentStories, payload.stories, editorialStories)
+          .stories,
       )
       const updatedAt = payload.updatedAt || new Date().toISOString()
       const nextAt =
@@ -2779,10 +2915,14 @@ function App() {
     setIsRefreshing(true)
 
     try {
-      const payload = await fetchLivePositiveNewsPayload()
+      const [payload, editorialStories] = await Promise.all([
+        fetchLivePositiveNewsPayload(),
+        seedArticlesPromise,
+      ])
 
       setLiveStories((currentStories) =>
-        mergeLiveStories(currentStories, payload.stories).stories,
+        mergeLiveStories(currentStories, payload.stories, editorialStories)
+          .stories,
       )
 
       const updatedAt = payload.updatedAt || new Date().toISOString()
@@ -2849,7 +2989,7 @@ function App() {
         {route.page === 'home' ? (
           <>
             <h1 className="sr-only">
-              El Bon Diari: bones notícies verificables
+              El Bon Diari: periodisme constructiu, útil i verificable
             </h1>
             <section className="topics-bar" aria-label="Temes">
               <p className="section-tag">Temes</p>
@@ -2942,6 +3082,10 @@ function App() {
                         className="featured-story__image"
                         src={featuredStory.imageUrl}
                         alt={featuredStory.imageAlt}
+                        width="1600"
+                        height="850"
+                        fetchPriority="high"
+                        decoding="async"
                         onError={handleImageError}
                       />
                     </a>
@@ -2957,7 +3101,10 @@ function App() {
                       </span>
                       {featuredStory.origin !== 'editorial' ? (
                         <span className="paper-chip paper-chip--subtle">
-                          {getOriginLabel(featuredStory.origin)}
+                          {getOriginLabel(
+                            featuredStory.origin,
+                            featuredStory.editorialFormat,
+                          )}
                         </span>
                       ) : null}
                     </div>
@@ -3046,11 +3193,11 @@ function App() {
                 </div>
                 <p className="section-caption">
                   {sectionShowingGeneral
-                    ? 'Aquesta secció encara no té notícies pròpies avui; mentrestant, aquí tens les bones notícies del dia.'
+                    ? 'Aquesta secció encara no té peces pròpies avui; mentrestant, aquí tens la selecció del dia.'
                     : sectionFromArchive
                     ? 'Aquesta secció no té novetats recents: et mostrem les últimes de l’hemeroteca.'
                     : headlineCount > 0
-                    ? `Mostrant ${headlineCount} bones notícies a l’edició actual.`
+                    ? `Mostrant ${headlineCount} peces a l’edició actual.`
                     : 'Cap història coincideix amb aquest filtre ara mateix.'}
                   <a
                     className="section-caption__link"
@@ -3156,8 +3303,8 @@ function App() {
           <>
             <PageHero
               tag="Manifest editorial"
-              title="Una web de bones notícies necessita criteri, no només to positiu."
-              description="Aquest és el marc amb què El Bon Diari decideix què entra a portada, com s’explica i quin valor ha de tenir per a qui ho llegeix."
+              title="Una mirada constructiva necessita evidència, utilitat i límits."
+              description="Aquest és el marc amb què El Bon Diari tria solucions, verificacions i informació pràctica, i explica quin valor té per a qui ho llegeix."
             />
             <ManifestSection />
             <SourcesManifest />
