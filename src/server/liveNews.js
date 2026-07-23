@@ -1700,10 +1700,11 @@ export async function getLiveNewsPayload(kv, { force = false, env } = {}) {
 
   try {
     const payload = await setCachedPayload(kv, publishedStories)
-    // Persistim cada peça publicada sota story:<id> (30 dies) perquè la seva
-    // pàgina de detall es pugui resoldre encara que surti de la portada.
+    // Persistim sota story:<id> només les peces que entren per primer cop.
+    // Les peces arrossegades ja tenen aquesta còpia i reescriure fins a 50 claus
+    // a cada refresc consumia quota de KV sense canviar-ne el contingut.
     await Promise.all(
-      publishedStories.map((story) =>
+      storiesRequiringDetailPersistence(publishedStories, shownFreshUrls).map((story) =>
         kv.put(`story:${feedStoryId(story.url)}`, JSON.stringify(story), {
           expirationTtl: storyDetailTtlSeconds,
         }),
@@ -1748,14 +1749,25 @@ export async function getLiveNewsPayload(kv, { force = false, env } = {}) {
 // només els titulars constructius. Es cacheja pocs minuts a KV per no re-scrapejar
 // (ni re-jutjar) a cada visita.
 const tickerCacheKey = 'live-ticker'
-// Re-escaneig de fonts com a molt cada 90 s (prou "temps real" sense martellejar
-// les fonts: gràcies a la cache KV, cada finestra només fa UN scrape encara que
-// hi hagi molts visitants). El client sondeja cada 2 min.
-const tickerCacheTtlMs = 90 * 1000
-const tickerCacheTtlSeconds = 90
+// Un ticker constructiu no necessita reescriure KV cada 90 segons. Quinze minuts
+// el manté actual i redueix el sostre teòric de 960 a 96 escriptures/dia. La clau
+// es conserva una hora perquè continuï disponible com a fallback si fallen fonts
+// o IA; la frescor es decideix amb updatedAt.
+const tickerFreshnessMs = 15 * 60 * 1000
+const tickerStorageTtlSeconds = 60 * 60
 // Un grapat de fonts catalanes GRATUÏTES i ràpides (poques subpeticions).
 const tickerFeedNames = ['Vilaweb', 'Nació Digital', 'Betevé', 'Capgròs', 'El Món', 'Crític']
 const tickerLimit = 12
+
+export function storiesRequiringDetailPersistence(publishedStories, shownFreshUrls) {
+  const freshUrls = new Set(shownFreshUrls)
+  return publishedStories.filter((story) => freshUrls.has(story.url))
+}
+
+export function isTickerCacheFresh(cached, now = Date.now()) {
+  const updatedAt = cached?.updatedAt ? new Date(cached.updatedAt).getTime() : 0
+  return Boolean(updatedAt && now - updatedAt < tickerFreshnessMs)
+}
 
 export async function getLiveTicker(env, { force = false } = {}) {
   const kv = env?.LIVE_NEWS_KV
@@ -1763,10 +1775,7 @@ export async function getLiveTicker(env, { force = false } = {}) {
   if (kv && !force) {
     try {
       const cached = await kv.get(tickerCacheKey, 'json')
-      if (
-        cached?.updatedAt &&
-        Date.now() - new Date(cached.updatedAt).getTime() < tickerCacheTtlMs
-      ) {
+      if (isTickerCacheFresh(cached)) {
         return { ...cached, cache: 'hit' }
       }
     } catch {
@@ -1824,7 +1833,7 @@ export async function getLiveTicker(env, { force = false } = {}) {
   if (kv && payload.items.length) {
     try {
       await kv.put(tickerCacheKey, JSON.stringify(payload), {
-        expirationTtl: tickerCacheTtlSeconds,
+        expirationTtl: tickerStorageTtlSeconds,
       })
     } catch {
       // Si no es pot desar, igualment retornem el resultat.

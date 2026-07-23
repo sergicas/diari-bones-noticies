@@ -11,6 +11,8 @@ import {
   applyDiversityCap,
   UNIVERSAL_NEG,
   POLITICAL_MARKERS,
+  isTickerCacheFresh,
+  storiesRequiringDetailPersistence,
 } from '../liveNews.js'
 import {
   normalizeCategory,
@@ -38,6 +40,28 @@ const SEO_STORY = {
   body: ['Primer paràgraf.', 'Segon paràgraf.'],
   language: 'ca',
 }
+
+describe('quota KV — escriptures acotades', () => {
+  it('manté el ticker fresc durant quinze minuts', () => {
+    const now = Date.parse('2026-07-23T08:00:00Z')
+    expect(
+      isTickerCacheFresh({ updatedAt: '2026-07-23T07:46:00Z' }, now),
+    ).toBe(true)
+    expect(
+      isTickerCacheFresh({ updatedAt: '2026-07-23T07:44:59Z' }, now),
+    ).toBe(false)
+  })
+
+  it('només persisteix el detall de les peces noves', () => {
+    const stories = [
+      { url: 'https://bondiari.com/nova' },
+      { url: 'https://bondiari.com/arrossegada' },
+    ]
+    expect(
+      storiesRequiringDetailPersistence(stories, ['https://bondiari.com/nova']),
+    ).toEqual([{ url: 'https://bondiari.com/nova' }])
+  })
+})
 
 describe('SEO — JSON-LD NewsArticle', () => {
   it('genera un NewsArticle vàlid amb els camps clau', () => {
