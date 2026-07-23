@@ -104,7 +104,32 @@ export async function fetchAndReadWithTimeout(
       signal: controller.signal,
     })
     if (!response.ok) return { ok: false, status: response.status, data: null }
-    const data = await readerFn(response, controller.signal)
+
+    if (controller.signal.aborted) {
+      throw new Error('Aborted by signal timeout')
+    }
+
+    const abortPromise = new Promise((_, reject) => {
+      if (controller.signal.aborted) {
+        reject(new Error('Aborted by signal timeout'))
+      } else {
+        controller.signal.addEventListener(
+          'abort',
+          () => {
+            if (response.body && typeof response.body.cancel === 'function') {
+              response.body.cancel().catch(() => {})
+            }
+            reject(new Error('Aborted by signal timeout'))
+          },
+          { once: true },
+        )
+      }
+    })
+
+    const data = await Promise.race([
+      readerFn(response, controller.signal),
+      abortPromise,
+    ])
     return { ok: true, status: response.status, data }
   } finally {
     clearTimeout(timeoutId)

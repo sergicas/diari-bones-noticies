@@ -1,15 +1,15 @@
 import { describe, it, expect } from 'vitest'
 import { fetchAndReadWithTimeout } from '../rss/serviceFeeds.js'
 
-describe('fetchAndReadWithTimeout body timeout protection', () => {
-  it('resolves cleanly when response and body arrive quickly', async () => {
-    const mockFetch = async () => ({ ok: true, status: 200 })
-    const mockReader = async () => 'sample body content'
+describe('fetchAndReadWithTimeout body timeout protection with ReadableStream', () => {
+  it('resolves cleanly when response body stream arrives quickly', async () => {
+    const mockResponse = new Response('sample body content', { status: 200 })
+    const mockFetch = async () => mockResponse
 
     const res = await fetchAndReadWithTimeout(
       'https://example.com/api',
       {},
-      mockReader,
+      (r) => r.text(),
       3000,
       mockFetch,
     )
@@ -17,22 +17,20 @@ describe('fetchAndReadWithTimeout body timeout protection', () => {
     expect(res.data).toBe('sample body content')
   })
 
-  it('aborts and throws when body reading hangs beyond timeout', async () => {
-    const mockFetch = async () => ({ ok: true, status: 200 })
-    const hangingReader = (res, signal) =>
-      new Promise((_, reject) => {
-        if (signal.aborted) return reject(new Error('Aborted by signal timeout'))
-        signal.addEventListener('abort', () =>
-          reject(new Error('Aborted by signal timeout')),
-        )
-      })
+  it('aborts and cancels when body stream hangs beyond timeout', async () => {
+    const hangingStream = new ReadableStream({
+      start() {},
+      cancel() {},
+    })
+    const mockResponse = new Response(hangingStream, { status: 200 })
+    const mockFetch = async () => mockResponse
 
     const start = Date.now()
     try {
       await fetchAndReadWithTimeout(
         'https://example.com/api',
         {},
-        hangingReader,
+        (r) => r.text(),
         50,
         mockFetch,
       )

@@ -665,15 +665,50 @@ function App() {
   )
   const route = getRoute(currentPath)
 
+function waitForSwController() {
+  if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
+    return Promise.resolve(null)
+  }
+  if (navigator.serviceWorker.controller) {
+    return Promise.resolve(navigator.serviceWorker.controller)
+  }
+  return new Promise((resolve) => {
+    let resolved = false
+    const onControllerChange = () => {
+      if (resolved) return
+      resolved = true
+      navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange)
+      resolve(navigator.serviceWorker.controller)
+    }
+    navigator.serviceWorker.addEventListener('controllerchange', onControllerChange)
+    navigator.serviceWorker.ready
+      .then(() => {
+        if (navigator.serviceWorker.controller && !resolved) {
+          resolved = true
+          navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange)
+          resolve(navigator.serviceWorker.controller)
+        }
+      })
+      .catch(() => {})
+
+    setTimeout(() => {
+      if (!resolved) {
+        resolved = true
+        navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange)
+        resolve(navigator.serviceWorker.controller)
+      }
+    }, 3000)
+  })
+}
+
   // Pre-carrega en segon pla (idle) dels chunks diferits quan el Service Worker
-  // està actiu per garantir la seva precàrrega a memòria cau offline.
+  // ha pres el control del client (controllerchange / controller active)
+  // per garantir que queden desats a CacheStorage offline.
   useEffect(() => {
     if (typeof window === 'undefined') return
     const prefetch = async () => {
       try {
-        if ('serviceWorker' in navigator && !navigator.serviceWorker.controller) {
-          await navigator.serviceWorker.ready.catch(() => {})
-        }
+        await waitForSwController()
         await Promise.allSettled([
           import('./views/ArchiveView.jsx'),
           import('./views/SavedView.jsx'),
