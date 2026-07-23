@@ -2896,7 +2896,7 @@ function App() {
 
     if (typeof window !== 'undefined' && category !== 'Totes') {
       window.setTimeout(() => {
-        const target = document.getElementById('resultats-portada')
+        const target = document.getElementById('noticia-destacada')
         if (target) {
           target.scrollIntoView({ behavior: 'smooth', block: 'start' })
           target.focus({ preventScroll: true })
@@ -3079,7 +3079,12 @@ function App() {
                 </div>
               </section>
             ) : null}
-            <section className="hero-grid">
+            <section
+              id="noticia-destacada"
+              className="hero-grid"
+              tabIndex="-1"
+              aria-label="Notícia destacada"
+            >
               {featuredStory ? (
                 <article className="featured-story">
                   <div className="featured-story__media">
