@@ -5,7 +5,7 @@
 //   rutes client-side com /noticia/:id, /manifest, /hemeroteca, /sobre).
 // - El handler scheduled() refresca el radar dues vegades al dia via cron.
 
-import { getLiveNewsPayload, readEditorialStats, getLiveTicker } from './server/liveNews.js'
+import { getLiveNewsPayload, readEditorialStats, readFeedHealthStats, getLiveTicker } from './server/liveNews.js'
 import { handleStats, handleTrackVisit } from './server/stats.js'
 import {
   handleSubscribe,
@@ -66,6 +66,15 @@ export async function isRefreshAuthorized(request, env) {
     ? authorization.slice('Bearer '.length).trim()
     : ''
   return secretsMatch(provided, env.BONDIARI_REFRESH_TOKEN)
+}
+
+export async function isFeedHealthAuthorized(request, env) {
+  const authorization = request.headers.get('authorization') || ''
+  const provided = authorization.startsWith('Bearer ')
+    ? authorization.slice('Bearer '.length).trim()
+    : ''
+  const expectedToken = env.BONDIARI_FEED_HEALTH_TOKEN || env.BONDIARI_REFRESH_TOKEN
+  return secretsMatch(provided, expectedToken)
 }
 
 // Capçaleres de seguretat aplicades a totes les respostes.
@@ -165,9 +174,42 @@ async function handleRefreshNews(request, env) {
   }
 }
 
+async function handleFeedHealth(request, env) {
+  if (request.method !== 'GET' && request.method !== 'HEAD') {
+    return methodNotAllowed('GET, HEAD')
+  }
+  if (!(await isFeedHealthAuthorized(request, env))) {
+    return jsonResponse(
+      { ok: false, error: 'unauthorized' },
+      {
+        status: 401,
+        headers: {
+          'cache-control': 'no-store',
+          'www-authenticate': 'Bearer realm="bondiari-health"',
+        },
+      },
+    )
+  }
+  try {
+    const stats = await readFeedHealthStats(env)
+    if (stats?._readError) {
+      return jsonResponse(
+        { ok: false, error: 'kv-read-error' },
+        { status: 503, headers: { 'cache-control': 'no-store' } },
+      )
+    }
+    return jsonResponse({ ok: true, stats }, { headers: { 'cache-control': 'no-store' } })
+  } catch (error) {
+    console.error('No s’han pogut carregar les mètriques de salut dels feeds', error)
+    return jsonResponse({ ok: false, error: 'internal-error' }, { status: 500 })
+  }
+}
+
 async function route(request, env, ctx) {
   const url = new URL(request.url)
   const path = url.pathname
+
+  if (path === '/api/feed-health') return handleFeedHealth(request, env)
 
   // Il·lustració editorial pròpia de cada peça (generada per IA i cachejada).
   // Substitueix les fotos de premsa de tercers: cap risc de drets d'autor.

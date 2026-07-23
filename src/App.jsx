@@ -15,6 +15,7 @@ import ShareRow from './components/ShareRow.jsx'
 import SaveButton from './components/SaveButton.jsx'
 import PullToRefresh from './components/PullToRefresh.jsx'
 import { getSaved, removeSaved, SAVED_EVENT } from './lib/saved.js'
+import { canInterceptNavigation, getStoryPath } from './lib/navigation.js'
 import {
   DEFAULT_STORY_IMAGE,
   classifyImage,
@@ -459,9 +460,6 @@ function getRoute(path) {
   return { page: 'home' }
 }
 
-function getStoryPath(storyId) {
-  return `/noticia/${encodeURIComponent(storyId)}`
-}
 
 function getCategorySlug(category) {
   if (category === 'Totes') {
@@ -1044,16 +1042,6 @@ function splitEditionStories(stories) {
   }
 }
 
-function canInterceptNavigation(event) {
-  return !(
-    event.defaultPrevented ||
-    event.button !== 0 ||
-    event.metaKey ||
-    event.ctrlKey ||
-    event.shiftKey ||
-    event.altKey
-  )
-}
 
 function SiteHeader({ currentPage, isRefreshing, onNavigate, onRefresh }) {
   const navItems = [

@@ -1279,39 +1279,182 @@ export function normalizeFeedItem(block, feed) {
   return story
 }
 
-async function collectFeedStories(feed) {
+export const FEED_HEALTH_KV_KEY = 'feed-health-stats'
+const CIRCUIT_BREAKER_MAX_FAILURES = 5
+const CIRCUIT_BREAKER_PAUSE_MS = 24 * 60 * 60 * 1000 // 24 hores
+
+export async function readFeedHealthStats(kvOrEnv) {
+  const kv = kvOrEnv?.LIVE_NEWS_KV || kvOrEnv
+  if (!kv || typeof kv.get !== 'function') return {}
+  try {
+    const data = await kv.get(FEED_HEALTH_KV_KEY, 'json')
+    return data && typeof data === 'object' ? data : {}
+  } catch (error) {
+    console.warn('[feed-health] no s’ha pogut llegir KV', error?.message)
+    return { _readError: true }
+  }
+}
+
+export async function saveFeedHealthStats(kvOrEnv, stats) {
+  const kv = kvOrEnv?.LIVE_NEWS_KV || kvOrEnv
+  if (!kv || typeof kv.put !== 'function' || !stats) return
+  if (stats._readError) {
+    console.warn('[feed-health] s’evita sobreescriure KV per error de lectura previ')
+    return
+  }
+  const cleanStats = { ...stats }
+  delete cleanStats._readError
+  try {
+    await kv.put(FEED_HEALTH_KV_KEY, JSON.stringify(cleanStats))
+  } catch (error) {
+    console.warn('[feed-health] no s’han pogut desar les mètriques', error?.message)
+  }
+}
+
+export function isFeedPaused(feedHealthRecord, now = Date.now()) {
+  if (!feedHealthRecord || !feedHealthRecord.pausedUntil) return false
+  const pauseEnd = new Date(feedHealthRecord.pausedUntil).getTime()
+  return !isNaN(pauseEnd) && pauseEnd > now
+}
+
+export function isSignificantHealthChange(oldRecord, newRecord) {
+  if (!newRecord) return false
+  if (!oldRecord) {
+    return newRecord.status !== 'ok' || (newRecord.consecutiveFailures || 0) > 0
+  }
+  if (oldRecord.status !== newRecord.status) return true
+  if ((oldRecord.consecutiveFailures || 0) !== (newRecord.consecutiveFailures || 0)) return true
+  if (oldRecord.pausedUntil !== newRecord.pausedUntil) return true
+  return false
+}
+
+export async function fetchFeed(feed, options = {}) {
+  const timeoutMs = options.timeoutMs ?? 6000
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+  const startTime = Date.now()
+
   try {
     const response = await fetch(feed.url, {
       headers: {
         accept: 'application/rss+xml, application/xml, application/atom+xml, text/xml, */*',
         'user-agent': 'El Bon Diari/1.0 (+https://bondiari.com)',
       },
+      signal: controller.signal,
     })
+
     if (!response.ok) {
-      console.warn(`[radar] Feed ${feed.name} ha respost ${response.status}`)
-      return { stories: [], candidates: 0 }
-    }
-    const xml = await response.text()
-    if (!/<rss[\s>]|<feed[\s>]/i.test(xml)) {
-      console.warn(`[radar] Feed ${feed.name} no sembla RSS/Atom (${xml.length} bytes)`)
-      return { stories: [], candidates: 0 }
+      const durationMs = Date.now() - startTime
+      return {
+        ok: false,
+        status: response.status,
+        xml: null,
+        error: `HTTP ${response.status}`,
+        durationMs,
+      }
     }
 
-    const itemRegex = /<(item|entry)\b[^>]*>([\s\S]*?)<\/\1>/gi
-    const stories = []
-    let candidates = 0
-    let match
-    while ((match = itemRegex.exec(xml)) !== null) {
-      candidates += 1
-      const story = normalizeFeedItem(match[2], feed)
-      if (story) stories.push(story)
+    const xml = await response.text()
+    const durationMs = Date.now() - startTime
+    if (!/<rss[\s>]|<feed[\s>]/i.test(xml)) {
+      return {
+        ok: false,
+        status: response.status,
+        xml,
+        error: 'Not valid RSS/Atom XML',
+        durationMs,
+      }
     }
-    return { stories, candidates }
+
+    return {
+      ok: true,
+      status: response.status,
+      xml,
+      error: null,
+      durationMs,
+    }
   } catch (error) {
-    console.warn(`[radar] Ha fallat el feed ${feed.name}`, error)
-    return { stories: [], candidates: 0 }
+    const durationMs = Date.now() - startTime
+    const isAbort = error.name === 'AbortError' || controller.signal?.aborted
+    return {
+      ok: false,
+      status: 0,
+      xml: null,
+      error: isAbort ? `Timeout (${timeoutMs}ms)` : (error?.message || 'Fetch error'),
+      durationMs,
+    }
+  } finally {
+    clearTimeout(timeoutId)
   }
 }
+
+export async function collectFeedStories(feed, options = {}) {
+  const now = options.now ?? Date.now()
+  const healthRecord = options.healthRecord || null
+
+  if (isFeedPaused(healthRecord, now)) {
+    console.warn(`[radar] Feed ${feed.name} pausat per circuit breaker (fins ${healthRecord.pausedUntil})`)
+    return { stories: [], candidates: 0, skipped: true, healthUpdate: healthRecord }
+  }
+
+  const result = await fetchFeed(feed, options)
+  const isoNow = new Date(now).toISOString()
+
+  if (!result.ok) {
+    console.warn(`[radar] Ha fallat el feed ${feed.name}: ${result.error}`)
+    const prevFailures = healthRecord?.consecutiveFailures || 0
+    const newFailures = prevFailures + 1
+    const pausedUntil =
+      newFailures >= CIRCUIT_BREAKER_MAX_FAILURES
+        ? new Date(now + CIRCUIT_BREAKER_PAUSE_MS).toISOString()
+        : null
+
+    const healthUpdate = {
+      name: feed.name,
+      url: feed.url,
+      lastAttemptAt: isoNow,
+      lastSuccessAt: healthRecord?.lastSuccessAt || null,
+      lastHttpStatus: result.status,
+      durationMs: result.durationMs,
+      storiesCount: 0,
+      rawItemCount: 0,
+      consecutiveFailures: newFailures,
+      status: 'error',
+      pausedUntil,
+      lastError: result.error,
+    }
+    return { stories: [], candidates: 0, healthUpdate }
+  }
+
+  const itemRegex = /<(item|entry)\b[^>]*>([\s\S]*?)<\/\1>/gi
+  const stories = []
+  let candidates = 0
+  let match
+  while ((match = itemRegex.exec(result.xml)) !== null) {
+    candidates += 1
+    const story = normalizeFeedItem(match[2], feed)
+    if (story) stories.push(story)
+  }
+
+  const isEmpty = candidates === 0
+  const healthUpdate = {
+    name: feed.name,
+    url: feed.url,
+    lastAttemptAt: isoNow,
+    lastSuccessAt: isoNow,
+    lastHttpStatus: result.status,
+    durationMs: result.durationMs,
+    storiesCount: stories.length,
+    rawItemCount: candidates,
+    consecutiveFailures: 0,
+    status: isEmpty ? 'empty' : 'ok',
+    pausedUntil: null,
+    lastError: isEmpty ? 'RSS sense ítems' : null,
+  }
+
+  return { stories, candidates, healthUpdate }
+}
+
 
 // --- Fonts de servei estructurades -----------------------------------------
 
@@ -1754,18 +1897,35 @@ async function aiReview(env, candidates, { failOpen = true } = {}) {
 // --- Recol·lecció combinada -----------------------------------------------
 
 export async function collectLivePositiveNews(env) {
+  const now = Date.now()
+  const healthStats = await readFeedHealthStats(env)
   // Només la finestra de fonts d'aquest refresc (core + rotatòries), per no
   // petar el límit de subpeticions. La rotació avança sola amb el temps.
-  const feedsThisRun = selectFeedsForRun(Date.now())
+  const feedsThisRun = selectFeedsForRun(now)
   const [sectionResults, feedResults, serviceResults] = await Promise.all([
     Promise.all(sections.map(collectSectionStories)),
-    Promise.all(feedsThisRun.map(collectFeedStories)),
+    Promise.all(
+      feedsThisRun.map((feed) =>
+        collectFeedStories(feed, {
+          now,
+          healthRecord: healthStats[feed.name],
+          env,
+        }),
+      ),
+    ),
     Promise.all([
       collectAgendaStories(),
       collectRaiscOpportunities(),
       collectIdescatUpdates(),
     ]),
   ])
+
+  for (const result of feedResults) {
+    if (result.healthUpdate) {
+      healthStats[result.healthUpdate.name] = result.healthUpdate
+    }
+  }
+  await saveFeedHealthStats(env, healthStats)
 
   const stories = []
   let reviewedCount = 0
@@ -2150,8 +2310,33 @@ export async function getLiveTicker(env, { force = false } = {}) {
   }
 
   // 2) Scrap ràpid d'un subconjunt de fonts.
+  const now = Date.now()
+  const healthStats = await readFeedHealthStats(env)
   const feeds = rssFeeds.filter((feed) => tickerFeedNames.includes(feed.name))
-  const results = await Promise.all(feeds.map((feed) => collectFeedStories(feed)))
+  const results = await Promise.all(
+    feeds.map((feed) =>
+      collectFeedStories(feed, {
+        now,
+        healthRecord: healthStats[feed.name],
+        env,
+      }),
+    ),
+  )
+
+  let hasSignificantChange = false
+  for (const res of results) {
+    if (res.healthUpdate) {
+      const oldRecord = healthStats[res.healthUpdate.name]
+      if (isSignificantHealthChange(oldRecord, res.healthUpdate)) {
+        hasSignificantChange = true
+      }
+      healthStats[res.healthUpdate.name] = res.healthUpdate
+    }
+  }
+  if (hasSignificantChange) {
+    await saveFeedHealthStats(env, healthStats)
+  }
+
   const seen = new Set()
   const candidates = []
   for (const { stories } of results) {
