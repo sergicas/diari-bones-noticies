@@ -89,7 +89,7 @@ function serviceStory({
   }
 }
 
-async function fetchWithTimeout(url, init = {}, timeoutMs = 6000) {
+async function fetchAndReadWithTimeout(url, init = {}, readerFn = (res) => res.text(), timeoutMs = 6000) {
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
   try {
@@ -97,7 +97,9 @@ async function fetchWithTimeout(url, init = {}, timeoutMs = 6000) {
       ...init,
       signal: controller.signal,
     })
-    return response
+    if (!response.ok) return { ok: false, status: response.status, data: null }
+    const data = await readerFn(response)
+    return { ok: true, status: response.status, data }
   } finally {
     clearTimeout(timeoutId)
   }
@@ -128,14 +130,19 @@ export function normalizeAgendaItem(block, publishedAt = new Date().toISOString(
 
 export async function collectAgendaStories() {
   try {
-    const response = await fetchWithTimeout(agendaMataroFeedUrl, {
-      headers: {
-        accept: 'application/rss+xml, application/xml, text/xml',
-        'user-agent': 'El Bon Diari/1.0 (+https://bondiari.com)',
+    const res = await fetchAndReadWithTimeout(
+      agendaMataroFeedUrl,
+      {
+        headers: {
+          accept: 'application/rss+xml, application/xml, text/xml',
+          'user-agent': 'El Bon Diari/1.0 (+https://bondiari.com)',
+        },
       },
-    }, 6000)
-    if (!response.ok) return { stories: [], candidates: 0 }
-    const xml = await response.text()
+      (r) => r.text(),
+      6000,
+    )
+    if (!res.ok || !res.data) return { stories: [], candidates: 0 }
+    const xml = res.data
     if (xml.length > 250_000 || !/<rss[\s>]/i.test(xml)) {
       console.warn(`[servei] Agenda ha retornat una resposta invàlida (${xml.length} bytes)`)
       return { stories: [], candidates: 0 }
@@ -229,15 +236,19 @@ export async function collectRaiscOpportunities() {
       $order: 'data_fi_termini_presentaci_sol_licitud ASC',
       $limit: '12',
     })
-    const response = await fetchWithTimeout(`${raiscApiUrl}?${query}`, {
-      headers: {
-        accept: 'application/json',
-        'user-agent': 'El Bon Diari/1.0 (+https://bondiari.com)',
+    const res = await fetchAndReadWithTimeout(
+      `${raiscApiUrl}?${query}`,
+      {
+        headers: {
+          accept: 'application/json',
+          'user-agent': 'El Bon Diari/1.0 (+https://bondiari.com)',
+        },
       },
-    }, 6000)
-    if (!response.ok) return { stories: [], candidates: 0 }
-    const records = await response.json()
-    if (!Array.isArray(records)) return { stories: [], candidates: 0 }
+      (r) => r.json(),
+      6000,
+    )
+    if (!res.ok || !Array.isArray(res.data)) return { stories: [], candidates: 0 }
+    const records = res.data
     return {
       stories: records.map(normalizeRaiscOpportunity).filter(Boolean),
       candidates: records.length,
@@ -286,14 +297,19 @@ export function normalizeIdescatUpdate(table) {
 
 export async function collectIdescatUpdates() {
   try {
-    const response = await fetchWithTimeout(idescatMataroApiUrl, {
-      headers: {
-        accept: 'application/json',
-        'user-agent': 'El Bon Diari/1.0 (+https://bondiari.com)',
+    const res = await fetchAndReadWithTimeout(
+      idescatMataroApiUrl,
+      {
+        headers: {
+          accept: 'application/json',
+          'user-agent': 'El Bon Diari/1.0 (+https://bondiari.com)',
+        },
       },
-    }, 6000)
-    if (!response.ok) return { stories: [], candidates: 0 }
-    const payload = await response.json()
+      (r) => r.json(),
+      6000,
+    )
+    if (!res.ok || !res.data) return { stories: [], candidates: 0 }
+    const payload = res.data
     const tables = collectObjects(
       payload,
       (value) =>

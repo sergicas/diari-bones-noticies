@@ -4,11 +4,9 @@ import './App.css'
 import { fetchLivePositiveNewsPayload, fetchLiveTicker } from './api/rssFeed'
 import { LIVE_EDITORIAL_VERSION } from './lib/editorial-version.js'
 import { feedStoryId } from './lib/story-id.js'
-import PageHero from './components/PageHero.jsx'
-import ManifestSection from './components/ManifestSection.jsx'
-import SourcesManifest from './components/SourcesManifest.jsx'
 import NotFoundPage from './components/NotFoundPage.jsx'
 import PullToRefresh from './components/PullToRefresh.jsx'
+import ErrorBoundary from './components/ErrorBoundary.jsx'
 import { canInterceptNavigation, getStoryPath } from './lib/navigation.js'
 import {
   DEFAULT_STORY_IMAGE,
@@ -35,6 +33,7 @@ const SavedView = lazy(() => import('./views/SavedView.jsx'))
 const StatsView = lazy(() => import('./views/StatsView.jsx'))
 const PrivacyView = lazy(() => import('./views/PrivacyView.jsx'))
 const ManifestView = lazy(() => import('./views/ManifestView.jsx'))
+const AboutView = lazy(() => import('./views/AboutView.jsx'))
 
 const siteName = 'El Bon Diari'
 const siteUrl = 'https://bondiari.com'
@@ -640,82 +639,6 @@ function FooterNote({ onNavigate }) {
   )
 }
 
-function MostReadSection({ allStories, onNavigate }) {
-  const [topStories, setTopStories] = useState(null)
-  const [status, setStatus] = useState('loading')
-
-  useEffect(() => {
-    let cancelled = false
-    fetch('/api/stats')
-      .then((response) => {
-        if (!response.ok) throw new Error(`HTTP ${response.status}`)
-        return response.json()
-      })
-      .then((data) => {
-        if (cancelled) return
-        const byPath = new Map(
-          allStories.map((s) => [`/noticia/${encodeURIComponent(s.id)}`, s]),
-        )
-        const selected = []
-        for (const row of data.topPathsWeek || []) {
-          const story = byPath.get(row.key)
-          if (story) selected.push({ story, count: row.count })
-          if (selected.length >= 3) break
-        }
-        setTopStories(selected)
-        setStatus('ready')
-      })
-      .catch(() => {
-        if (cancelled) return
-        setStatus('error')
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [allStories])
-
-  if (status !== 'ready' || !topStories || topStories.length === 0) {
-    return null
-  }
-
-  return (
-    <section className="section-block most-read-block">
-      <div className="section-heading">
-        <div>
-          <p className="section-tag">Llegides al moment</p>
-          <h2>Les peces amb més lectures aquesta setmana</h2>
-        </div>
-      </div>
-      <ol className="most-read-list">
-        {topStories.map((entry, index) => {
-          const path = `/noticia/${encodeURIComponent(entry.story.id)}`
-          return (
-            <li key={entry.story.id} className="most-read-item">
-              <span className="most-read-item__rank">
-                {String(index + 1).padStart(2, '0')}
-              </span>
-              <a
-                className="most-read-item__title"
-                href={path}
-                onClick={(event) => {
-                  if (!canInterceptNavigation(event) || !onNavigate) return
-                  event.preventDefault()
-                  onNavigate(path)
-                }}
-              >
-                {entry.story.title}
-              </a>
-              <span className="most-read-item__meta">
-                {entry.story.category} · {entry.count} lectures
-              </span>
-            </li>
-          )
-        })}
-      </ol>
-    </section>
-  )
-}
-
 function App() {
   const initialFilterState = getFilterStateFromPath(getCurrentPath())
   const [liveStories, setLiveStories] = useState([])
@@ -741,6 +664,25 @@ function App() {
     loadStoredTimestamp(nextRefreshStorageKey),
   )
   const route = getRoute(currentPath)
+
+  // Pre-carrega en segon pla (idle) dels chunks diferits per garantir
+  // disponibilitat offline completa als service workers.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const prefetch = () => {
+      import('./views/ArchiveView.jsx')
+      import('./views/SavedView.jsx')
+      import('./views/StatsView.jsx')
+      import('./views/PrivacyView.jsx')
+      import('./views/ManifestView.jsx')
+      import('./views/AboutView.jsx')
+    }
+    if ('requestIdleCallback' in window) {
+      window.requestIdleCallback(prefetch)
+    } else {
+      window.setTimeout(prefetch, 2000)
+    }
+  }, [])
 
   useEffect(() => {
     let isCancelled = false
@@ -1272,83 +1214,75 @@ function App() {
           />
 
           <main id="contingut" className="site-main">
-            <Suspense fallback={<div className="section-block"><h2>Carregant vista…</h2></div>}>
-              {route.page === 'story' ? (
-                currentStory ? (
-                  <StoryDetailView
-                    story={currentStory}
-                    sourceLink={currentStorySourceLink}
-                    imageLink={currentStoryImageLink}
-                    relatedStories={relatedStories}
+            <ErrorBoundary>
+              <Suspense fallback={<div className="section-block"><h2>Carregant vista…</h2></div>}>
+                {route.page === 'story' ? (
+                  currentStory ? (
+                    <StoryDetailView
+                      story={currentStory}
+                      sourceLink={currentStorySourceLink}
+                      imageLink={currentStoryImageLink}
+                      relatedStories={relatedStories}
+                      onNavigate={navigate}
+                    />
+                  ) : isFetchingStory ? (
+                    <section className="section-block not-found" role="status">
+                      <p className="section-tag">Pàgina d'article</p>
+                      <h1>Carregant la notícia…</h1>
+                      <p>Estem recuperant aquesta peça de l’hemeroteca.</p>
+                    </section>
+                  ) : (
+                    <NotFoundPage onNavigate={navigate} />
+                  )
+                ) : null}
+
+                {route.page === 'archive' ? (
+                  <ArchiveView
+                    archiveStories={archiveStories}
+                    lastRefreshLabel={lastRefreshLabel}
                     onNavigate={navigate}
                   />
-                ) : isFetchingStory ? (
-                  <section className="section-block not-found" role="status">
-                    <p className="section-tag">Pàgina d'article</p>
-                    <h1>Carregant la notícia…</h1>
-                    <p>Estem recuperant aquesta peça de l’hemeroteca.</p>
-                  </section>
-                ) : (
-                  <NotFoundPage onNavigate={navigate} />
-                )
-              ) : null}
+                ) : null}
 
-              {route.page === 'archive' ? (
-                <ArchiveView
-                  archiveStories={archiveStories}
-                  lastRefreshLabel={lastRefreshLabel}
-                  onNavigate={navigate}
-                />
-              ) : null}
-
-              {route.page === 'home' ? (
-                <PortadaView
-                  categories={categories}
-                  activeCategory={activeCategory}
-                  applyCategoryFilter={applyCategoryFilter}
-                  getFilterPath={getFilterPath}
-                  activeDistanceFilter={activeDistanceFilter}
-                  searchTerm={searchTerm}
-                  setSearchTerm={setSearchTerm}
-                  liveTicker={liveTicker}
-                  featuredStory={featuredStory}
-                  featuredImageLink={featuredImageLink}
-                  featuredSourceLink={featuredSourceLink}
-                  resetFilters={resetFilters}
-                  sectionShowingGeneral={sectionShowingGeneral}
-                  sectionFromArchive={sectionFromArchive}
-                  headlineCount={headlineCount}
-                  isServiceSection={isServiceSection}
-                  navigate={navigate}
-                  hasActiveFilters={hasActiveFilters}
-                  distanceFilterOptions={distanceFilterOptions}
-                  applyDistanceFilter={applyDistanceFilter}
-                  activeDistanceOption={activeDistanceOption}
-                  allStories={allStories}
-                  portadaStories={portadaStories}
-                />
-              ) : null}
-
-              {route.page === 'manifest' ? (
-                <>
-                  <PageHero
-                    tag="Manifest editorial"
-                    title="Una mirada constructiva necessita evidència, utilitat i límits."
-                    description="Aquest és el marc amb què El Bon Diari tria solucions, verificacions i informació pràctica, i explica quin valor té per a qui ho llegeix."
+                {route.page === 'home' ? (
+                  <PortadaView
+                    categories={categories}
+                    activeCategory={activeCategory}
+                    applyCategoryFilter={applyCategoryFilter}
+                    getFilterPath={getFilterPath}
+                    activeDistanceFilter={activeDistanceFilter}
+                    searchTerm={searchTerm}
+                    setSearchTerm={setSearchTerm}
+                    liveTicker={liveTicker}
+                    featuredStory={featuredStory}
+                    featuredImageLink={featuredImageLink}
+                    featuredSourceLink={featuredSourceLink}
+                    resetFilters={resetFilters}
+                    sectionShowingGeneral={sectionShowingGeneral}
+                    sectionFromArchive={sectionFromArchive}
+                    headlineCount={headlineCount}
+                    isServiceSection={isServiceSection}
+                    navigate={navigate}
+                    hasActiveFilters={hasActiveFilters}
+                    distanceFilterOptions={distanceFilterOptions}
+                    applyDistanceFilter={applyDistanceFilter}
+                    activeDistanceOption={activeDistanceOption}
+                    allStories={allStories}
+                    portadaStories={portadaStories}
                   />
-                  <ManifestSection />
-                  <SourcesManifest />
-                </>
-              ) : null}
+                ) : null}
 
-              {route.page === 'stats' ? <StatsView allStories={allStories} /> : null}
+                {route.page === 'manifest' ? <ManifestView /> : null}
 
-              {route.page === 'about' ? <ManifestView onNavigate={navigate} /> : null}
+                {route.page === 'stats' ? <StatsView allStories={allStories} /> : null}
 
-              {route.page === 'privacy' ? <PrivacyView onNavigate={navigate} /> : null}
+                {route.page === 'about' ? <AboutView onNavigate={navigate} /> : null}
 
-              {route.page === 'saved' ? <SavedView onNavigate={navigate} /> : null}
-            </Suspense>
+                {route.page === 'privacy' ? <PrivacyView onNavigate={navigate} /> : null}
+
+                {route.page === 'saved' ? <SavedView onNavigate={navigate} /> : null}
+              </Suspense>
+            </ErrorBoundary>
           </main>
 
           <FooterNote onNavigate={navigate} />
