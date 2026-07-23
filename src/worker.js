@@ -70,9 +70,12 @@ export async function isRefreshAuthorized(request, env) {
 
 export async function isFeedHealthAuthorized(request, env) {
   const authorization = request.headers.get('authorization') || ''
+  const customHeader = request.headers.get('x-health-token') || ''
+  const url = new URL(request.url)
+  const urlToken = url.searchParams.get('token') || ''
   const provided = authorization.startsWith('Bearer ')
     ? authorization.slice('Bearer '.length).trim()
-    : ''
+    : customHeader || urlToken || ''
   const expectedToken = env.BONDIARI_FEED_HEALTH_TOKEN || env.BONDIARI_REFRESH_TOKEN
   return secretsMatch(provided, expectedToken)
 }
@@ -191,6 +194,7 @@ async function handleFeedHealth(request, env) {
     )
   }
   try {
+    const kv = env.LIVE_NEWS_KV
     const stats = await readFeedHealthStats(env)
     if (stats?._readError) {
       return jsonResponse(
@@ -198,6 +202,49 @@ async function handleFeedHealth(request, env) {
         { status: 503, headers: { 'cache-control': 'no-store' } },
       )
     }
+
+    const url = new URL(request.url)
+    const isDashboard = url.searchParams.get('mode') === 'dashboard'
+
+    if (isDashboard && kv) {
+      let cronTiming = null
+      const history = []
+      try {
+        cronTiming = await kv.get('cron-timing:latest', 'json')
+      } catch {
+        // Ignorar si no hi ha cron timing
+      }
+
+      try {
+        const today = new Date()
+        for (let i = 0; i < 30; i += 1) {
+          const date = new Date(today.getTime() - i * 24 * 60 * 60 * 1000)
+          const dateKey = date.toISOString().slice(0, 10)
+          const snapshot = await kv.get(`health-daily:${dateKey}`, 'json')
+          if (snapshot) {
+            history.push(snapshot)
+          }
+        }
+      } catch {
+        // Ignorar errors de cerca històrica
+      }
+
+      const circuitBreakers = Object.values(stats || {}).filter(
+        (rec) => rec && typeof rec === 'object' && rec.circuitBreakerActive,
+      )
+
+      return jsonResponse(
+        {
+          ok: true,
+          stats,
+          cronTiming,
+          circuitBreakers,
+          history,
+        },
+        { headers: { 'cache-control': 'no-store' } },
+      )
+    }
+
     return jsonResponse({ ok: true, stats }, { headers: { 'cache-control': 'no-store' } })
   } catch (error) {
     console.error('No s’han pogut carregar les mètriques de salut dels feeds', error)

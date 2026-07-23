@@ -34,6 +34,7 @@ const StatsView = lazy(() => import('./views/StatsView.jsx'))
 const PrivacyView = lazy(() => import('./views/PrivacyView.jsx'))
 const ManifestView = lazy(() => import('./views/ManifestView.jsx'))
 const AboutView = lazy(() => import('./views/AboutView.jsx'))
+const DiagnosticView = lazy(() => import('./views/DiagnosticView.jsx'))
 
 const siteName = 'El Bon Diari'
 const siteUrl = 'https://bondiari.com'
@@ -102,6 +103,10 @@ function getRoute(path) {
 
   if (normalizedPath === '/estadistiques') {
     return { page: 'stats' }
+  }
+
+  if (normalizedPath === '/diagnostic' || normalizedPath === '/diagnosi') {
+    return { page: 'diagnostic' }
   }
 
   if (
@@ -716,6 +721,7 @@ function waitForSwController() {
           import('./views/PrivacyView.jsx'),
           import('./views/ManifestView.jsx'),
           import('./views/AboutView.jsx'),
+          import('./views/DiagnosticView.jsx'),
         ])
       } catch {
         // Ignorar fallades en offline inicial
@@ -1325,6 +1331,8 @@ function waitForSwController() {
                 {route.page === 'privacy' ? <PrivacyView onNavigate={navigate} /> : null}
 
                 {route.page === 'saved' ? <SavedView onNavigate={navigate} /> : null}
+
+                {route.page === 'diagnostic' ? <DiagnosticView /> : null}
               </Suspense>
             </ErrorBoundary>
           </main>

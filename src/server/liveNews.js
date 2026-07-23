@@ -1695,6 +1695,7 @@ function ensureCategoryCoverage(capped, pool, limit) {
 }
 
 export async function getLiveNewsPayload(kv, { force = false, env } = {}) {
+  const runStartTime = Date.now()
   let cached = null
   try {
     cached = await getCachedPayload(kv)
@@ -1818,10 +1819,38 @@ export async function getLiveNewsPayload(kv, { force = false, env } = {}) {
     )
     await updateEditorialStats(kv, {
       reviewed: reviewedThisPass,
-      // "published" compta peces NOVES úniques d'aquesta passada (no el total del
-      // lot a cada refresc), perquè el comptador mensual no s'infli artificialment.
       published: shownFreshUrls.length,
     })
+
+    const cronDurationMs = Date.now() - runStartTime
+    const todayKey = new Date().toISOString().slice(0, 10)
+    const cronTiming = {
+      runStartTime,
+      cronDurationMs,
+      reviewedThisPass,
+      publishedCount: shownFreshUrls.length,
+      totalStories: publishedStories.length,
+      updatedAt: new Date().toISOString(),
+    }
+
+    try {
+      await kv.put('cron-timing:latest', JSON.stringify(cronTiming))
+      const healthStats = await readFeedHealthStats(env)
+      const dailySnapshot = {
+        date: todayKey,
+        cronTiming,
+        feedHealthStats: healthStats,
+        updatedAt: new Date().toISOString(),
+      }
+      await kv.put(
+        `health-daily:${todayKey}`,
+        JSON.stringify(dailySnapshot),
+        { expirationTtl: 30 * 24 * 60 * 60 },
+      )
+    } catch (kvErr) {
+      console.warn('[telemetria] No s’ha pogut desar el snapshot de salut diari', kvErr)
+    }
+
     const cacheLabel =
       freshStories.length >= minFreshStoriesForFullRefresh
         ? 'refresh-fresh'
@@ -1834,6 +1863,7 @@ export async function getLiveNewsPayload(kv, { force = false, env } = {}) {
       freshCount: freshStories.length,
       totalCandidates: allStories.length,
       reviewedThisPass,
+      cronDurationMs,
     }
   } catch (error) {
     console.warn('No s’ha pogut escriure la memòria de notícies', error)
