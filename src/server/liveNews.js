@@ -7,13 +7,38 @@ import { normalizeCategory, refineCategoryByContent } from '../lib/category.js'
 import { storyImagePath } from '../lib/story-image-path.js'
 import { applyOwnContent } from './storyText.js'
 import { feedStoryId } from '../lib/story-id.js'
+import {
+  refreshIntervalMs,
+  targetStoryLimit,
+  maxStoriesPerSource,
+  collectionPoolSize,
+  maxStoriesPerLanguage,
+  sections,
+  rssFeeds,
+  allowedSourceNames,
+  selectFeedsForRun,
+  tickerFeedNames,
+} from './rss/feedsConfig.js'
+import {
+  normalizeAgendaItem,
+  collectAgendaStories,
+  normalizeRaiscOpportunity,
+  collectRaiscOpportunities,
+  normalizeIdescatUpdate,
+  collectIdescatUpdates,
+} from './rss/serviceFeeds.js'
+
+export {
+  refreshIntervalMs,
+  normalizeAgendaItem,
+  normalizeRaiscOpportunity,
+  normalizeIdescatUpdate,
+}
 
 // Les peces publicades es desen també sota una clau estable story:<id> perquè la
 // seva pàgina de detall es pugui resoldre encara que surtin de la portada (finestra
 // de 30 peces / 4 dies). Així els enllaços compartits o indexats no fan 404.
 const storyDetailTtlSeconds = 30 * 24 * 60 * 60
-
-export const refreshIntervalMs = 12 * 60 * 60 * 1000
 
 const cacheKey = 'latest'
 // El Bon Diari és un DIARI: el radar només manté notícies de pocs dies. Una
@@ -47,181 +72,6 @@ export function isStoryWithinLiveWindow(story, now = Date.now()) {
   )
 }
 const liveEditorialVersion = LIVE_EDITORIAL_VERSION
-const targetStoryLimit = 50
-const maxStoriesPerSource = 8
-const collectionPoolSize = 80
-// Bondiari és un diari de Catalunya. Proporcions OBJECTIU sobre el lot
-// (targetStoryLimit = 50): català ~60% (sense sostre: omple la resta de la
-// portada), castellà ~20% (6), anglès ~10% (3) i la resta de llengües ~10% en
-// conjunt (francès/italià/portuguès, una cadascuna). Així el català domina la
-// portada i cap llengua forana no la pot inundar.
-const maxStoriesPerLanguage = { es: 6, en: 3, fr: 1, it: 1, pt: 1 }
-
-// Els feeds per secció de 3cat van quedar TRENCATS el 2026 (ara són pàgines
-// HTML, no RSS): donaven 0 notícies i malgastaven una subpetició cadascun. Les
-// seccions s'alimenten ara dels feeds dedicats de rssFeeds (El País Cultura/
-// Tecnologia/Ciència, ARA Cultura, etc.).
-const sections = []
-
-// Llista mestra de fonts en SIS llengües (ca, es, en, pt, fr, it). És massa
-// gran per baixar-la sencera en un sol refresc sense petar el límit de
-// subpeticions del pla gratuït (~50), així que les marcades amb `core: true`
-// es baixen SEMPRE (una àncora per llengua perquè cap quedi muda) i la resta
-// ROTEN: cada refresc n'agafa una finestra diferent (vegeu selectFeedsForRun).
-// Totes les URLs estan validades (responen RSS/Atom amb peces fresques).
-const rssFeeds = [
-  // ===== FONTS AMPLIADES (jul. 2026): proximitat CAT, estatal i europeu =====
-  { name: 'ARA', url: 'https://www.ara.cat/rss/latest/', language: 'ca', defaultCategory: 'Actualitat', core: true },
-  { name: 'ARA Internacional', url: 'https://www.ara.cat/rss/internacional/', language: 'ca', defaultCategory: 'Internacional' },
-  { name: 'ARA Cultura', url: 'https://www.ara.cat/rss/cultura/', language: 'ca', defaultCategory: 'Cultura' },
-  { name: 'ARA Societat', url: 'https://www.ara.cat/rss/societat/', language: 'ca', defaultCategory: 'Societat' },
-  { name: 'ARA Economia', url: 'https://www.ara.cat/rss/economia/', language: 'ca', defaultCategory: 'Economia' },
-  { name: 'El 9 Nou Osona', url: 'https://el9nou.cat/feed/?post_type=post&edicio=osona-ripolles', language: 'ca', defaultCategory: 'Comarcal' },
-  { name: 'El 9 Nou Valles', url: 'https://el9nou.cat/feed/?post_type=post&edicio=valles-oriental', language: 'ca', defaultCategory: 'Comarcal' },
-  { name: 'AnoiaDiari', url: 'https://www.anoiadiari.cat/rss', language: 'ca', defaultCategory: 'Comarcal' },
-  { name: "La Veu de l'Anoia", url: 'https://veuanoia.cat/feed/', language: 'ca', defaultCategory: 'Comarcal' },
-  { name: "L'Independent de Gracia", url: 'https://www.independent.cat/rss', language: 'ca', defaultCategory: 'Local' },
-  { name: 'Diari Mes', url: 'https://www.diarimes.com/ca/rss/home.xml', language: 'ca', defaultCategory: 'Comarcal' },
-  { name: 'Aguaita', url: 'https://www.aguaita.cat/rss', language: 'ca', defaultCategory: 'Comarcal' },
-  { name: 'Segre', url: 'https://www.segre.com/ca/rss/home.xml', language: 'ca', defaultCategory: 'Comarcal' },
-  { name: 'La Directa', url: 'https://directa.cat/feed/', language: 'ca', defaultCategory: 'Societat' },
-  { name: 'La Vanguardia Catalunya', url: 'https://www.lavanguardia.com/rss/local/catalunya.xml', language: 'es', defaultCategory: 'Actualitat' },
-  { name: 'La Vanguardia Girona', url: 'https://www.lavanguardia.com/rss/local/girona.xml', language: 'es', defaultCategory: 'Local' },
-  { name: 'La Vanguardia Tarragona', url: 'https://www.lavanguardia.com/rss/local/tarragona.xml', language: 'es', defaultCategory: 'Local' },
-  { name: 'La Vanguardia Lleida', url: 'https://www.lavanguardia.com/rss/local/lleida.xml', language: 'es', defaultCategory: 'Local' },
-  { name: 'elDiario.es', url: 'https://www.eldiario.es/rss/', language: 'es', defaultCategory: 'Actualitat' },
-  { name: 'La Vanguardia', url: 'https://www.lavanguardia.com/rss/home.xml', language: 'es', defaultCategory: 'Actualitat' },
-  { name: 'El Periodico', url: 'https://www.elperiodico.com/es/rss/sociedad/rss.xml', language: 'es', defaultCategory: 'Actualitat' },
-  { name: 'Newtral', url: 'https://www.newtral.es/feed/', language: 'es', defaultCategory: 'Societat' },
-  { name: 'The Local Spain', url: 'https://feeds.thelocal.com/rss/es', language: 'en', defaultCategory: 'Actualitat' },
-  { name: 'POLITICO Europe', url: 'https://www.politico.eu/feed/', language: 'en', defaultCategory: 'Politica' },
-
-  // NOTA: només fonts GRATUÏTES/obertes. S'han tret els mitjans amb subscripció
-  // o mur de pagament (ARA, El Punt Avui, Diari de Tarragona, El País, La
-  // Vanguardia, ABC, El Mundo, El Español, NYT, WaPo, WSJ, FT, Bloomberg, Le
-  // Monde, la Repubblica, Observador…). Vegeu l'historial de git per la llista
-  // completa del que s'ha retirat.
-  // ===================== CATALÀ =====================
-  { name: 'Vilaweb', url: 'https://www.vilaweb.cat/feed/', language: 'ca', defaultCategory: 'Actualitat', core: true },
-  { name: 'Nació Digital', url: 'https://www.naciodigital.cat/rss/', language: 'ca', defaultCategory: 'Actualitat', core: true },
-  { name: 'El Món', url: 'https://elmon.cat/feed/', language: 'ca', defaultCategory: 'Actualitat' },
-  // Local de Mataró i el Maresme (Capgròs). Categoria forçada a 'Local'.
-  { name: 'Capgròs', url: 'https://capgros.elnacional.cat/uploads/feeds/feed_ca.xml', language: 'ca', defaultCategory: 'Local', forceCategory: true, lenient: true, core: true },
-  { name: 'Betevé', url: 'https://beteve.cat/feed/', language: 'ca', defaultCategory: 'Barcelona' },
-  { name: 'Crític', url: 'https://www.elcritic.cat/feed', language: 'ca', defaultCategory: 'Periodisme' },
-  // Primer format de servei que amplia Bondiari més enllà de la notícia
-  // positiva. És un feed íntegrament dedicat a verificacions: no passa pel
-  // filtre de "bondat", sinó per la confiança editorial de la font.
-  {
-    name: 'Verificat',
-    url: 'https://www.verificat.cat/feed/',
-    language: 'ca',
-    defaultCategory: 'Verificació',
-    forceCategory: true,
-    editorialMode: 'verification',
-    sourceTier: 'B',
-    core: true,
-  },
-
-  // ===================== CASTELLÀ (només obert/gratuït) =====================
-  { name: 'RTVE', url: 'https://www.rtve.es/rss/temas_noticias.xml', language: 'es', defaultCategory: 'Espanya', core: true },
-  { name: '20minutos', url: 'https://www.20minutos.es/rss/', language: 'es', defaultCategory: 'Espanya' },
-  // Agències / serveis d'informació gratuïts (RSS oficial verificat).
-  { name: 'Europa Press', url: 'https://www.europapress.es/rss/rss.aspx', language: 'es', defaultCategory: 'Espanya' },
-  { name: 'UN News', url: 'https://news.un.org/feed/subscribe/es/news/all/rss.xml', language: 'es', defaultCategory: 'Món' },
-
-  // ===================== ANGLÈS =====================
-  { name: 'BBC', url: 'https://feeds.bbci.co.uk/news/world/rss.xml', language: 'en', defaultCategory: 'Món', core: true },
-  // Diaris de bones notícies (ja curats: passen sense exigir paraula positiva).
-  { name: 'Positive News', url: 'https://www.positive.news/feed/', language: 'en', defaultCategory: 'Món', lenient: true, curated: true, core: true },
-  { name: 'Good News Network', url: 'https://www.goodnewsnetwork.org/feed/', language: 'en', defaultCategory: 'Món', lenient: true, curated: true },
-  { name: 'Reasons to be Cheerful', url: 'https://reasonstobecheerful.world/feed/', language: 'en', defaultCategory: 'Món', lenient: true, curated: true },
-  { name: 'The Guardian', url: 'https://www.theguardian.com/world/rss', language: 'en', defaultCategory: 'Món' },
-  { name: 'CNN', url: 'http://rss.cnn.com/rss/edition.rss', language: 'en', defaultCategory: 'Món' },
-  { name: 'Al Jazeera', url: 'https://www.aljazeera.com/xml/rss/all.xml', language: 'en', defaultCategory: 'Món' },
-  { name: 'NPR', url: 'https://feeds.npr.org/1001/rss.xml', language: 'en', defaultCategory: 'Món' },
-  { name: 'Sky News', url: 'https://feeds.skynews.com/feeds/rss/world.xml', language: 'en', defaultCategory: 'Món' },
-  { name: 'The Independent', url: 'https://www.independent.co.uk/news/world/rss', language: 'en', defaultCategory: 'Món' },
-  { name: 'The Conversation', url: 'https://theconversation.com/articles.atom', language: 'en', defaultCategory: 'Coneixement' },
-  { name: 'Science Daily', url: 'https://www.sciencedaily.com/rss/all.xml', language: 'en', defaultCategory: 'Ciència', forceCategory: true },
-  { name: 'Phys.org', url: 'https://phys.org/rss-feed/', language: 'en', defaultCategory: 'Ciència', forceCategory: true },
-  { name: 'BBC Science', url: 'https://feeds.bbci.co.uk/news/science_and_environment/rss.xml', language: 'en', defaultCategory: 'Ciència', forceCategory: true },
-  { name: 'Guardian Science', url: 'https://www.theguardian.com/science/rss', language: 'en', defaultCategory: 'Ciència', forceCategory: true },
-  { name: 'BBC Technology', url: 'https://feeds.bbci.co.uk/news/technology/rss.xml', language: 'en', defaultCategory: 'Tecnologia', forceCategory: true },
-  { name: 'TechCrunch', url: 'https://techcrunch.com/feed/', language: 'en', defaultCategory: 'Tecnologia', forceCategory: true },
-  { name: 'The Verge', url: 'https://www.theverge.com/rss/index.xml', language: 'en', defaultCategory: 'Tecnologia', forceCategory: true },
-  { name: 'Guardian Culture', url: 'https://www.theguardian.com/culture/rss', language: 'en', defaultCategory: 'Cultura', forceCategory: true },
-  { name: 'Smithsonian', url: 'https://www.smithsonianmag.com/rss/latest_articles/', language: 'en', defaultCategory: 'Cultura', forceCategory: true },
-  { name: 'Euronews', url: 'https://www.euronews.com/rss?level=theme&name=news', language: 'en', defaultCategory: 'Europa' },
-
-  // ===================== PORTUGUÈS (només obert/gratuït) =====================
-  { name: 'RTP Notícias', url: 'https://www.rtp.pt/noticias/rss', language: 'pt', defaultCategory: 'Món', core: true },
-  { name: 'CNN Portugal', url: 'https://cnnportugal.iol.pt/rss', language: 'pt', defaultCategory: 'Món' },
-  { name: 'G1', url: 'https://g1.globo.com/rss/g1/', language: 'pt', defaultCategory: 'Món' },
-  { name: 'Agência Brasil', url: 'https://agenciabrasil.ebc.com.br/rss/ultimasnoticias/feed.xml', language: 'pt', defaultCategory: 'Món' },
-
-  // ===================== FRANCÈS (només obert/gratuït) =====================
-  { name: 'France 24', url: 'https://www.france24.com/fr/rss', language: 'fr', defaultCategory: 'Europa', core: true },
-  { name: 'Positivr', url: 'https://positivr.fr/feed/', language: 'fr', defaultCategory: 'Europa', lenient: true, curated: true },
-  { name: 'RFI', url: 'https://www.rfi.fr/fr/rss', language: 'fr', defaultCategory: 'Europa' },
-  { name: '20 Minutes', url: 'https://www.20minutes.fr/feeds/rss-une.xml', language: 'fr', defaultCategory: 'Europa' },
-  { name: 'Franceinfo', url: 'https://www.francetvinfo.fr/titres.rss', language: 'fr', defaultCategory: 'Europa' },
-
-  // ===================== ITALIÀ (només obert/gratuït) =====================
-  { name: 'ANSA', url: 'https://www.ansa.it/sito/ansait_rss.xml', language: 'it', defaultCategory: 'Europa', core: true },
-  { name: 'Rai News', url: 'https://www.rainews.it/rss/tutti', language: 'it', defaultCategory: 'Europa' },
-  { name: 'Il Fatto Quotidiano', url: 'https://www.ilfattoquotidiano.it/feed/', language: 'it', defaultCategory: 'Europa' },
-  { name: 'Open', url: 'https://www.open.online/feed/', language: 'it', defaultCategory: 'Europa' },
-  { name: 'ANSA Cultura', url: 'https://www.ansa.it/sito/notizie/cultura/cultura_rss.xml', language: 'it', defaultCategory: 'Cultura', forceCategory: true },
-]
-
-// Quantes fonts es baixen com a màxim per refresc (límit de subpeticions del
-// pla gratuït ~50; en deixem ~14 per a la IA). Les `core` sempre; la resta
-// roten en finestres deterministes que avancen cada interval de refresc, de
-// manera que en poques hores es cobreixen totes les fonts del món.
-// Quantes fonts ROTATÒRIES de cada llengua entren a CADA refresc. El català i
-// el castellà (llengües de casa) en porten més; la resta, menys però sempre
-// alguna. Roten dins de cada llengua (avancen amb el temps), de manera que cada
-// refresc duu sempre una barreja de les sis llengües i, en uns quants refrescs,
-// es cobreix tota la llista mestra. core (9) + 13 rotatòries = 22 fonts/refresc,
-// que deixa marge per a les ~6 crides de la IA sota el límit de subpeticions.
-// El català en porta més (és la llengua de casa i ha de dominar la portada) i
-// l'anglès menys (ja té dues fonts core: BBC i Positive News).
-const rotatingPerLanguage = { ca: 5, es: 3, en: 2, fr: 1, it: 1, pt: 1 }
-
-// Noms de les fonts VIGENTS (totes gratuïtes). Serveix per purgar de seguida les
-// peces arrossegades ("carryover") d'una font que s'ha eliminat de la llista
-// (p. ex. en treure els mitjans de pagament), en lloc d'esperar que caduquin.
-const serviceSourceNames = [
-  'Agenda Cultural',
-  'Dades Obertes de Catalunya · RAISC',
-  'Idescat',
-]
-const allowedSourceNames = new Set([
-  ...rssFeeds.map((feed) => feed.name),
-  ...serviceSourceNames,
-])
-
-function selectFeedsForRun(nowMs) {
-  const core = rssFeeds.filter((feed) => feed.core)
-  const tick = Math.floor(nowMs / refreshIntervalMs)
-  const seen = new Set(core.map((feed) => feed.url))
-  const picked = []
-  for (const [language, count] of Object.entries(rotatingPerLanguage)) {
-    const pool = rssFeeds.filter(
-      (feed) => !feed.core && feed.language === language,
-    )
-    if (!pool.length) continue
-    for (let i = 0; i < count; i += 1) {
-      const feed = pool[(tick * count + i) % pool.length]
-      if (!seen.has(feed.url)) {
-        seen.add(feed.url)
-        picked.push(feed)
-      }
-    }
-  }
-  return [...core, ...picked]
-}
 
 // --- Diccionaris editorials per idioma -------------------------------------
 // CRITERI de les paraules POSITIVES: només hi entren mots que denoten BONDAT en
@@ -1456,277 +1306,7 @@ export async function collectFeedStories(feed, options = {}) {
 }
 
 
-// --- Fonts de servei estructurades -----------------------------------------
 
-const agendaMataroFeedUrl =
-  'https://agenda.cultura.gencat.cat/content/agenda/ca/rss/resultats.html?' +
-  [
-  'comarcaMunicipiTagId=agenda:ubicacions/barcelona/maresme/mataro',
-  'ambitIds=agenda:ambits/arts-visuals',
-  'ambitIds=agenda:ambits/cinema',
-  'ambitIds=agenda:ambits/divulgacio',
-  'ambitIds=agenda:ambits/espectacles',
-  'ambitIds=agenda:ambits/gastronomia',
-  'ambitIds=agenda:ambits/llibres-i-lletres',
-  'ambitIds=agenda:ambits/musica',
-  'ambitIds=agenda:ambits/tradicional-i-popular',
-  'ambitIds=agenda:ambits/zz-altres-ambits',
-  ].join('&')
-
-const raiscApiUrl =
-  'https://analisi.transparenciacatalunya.cat/resource/khxn-nv6a.json'
-const idescatMataroApiUrl =
-  'https://api.idescat.cat/emex/v1/dades.json?id=081213'
-
-function serviceStory({
-  title,
-  category,
-  summary,
-  impact,
-  source,
-  url,
-  publishedAt,
-  editorialFormat,
-  expiresAt,
-  location = 'Catalunya',
-}) {
-  if (!title || !url || !publishedAt) return null
-  const ownBody = [summary, impact].filter(Boolean)
-  return {
-    title,
-    category,
-    location,
-    summary,
-    impact,
-    source,
-    sourceTier: 'A',
-    editorialFormat,
-    language: 'ca',
-    url,
-    imageUrl: storyImagePath(url, { title, category }),
-    imageAlt: `Il·lustració editorial per a ${title}.`,
-    imageCredit: 'El Bon Diari (il·lustració IA)',
-    imageAttributionUrl: '',
-    editorialScore: 1,
-    curated: true,
-    body: ownBody,
-    ownContent: ownBody.length > 0,
-    editorialVersion: liveEditorialVersion,
-    publishedAt,
-    ...(expiresAt ? { expiresAt } : {}),
-  }
-}
-
-export function normalizeAgendaItem(block, publishedAt = new Date().toISOString()) {
-  const title = decodeHtmlEntities(stripHtml(extractTag(block, 'title')))
-  const url = decodeHtmlEntities(extractTag(block, 'link')).replace(
-    'agenda.cultura.gencat.cat:443',
-    'agenda.cultura.gencat.cat',
-  )
-  const summary =
-    `L’Agenda Cultural de la Generalitat inclou «${title}» entre les ` +
-    'activitats disponibles a Mataró.'
-  return serviceStory({
-    title,
-    category: 'Agenda',
-    summary,
-    impact:
-      'Afegeix una proposta cultural de proximitat a l’agenda del lector.',
-    source: 'Agenda Cultural',
-    url,
-    publishedAt,
-    editorialFormat: 'agenda',
-    location: 'Mataró, Maresme',
-  })
-}
-
-async function collectAgendaStories() {
-  try {
-    const response = await fetch(agendaMataroFeedUrl, {
-      headers: {
-        accept: 'application/rss+xml, application/xml, text/xml',
-        'user-agent': 'El Bon Diari/1.0 (+https://bondiari.com)',
-      },
-    })
-    if (!response.ok) return { stories: [], candidates: 0 }
-    const xml = await response.text()
-    if (xml.length > 250_000 || !/<rss[\s>]/i.test(xml)) {
-      console.warn(`[servei] Agenda ha retornat una resposta invàlida (${xml.length} bytes)`)
-      return { stories: [], candidates: 0 }
-    }
-    const itemRegex = /<item\b[^>]*>([\s\S]*?)<\/item>/gi
-    const stories = []
-    let candidates = 0
-    let match
-    const snapshotAt = new Date().toISOString()
-    while ((match = itemRegex.exec(xml)) !== null && stories.length < 6) {
-      candidates += 1
-      const story = normalizeAgendaItem(match[1], snapshotAt)
-      if (story) stories.push(story)
-    }
-    return { stories, candidates }
-  } catch (error) {
-    console.warn('[servei] Ha fallat l’Agenda Cultural', error)
-    return { stories: [], candidates: 0 }
-  }
-}
-
-function formatEuros(value) {
-  const amount = Number(value)
-  if (!Number.isFinite(amount)) return ''
-  return new Intl.NumberFormat('ca-ES', {
-    style: 'currency',
-    currency: 'EUR',
-    maximumFractionDigits: 0,
-  }).format(amount)
-}
-
-export function normalizeRaiscOpportunity(record) {
-  const title =
-    record.objecte_de_la_convocat_ria ||
-    record.t_tol_convocat_ria_catal ||
-    ''
-  const url = record.seu_electr_nica || record.url_diari_oficial || ''
-  const deadline = record.data_fi_termini_presentaci_sol_licitud || ''
-  const parts = [
-    record.tipus_de_beneficiaris
-      ? `Destinataris: ${record.tipus_de_beneficiaris}`
-      : '',
-    deadline
-      ? `Termini: ${new Date(deadline).toLocaleDateString('ca-ES')}`
-      : '',
-    record.import_total_convocat_ria
-      ? `Dotació: ${formatEuros(record.import_total_convocat_ria)}`
-      : '',
-  ].filter(Boolean)
-  return serviceStory({
-    title,
-    category: 'Oportunitats',
-    summary: parts.join(' · '),
-    impact:
-      'Resumeix una convocatòria oberta amb termini, destinataris i document oficial.',
-    source: 'Dades Obertes de Catalunya · RAISC',
-    url,
-    publishedAt:
-      record.data_diari_oficial || new Date().toISOString(),
-    editorialFormat: 'opportunity',
-    expiresAt: deadline,
-    location: record.regio_apli || 'Catalunya',
-  })
-}
-
-async function collectRaiscOpportunities() {
-  try {
-    const today = new Date()
-    const horizon = new Date(today.getTime() + 45 * 24 * 60 * 60 * 1000)
-    const start = `${today.toISOString().slice(0, 10)}T00:00:00.000`
-    const end = `${horizon.toISOString().slice(0, 10)}T23:59:59.999`
-    const fields = [
-      'codi_raisc',
-      't_tol_convocat_ria_catal',
-      'entitat_oo_aa_o_departament_1',
-      'data_diari_oficial',
-      'url_diari_oficial',
-      'tipus_de_beneficiaris',
-      'import_total_convocat_ria',
-      'data_fi_termini_presentaci_sol_licitud',
-      'seu_electr_nica',
-      'objecte_de_la_convocat_ria',
-      'finalitat_publica',
-      'regio_apli',
-    ].join(',')
-    const query = new URLSearchParams({
-      $select: fields,
-      $where:
-        `data_fi_termini_presentaci_sol_licitud >= '${start}' ` +
-        `AND data_fi_termini_presentaci_sol_licitud <= '${end}'`,
-      $order: 'data_fi_termini_presentaci_sol_licitud ASC',
-      $limit: '12',
-    })
-    const response = await fetch(`${raiscApiUrl}?${query}`, {
-      headers: {
-        accept: 'application/json',
-        'user-agent': 'El Bon Diari/1.0 (+https://bondiari.com)',
-      },
-    })
-    if (!response.ok) return { stories: [], candidates: 0 }
-    const records = await response.json()
-    if (!Array.isArray(records)) return { stories: [], candidates: 0 }
-    return {
-      stories: records.map(normalizeRaiscOpportunity).filter(Boolean),
-      candidates: records.length,
-    }
-  } catch (error) {
-    console.warn('[servei] Ha fallat el registre RAISC', error)
-    return { stories: [], candidates: 0 }
-  }
-}
-
-function collectObjects(value, predicate, result = []) {
-  if (!value || typeof value !== 'object') return result
-  if (predicate(value)) result.push(value)
-  for (const child of Object.values(value)) {
-    collectObjects(child, predicate, result)
-  }
-  return result
-}
-
-export function normalizeIdescatUpdate(table) {
-  const rows = asArray(table?.ff?.f)
-    .filter((row) => row?.c && row?.v)
-    .slice(0, 4)
-  if (!table?.c || !table?.updated || !table?.l || rows.length === 0) {
-    return null
-  }
-  const facts = rows.map((row) => {
-    const localValue = String(row.v).split(',')[0]
-    return `${row.c}: ${localValue}${row.u ? ` ${row.u}` : ''}`
-  })
-  const title = `Idescat actualitza ${table.c} a Mataró`
-  const versionUrl = `${table.l}#actualitzacio-${table.updated.slice(0, 10)}`
-  return serviceStory({
-    title,
-    category: 'Dades',
-    summary: `${table.c}${table.r ? ` (${table.r})` : ''}: ${facts.join(' · ')}`,
-    impact:
-      'Actualitza un indicador públic de Mataró amb període, xifra i font originals.',
-    source: 'Idescat',
-    url: versionUrl,
-    publishedAt: table.updated,
-    editorialFormat: 'data',
-    location: 'Mataró, Maresme',
-  })
-}
-
-async function collectIdescatUpdates() {
-  try {
-    const response = await fetch(idescatMataroApiUrl, {
-      headers: {
-        accept: 'application/json',
-        'user-agent': 'El Bon Diari/1.0 (+https://bondiari.com)',
-      },
-    })
-    if (!response.ok) return { stories: [], candidates: 0 }
-    const payload = await response.json()
-    const tables = collectObjects(
-      payload,
-      (value) =>
-        /^t\d+$/.test(value?.id || '') &&
-        value.updated &&
-        !Number.isNaN(new Date(value.updated).getTime()),
-    ).sort(
-      (left, right) =>
-        new Date(right.updated).getTime() - new Date(left.updated).getTime(),
-    )
-    return {
-      stories: tables.slice(0, 4).map(normalizeIdescatUpdate).filter(Boolean),
-      candidates: tables.length,
-    }
-  } catch (error) {
-    console.warn('[servei] Ha fallat Idescat', error)
-    return { stories: [], candidates: 0 }
-  }
-}
 
 // --- Segona capa: rescat amb IA (Cloudflare Workers AI) --------------------
 // El filtre de paraules clau és ràpid però cec al sentit: rebutja notícies
@@ -2281,8 +1861,7 @@ const tickerCacheKey = 'live-ticker'
 // o IA; la frescor es decideix amb updatedAt.
 const tickerFreshnessMs = 15 * 60 * 1000
 const tickerStorageTtlSeconds = 60 * 60
-// Un grapat de fonts catalanes GRATUÏTES i ràpides (poques subpeticions).
-const tickerFeedNames = ['Vilaweb', 'Nació Digital', 'Betevé', 'Capgròs', 'El Món', 'Crític']
+
 const tickerLimit = 12
 
 export function storiesRequiringDetailPersistence(publishedStories, shownFreshUrls) {
