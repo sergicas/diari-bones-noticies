@@ -36,9 +36,14 @@ export function isStoryWithinLiveWindow(story, now = Date.now()) {
     }
   }
   const publishedAt = new Date(story?.publishedAt).getTime()
+  const maxAgeByFormat = {
+    verification: 45 * 24 * 60 * 60 * 1000,
+    data: 365 * 24 * 60 * 60 * 1000,
+  }
+  const maxAge = maxAgeByFormat[story?.editorialFormat] || maxLiveStoryAgeMs
   return (
     !Number.isNaN(publishedAt) &&
-    now - publishedAt <= maxLiveStoryAgeMs
+    now - publishedAt <= maxAge
   )
 }
 const liveEditorialVersion = LIVE_EDITORIAL_VERSION
@@ -1247,6 +1252,26 @@ export function normalizeFeedItem(block, feed) {
     editorialVersion: liveEditorialVersion,
     publishedAt,
   }
+  if (isTrustedService) {
+    const ownSummaryByFormat = {
+      verification:
+        `${feed.name} ha publicat una comprovació documentada sobre aquesta afirmació.`,
+      agenda:
+        `${feed.name} inclou aquesta activitat entre les propostes disponibles.`,
+      opportunity:
+        `${feed.name} recull aquesta convocatòria i n’ofereix la informació oficial.`,
+      data:
+        `${feed.name} ha actualitzat aquest indicador públic.`,
+    }
+    story.summary =
+      ownSummaryByFormat[editorialFormat] ||
+      `${feed.name} ha publicat aquesta informació de servei.`
+    story.body = [
+      story.summary,
+      `${story.impact} Consulta la font original per veure’n totes les dades i el context.`,
+    ]
+    story.ownContent = true
+  }
   // No la llencem (les clarament negatives ja han caigut amunt). La IA revisarà
   // totes les candidates: vetarà les dolentes que han colat per paraula clau i
   // rescatarà les bones neutres (p. ex. un producte nou amb aplicacions positives).
@@ -1323,6 +1348,7 @@ function serviceStory({
   location = 'Catalunya',
 }) {
   if (!title || !url || !publishedAt) return null
+  const ownBody = [summary, impact].filter(Boolean)
   return {
     title,
     category,
@@ -1340,6 +1366,8 @@ function serviceStory({
     imageAttributionUrl: '',
     editorialScore: 1,
     curated: true,
+    body: ownBody,
+    ownContent: ownBody.length > 0,
     editorialVersion: liveEditorialVersion,
     publishedAt,
     ...(expiresAt ? { expiresAt } : {}),
@@ -1352,13 +1380,13 @@ export function normalizeAgendaItem(block, publishedAt = new Date().toISOString(
     'agenda.cultura.gencat.cat:443',
     'agenda.cultura.gencat.cat',
   )
-  const description = decodeHtmlEntities(
-    stripHtml(extractTag(block, 'description')),
-  )
+  const summary =
+    `L’Agenda Cultural de la Generalitat inclou «${title}» entre les ` +
+    'activitats disponibles a Mataró.'
   return serviceStory({
     title,
     category: 'Agenda',
-    summary: description.slice(0, 320),
+    summary,
     impact:
       'Afegeix una proposta cultural de proximitat a l’agenda del lector.',
     source: 'Agenda Cultural',
@@ -1537,13 +1565,12 @@ async function collectIdescatUpdates() {
     })
     if (!response.ok) return { stories: [], candidates: 0 }
     const payload = await response.json()
-    const cutoff = Date.now() - maxLiveStoryAgeMs
     const tables = collectObjects(
       payload,
       (value) =>
         /^t\d+$/.test(value?.id || '') &&
         value.updated &&
-        new Date(value.updated).getTime() >= cutoff,
+        !Number.isNaN(new Date(value.updated).getTime()),
     ).sort(
       (left, right) =>
         new Date(right.updated).getTime() - new Date(left.updated).getTime(),

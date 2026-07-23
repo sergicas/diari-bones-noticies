@@ -32,6 +32,7 @@ import {
 } from '../storyMeta.js'
 import { buildNewsSitemap } from '../newsSitemap.js'
 import { composePostText, storyLink } from '../social.js'
+import { applyOwnContent } from '../storyText.js'
 
 const SEO_STORY = {
   title: 'Una cooperativa <crea> vint llocs de treball',
@@ -248,7 +249,9 @@ describe('formats editorials de servei', () => {
       source: 'Verificat',
       sourceTier: 'B',
       curated: true,
+      ownContent: true,
     })
+    expect(story.body).toHaveLength(2)
   })
 
   it('manté el mateix contingut fora del radar positiu si no és una verificació', () => {
@@ -276,6 +279,7 @@ describe('formats editorials de servei', () => {
       editorialFormat: 'agenda',
       location: 'Mataró, Maresme',
       sourceTier: 'A',
+      ownContent: true,
     })
     expect(story.url).not.toContain(':443')
   })
@@ -296,6 +300,7 @@ describe('formats editorials de servei', () => {
       editorialFormat: 'opportunity',
       expiresAt: '2026-07-31T00:00:00.000',
       source: 'Dades Obertes de Catalunya · RAISC',
+      ownContent: true,
     })
     expect(story.summary).toContain('400.000')
   })
@@ -319,6 +324,7 @@ describe('formats editorials de servei', () => {
       category: 'Dades',
       editorialFormat: 'data',
       source: 'Idescat',
+      ownContent: true,
     })
     expect(story.summary).toContain('Habitatges iniciats: 187')
   })
@@ -334,6 +340,47 @@ describe('formats editorials de servei', () => {
     expect(
       isStoryWithinLiveWindow(story, Date.parse('2026-07-24T00:00:00.000Z')),
     ).toBe(false)
+  })
+
+  it('manté vigents les verificacions i els indicadors més enllà de quatre dies', () => {
+    const now = Date.parse('2026-07-23T12:00:00.000Z')
+    expect(
+      isStoryWithinLiveWindow(
+        {
+          publishedAt: '2026-07-01T12:00:00.000Z',
+          editorialFormat: 'verification',
+        },
+        now,
+      ),
+    ).toBe(true)
+    expect(
+      isStoryWithinLiveWindow(
+        {
+          publishedAt: '2026-01-01T12:00:00.000Z',
+          editorialFormat: 'data',
+        },
+        now,
+      ),
+    ).toBe(true)
+  })
+
+  it('publica el contingut de servei ja normalitzat sense tornar a dependre de la IA', async () => {
+    const story = normalizeRaiscOpportunity({
+      objecte_de_la_convocat_ria: 'Ajuts per a projectes culturals',
+      url_diari_oficial: 'https://dogc.gencat.cat/ajut',
+      data_diari_oficial: '2026-07-20T00:00:00.000',
+      data_fi_termini_presentaci_sol_licitud: '2026-07-31T00:00:00.000',
+      tipus_de_beneficiaris: 'Entitats sense ànim de lucre',
+    })
+
+    const [published] = await applyOwnContent([story], {})
+
+    expect(published).toMatchObject({
+      title: 'Ajuts per a projectes culturals',
+      ownContent: true,
+      editorialFormat: 'opportunity',
+    })
+    expect(published.body[0]).toContain('Destinataris')
   })
 })
 

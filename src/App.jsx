@@ -359,6 +359,13 @@ const editorialSections = [
   },
 ]
 
+const serviceSectionIds = new Set([
+  'verificacio',
+  'marcador',
+  'et-pot-servir',
+  'agenda',
+])
+
 const fallbackSection = editorialSections.find(
   (section) => section.id === 'societat',
 )
@@ -2593,6 +2600,10 @@ function App() {
   // últim recurs. Així clicar "Ciència", "Salut"… sempre ensenya alguna cosa.
   let sectionFromArchive = false
   let sectionShowingGeneral = false
+  const activeSection = editorialSections.find(
+    (section) => section.label === activeCategory,
+  )
+  const isServiceSection = serviceSectionIds.has(activeSection?.id)
   if (activeCategory !== 'Totes' && filteredStories.length === 0) {
     const archiveSorted = [...archiveStories].sort(sortByPublishedAtDesc)
     const rescueWithDistance = archiveSorted.filter(
@@ -2604,7 +2615,7 @@ function App() {
     if (rescue.length > 0) {
       filteredStories = rescue
       sectionFromArchive = true
-    } else if (normalizedQuery === '') {
+    } else if (normalizedQuery === '' && !isServiceSection) {
       // Últim recurs: la secció no té CAP notícia (ni recent ni a l'hemeroteca,
       // p. ex. una secció temàtica un dia fluix). Per no deixar mai una pàgina morta,
       // ensenyem les bones notícies del dia amb un avís ben clar.
@@ -2884,11 +2895,11 @@ function App() {
     )
 
     if (typeof window !== 'undefined' && category !== 'Totes') {
-      const sectionId = getCategorySlug(category)
       window.setTimeout(() => {
-        const target = document.getElementById(`seccio-${sectionId}`)
+        const target = document.getElementById('resultats-portada')
         if (target) {
           target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+          target.focus({ preventScroll: true })
         }
       }, 120)
     }
@@ -3185,7 +3196,11 @@ function App() {
 
             <NewsletterForm variant="compact" />
 
-            <section className="section-block">
+            <section
+              id="resultats-portada"
+              className="section-block"
+              tabIndex="-1"
+            >
               <div className="section-heading">
                 <div>
                   <p className="section-tag">Portada viva</p>
@@ -3198,6 +3213,8 @@ function App() {
                     ? 'Aquesta secció no té novetats recents: et mostrem les últimes de l’hemeroteca.'
                     : headlineCount > 0
                     ? `Mostrant ${headlineCount} peces a l’edició actual.`
+                    : isServiceSection
+                    ? `Encara no hi ha cap peça disponible a ${activeCategory}; el radar tornarà a consultar-ne les fonts oficials al pròxim refresc.`
                     : 'Cap història coincideix amb aquest filtre ara mateix.'}
                   <a
                     className="section-caption__link"
@@ -3284,9 +3301,15 @@ function App() {
                 </div>
               ) : (
                 <div className="empty-state">
-                  <h3>No n’hi ha més per aquest filtre.</h3>
+                  <h3>
+                    {isServiceSection
+                      ? `Encara no hi ha peces a ${activeCategory}.`
+                      : 'No n’hi ha més per aquest filtre.'}
+                  </h3>
                   <p>
-                    {headlineCount > 0
+                    {isServiceSection
+                      ? 'La secció està activa, però ara mateix no hi ha cap element vigent de les fonts oficials. Ho tornarem a comprovar automàticament.'
+                      : headlineCount > 0
                       ? 'La peça destacada és l’única que encaixa amb aquesta cerca. Pots llegir-la o provar una altra categoria.'
                       : 'Prova amb una paraula diferent o torna a “Totes” per recuperar la portada completa.'}
                   </p>

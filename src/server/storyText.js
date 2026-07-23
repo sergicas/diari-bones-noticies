@@ -173,12 +173,31 @@ async function aiOwnContentBatch(env, items) {
 // del mitjà: si la IA no dona contingut, reserva neutra (mai el del mitjà).
 export async function applyOwnContent(stories, env) {
   const kv = env?.LIVE_NEWS_KV
-  const entries = stories.map((s) => ({ story: s, id: feedStoryId(s.url), own: null }))
+  const entries = stories.map((s) => {
+    const existingBody = Array.isArray(s.body)
+      ? s.body.filter(Boolean).join(' ')
+      : ''
+    const own =
+      s.ownContent && s.title && existingBody
+        ? {
+            title: s.title,
+            body: existingBody,
+            impact: s.impact || '',
+            brief: '',
+          }
+        : null
+    return {
+      story: s,
+      id: feedStoryId(s.url),
+      own,
+    }
+  })
 
   // 1) Contingut ja generat (cache)
   if (kv) {
     const cached = await Promise.all(entries.map((e) => kv.get(KV_PREFIX + e.id)))
     entries.forEach((e, i) => {
+      if (e.own) return
       if (!cached[i]) return
       try {
         e.own = JSON.parse(cached[i])
