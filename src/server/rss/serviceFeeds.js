@@ -89,16 +89,22 @@ function serviceStory({
   }
 }
 
-async function fetchAndReadWithTimeout(url, init = {}, readerFn = (res) => res.text(), timeoutMs = 6000) {
+export async function fetchAndReadWithTimeout(
+  url,
+  init = {},
+  readerFn = (res, _signal) => res.text(),
+  timeoutMs = 6000,
+  fetchFn = fetch,
+) {
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
   try {
-    const response = await fetch(url, {
+    const response = await fetchFn(url, {
       ...init,
       signal: controller.signal,
     })
     if (!response.ok) return { ok: false, status: response.status, data: null }
-    const data = await readerFn(response)
+    const data = await readerFn(response, controller.signal)
     return { ok: true, status: response.status, data }
   } finally {
     clearTimeout(timeoutId)

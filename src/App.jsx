@@ -665,22 +665,31 @@ function App() {
   )
   const route = getRoute(currentPath)
 
-  // Pre-carrega en segon pla (idle) dels chunks diferits per garantir
-  // disponibilitat offline completa als service workers.
+  // Pre-carrega en segon pla (idle) dels chunks diferits quan el Service Worker
+  // està actiu per garantir la seva precàrrega a memòria cau offline.
   useEffect(() => {
     if (typeof window === 'undefined') return
-    const prefetch = () => {
-      import('./views/ArchiveView.jsx')
-      import('./views/SavedView.jsx')
-      import('./views/StatsView.jsx')
-      import('./views/PrivacyView.jsx')
-      import('./views/ManifestView.jsx')
-      import('./views/AboutView.jsx')
+    const prefetch = async () => {
+      try {
+        if ('serviceWorker' in navigator && !navigator.serviceWorker.controller) {
+          await navigator.serviceWorker.ready.catch(() => {})
+        }
+        await Promise.allSettled([
+          import('./views/ArchiveView.jsx'),
+          import('./views/SavedView.jsx'),
+          import('./views/StatsView.jsx'),
+          import('./views/PrivacyView.jsx'),
+          import('./views/ManifestView.jsx'),
+          import('./views/AboutView.jsx'),
+        ])
+      } catch {
+        // Ignorar fallades en offline inicial
+      }
     }
     if ('requestIdleCallback' in window) {
       window.requestIdleCallback(prefetch)
     } else {
-      window.setTimeout(prefetch, 2000)
+      window.setTimeout(prefetch, 2500)
     }
   }, [])
 
