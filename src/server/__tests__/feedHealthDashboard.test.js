@@ -22,12 +22,12 @@ describe('Feed Health Dashboard & Authorization Tests', () => {
     expect(authorized).toBe(true)
   })
 
-  it('authorizes ?token= URL parameter', async () => {
+  it('rejects ?token= URL parameter (els tokens no han de viatjar dins l’URL)', async () => {
     const req = new Request(
       'https://bondiari.com/api/feed-health?token=test-secret-token-123',
     )
     const authorized = await isFeedHealthAuthorized(req, env)
-    expect(authorized).toBe(true)
+    expect(authorized).toBe(false)
   })
 
   it('rejects unauthorized request with wrong token', async () => {

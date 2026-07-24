@@ -5,7 +5,8 @@
 //   rutes client-side com /noticia/:id, /manifest, /hemeroteca, /sobre).
 // - El handler scheduled() refresca el radar dues vegades al dia via cron.
 
-import { getLiveNewsPayload, readEditorialStats, readFeedHealthStats, getLiveTicker } from './server/liveNews.js'
+import { getLiveNewsPayload, readEditorialStats, readFeedHealthStats, getLiveTicker, isFeedPaused } from './server/liveNews.js'
+import { rssFeeds } from './server/rss/feedsConfig.js'
 import { handleStats, handleTrackVisit } from './server/stats.js'
 import {
   handleSubscribe,
@@ -69,13 +70,13 @@ export async function isRefreshAuthorized(request, env) {
 }
 
 export async function isFeedHealthAuthorized(request, env) {
+  // Només capçaleres: un token dins l'URL (?token=...) acabaria escrit en
+  // registres i historials, així que no s'accepta.
   const authorization = request.headers.get('authorization') || ''
   const customHeader = request.headers.get('x-health-token') || ''
-  const url = new URL(request.url)
-  const urlToken = url.searchParams.get('token') || ''
   const provided = authorization.startsWith('Bearer ')
     ? authorization.slice('Bearer '.length).trim()
-    : customHeader || urlToken || ''
+    : customHeader
   const expectedToken = env.BONDIARI_FEED_HEALTH_TOKEN || env.BONDIARI_REFRESH_TOKEN
   return secretsMatch(provided, expectedToken)
 }
@@ -230,8 +231,17 @@ async function handleFeedHealth(request, env) {
       }
 
       const circuitBreakers = Object.values(stats || {}).filter(
-        (rec) => rec && typeof rec === 'object' && rec.circuitBreakerActive,
+        (rec) => rec && typeof rec === 'object' && isFeedPaused(rec),
       )
+
+      // El catàleg viatja dins la resposta: la vista /diagnostic no pot
+      // importar src/server/ (vite l'exclou del bundle del client).
+      const catalog = rssFeeds.map((feed) => ({
+        name: feed.name,
+        language: feed.language,
+        defaultCategory: feed.defaultCategory,
+        core: Boolean(feed.core),
+      }))
 
       return jsonResponse(
         {
@@ -240,6 +250,7 @@ async function handleFeedHealth(request, env) {
           cronTiming,
           circuitBreakers,
           history,
+          catalog,
         },
         { headers: { 'cache-control': 'no-store' } },
       )

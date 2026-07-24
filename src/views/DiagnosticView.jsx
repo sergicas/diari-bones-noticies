@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react'
 import PageHero from '../components/PageHero.jsx'
 import { formatDateTime } from '../lib/viewHelpers.js'
-import { rssFeeds } from '../server/rss/feedsConfig.js'
 
 export function DiagnosticView() {
   const [token, setToken] = useState(() => {
@@ -14,6 +13,7 @@ export function DiagnosticView() {
   const [status, setStatus] = useState(() => (token ? 'loading' : 'unauthorized'))
   const [data, setData] = useState(null)
   const [filterQuery, setFilterQuery] = useState('')
+  const [retryCount, setRetryCount] = useState(0)
 
   useEffect(() => {
     if (!token) return
@@ -36,7 +36,9 @@ export function DiagnosticView() {
       })
       .then((payload) => {
         if (isCancelled) return
-        setData(payload)
+        // fetchedAt fixa el "ara" del render: evita cridar Date.now() en ple
+        // dibuix (regla de puresa de React) i tota la taula jutja el mateix instant.
+        setData({ ...payload, fetchedAt: Date.now() })
         setStatus('success')
       })
       .catch((err) => {
@@ -54,7 +56,7 @@ export function DiagnosticView() {
     return () => {
       isCancelled = true
     }
-  }, [token])
+  }, [token, retryCount])
 
   const handleLogin = (e) => {
     e.preventDefault()
@@ -133,7 +135,14 @@ export function DiagnosticView() {
           title="Error en carregar el diagnòstic"
           description="No s'han pogut recuperar les dades del servidor o KV."
         />
-        <button type="button" className="button button--primary" onClick={() => setToken(token)}>
+        <button
+          type="button"
+          className="button button--primary"
+          onClick={() => {
+            setStatus('loading')
+            setRetryCount((count) => count + 1)
+          }}
+        >
           Reintentar
         </button>
       </section>
@@ -144,14 +153,15 @@ export function DiagnosticView() {
   const cronTiming = data?.cronTiming || null
   const circuitBreakers = data?.circuitBreakers || []
   const history = data?.history || []
+  const catalog = data?.catalog || []
 
   // Agregació de fonts
-  const totalCatalogFeeds = rssFeeds.length
+  const totalCatalogFeeds = catalog.length
   const pausedCount = circuitBreakers.length
   const healthyCount = totalCatalogFeeds - pausedCount
 
   const filterLower = filterQuery.toLowerCase().trim()
-  const displayFeeds = rssFeeds.filter((feed) => {
+  const displayFeeds = catalog.filter((feed) => {
     if (!filterLower) return true
     return (
       feed.name.toLowerCase().includes(filterLower) ||
@@ -203,7 +213,7 @@ export function DiagnosticView() {
           <div className="stat-card" style={{ padding: '1.2rem', background: 'var(--color-surface-subtle, #f8f9fa)', borderRadius: '8px', border: '1px solid var(--color-border, #e0e0e0)' }}>
             <span className="section-tag">Peces Revisades / Publicades</span>
             <h3 style={{ fontSize: '2rem', margin: '0.4rem 0' }}>
-              {cronTiming?.publishedCount ?? 0} / {cronTiming?.reviewedThisPass ?? 0}
+              {cronTiming?.reviewedThisPass ?? 0} / {cronTiming?.publishedCount ?? 0}
             </h3>
             <p style={{ margin: 0, fontSize: '0.85rem' }}>
               Peces noves a l’última passada
@@ -215,7 +225,7 @@ export function DiagnosticView() {
         <div className="section-heading" style={{ marginTop: '2rem' }}>
           <div>
             <p className="section-tag">Catàleg Editorial</p>
-            <h2>Estat individual de les 70 fonts RSS</h2>
+            <h2>Estat individual de les {totalCatalogFeeds} fonts RSS</h2>
           </div>
           <div className="search-field" style={{ maxWidth: '300px' }}>
             <input
@@ -242,8 +252,10 @@ export function DiagnosticView() {
             <tbody>
               {displayFeeds.map((feed) => {
                 const rec = feedStats[feed.name] || {}
-                const isCircuitActive = rec.circuitBreakerActive
-                const latency = rec.lastResponseMs
+                // El radar marca la pausa amb pausedUntil (data ISO de fi de pausa).
+                const pauseEnd = rec.pausedUntil ? new Date(rec.pausedUntil).getTime() : 0
+                const isCircuitActive = Boolean(pauseEnd && pauseEnd > (data?.fetchedAt || 0))
+                const latency = rec.durationMs
                 const failures = rec.consecutiveFailures || 0
 
                 let latencyColor = '#5cb85c'
@@ -285,7 +297,9 @@ export function DiagnosticView() {
             <p className="section-tag">Històric de Salut</p>
             <h2>Estabilitat diària dels darrers {history.length} dies</h2>
             <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end', height: '140px', marginTop: '1.5rem', paddingBottom: '1rem', borderBottom: '1px solid var(--color-border, #ccc)' }}>
-              {history.map((snap) => {
+              {/* El servidor envia el dia més recent primer; el gràfic es llegeix
+                  d'esquerra (més antic) a dreta (avui). */}
+              {[...history].reverse().map((snap) => {
                 const count = snap.cronTiming?.publishedCount || 0
                 const heightPct = Math.min(100, Math.max(15, count * 10))
                 return (
