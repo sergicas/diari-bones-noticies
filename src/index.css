@@ -1,4 +1,3 @@
-
 :root {
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   line-height: 1.5;
@@ -30,6 +29,45 @@
 
 html {
   scroll-behavior: smooth;
+}
+
+/* Accessibilitat: Mides de Lletra */
+html.font-size-large {
+  font-size: 118%;
+}
+
+html.font-size-xlarge {
+  font-size: 132%;
+}
+
+/* Accessibilitat: Mode d'Alta Llegibilitat */
+html.high-legibility {
+  line-height: 1.85;
+}
+
+html.high-legibility p,
+html.high-legibility li,
+html.high-legibility article {
+  letter-spacing: 0.015em;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --paper: #1c1c1e;
+    --ink: #f2f2f7;
+    --muted: #a1a1a6;
+    --accent: #30d158;
+    --secondary: #f2f2f7;
+    --line: rgba(255, 255, 255, 0.15);
+    --line-strong: rgba(255, 255, 255, 0.25);
+    --soft-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+    --hard-shadow: 0 20px 80px rgba(0, 0, 0, 0.6);
+  }
+  body {
+    background: #000000;
+    color: #f2f2f7;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -86,4 +124,55 @@ p {
 ::selection {
   background: rgba(52, 199, 89, 0.2);
   color: var(--ink);
+}
+
+/* Full d'estil d'impressió neta per a aules i tallers educatius */
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-size: 12pt !important;
+    line-height: 1.5 !important;
+  }
+
+  .skip-link,
+  .site-header,
+  .site-footer,
+  .footer-note,
+  .newsletter-form,
+  .accessibility-controls,
+  .no-print,
+  button,
+  nav,
+  input,
+  .link-button {
+    display: none !important;
+  }
+
+  .page-shell,
+  .section-block,
+  .masthead,
+  article {
+    border: none !important;
+    box-shadow: none !important;
+    background: transparent !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+  }
+
+  a {
+    text-decoration: none !important;
+    color: #000000 !important;
+  }
+
+  article h1 {
+    font-size: 20pt !important;
+    margin-bottom: 12px !important;
+  }
+
+  article p {
+    font-size: 12pt !important;
+    margin-bottom: 12px !important;
+  }
 }

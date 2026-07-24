@@ -36,6 +36,14 @@ export function StoryDetailView({ story, sourceLink, imageLink, relatedStories, 
             >
               Tornar a la portada
             </a>
+            <button
+              type="button"
+              className="button button--ghost no-print"
+              onClick={() => window.print()}
+              aria-label="Imprimir article o desar com a PDF per a aules"
+            >
+              🖨️ Imprimir / Desar PDF
+            </button>
             <a
               className="button button--primary"
               href={sourceLink.href}

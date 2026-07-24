@@ -27,6 +27,7 @@ import { formatDateTime } from './lib/viewHelpers.js'
 
 import PortadaView from './views/PortadaView.jsx'
 import StoryDetailView from './views/StoryDetailView.jsx'
+import { AccessibilityControls } from './components/AccessibilityControls.jsx'
 
 const ArchiveView = lazy(() => import('./views/ArchiveView.jsx'))
 const SavedView = lazy(() => import('./views/SavedView.jsx'))
@@ -638,6 +639,9 @@ function FooterNote({ onNavigate }) {
           <a href="/feed.xml" target="_blank" rel="noopener noreferrer">
             RSS (Feed)
           </a>
+        </div>
+        <div style={{ marginTop: '1rem', textAlign: 'center' }}>
+          <AccessibilityControls />
         </div>
       </div>
     </footer>

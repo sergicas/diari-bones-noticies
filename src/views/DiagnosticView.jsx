@@ -190,32 +190,32 @@ export function DiagnosticView() {
         </div>
 
         <div className="stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
-          <div className="stat-card" style={{ padding: '1.2rem', background: 'var(--color-surface-subtle, #f8f9fa)', borderRadius: '8px', border: '1px solid var(--color-border, #e0e0e0)' }}>
+          <div className="stat-card" style={{ padding: '1.2rem', background: 'var(--paper)', borderRadius: '8px', border: '1px solid var(--line-strong)' }}>
             <span className="section-tag">Fonts RSS Saludables</span>
-            <h3 style={{ fontSize: '2rem', margin: '0.4rem 0' }}>
+            <h3 style={{ fontSize: '2rem', margin: '0.4rem 0', color: 'var(--ink)' }}>
               {healthyCount} / {totalCatalogFeeds}
             </h3>
-            <p style={{ margin: 0, fontSize: '0.85rem', color: pausedCount > 0 ? 'var(--color-warning, #f0ad4e)' : 'var(--color-success, #5cb85c)' }}>
+            <p style={{ margin: 0, fontSize: '0.85rem', color: pausedCount > 0 ? 'var(--color-warning, #f0ad4e)' : 'var(--accent, #34C759)' }}>
               {pausedCount > 0 ? `${pausedCount} font(s) en circuit breaker` : '100% fonts operatives'}
             </p>
           </div>
 
-          <div className="stat-card" style={{ padding: '1.2rem', background: 'var(--color-surface-subtle, #f8f9fa)', borderRadius: '8px', border: '1px solid var(--color-border, #e0e0e0)' }}>
+          <div className="stat-card" style={{ padding: '1.2rem', background: 'var(--paper)', borderRadius: '8px', border: '1px solid var(--line-strong)' }}>
             <span className="section-tag">Durada Darrer Cron</span>
-            <h3 style={{ fontSize: '2rem', margin: '0.4rem 0' }}>
+            <h3 style={{ fontSize: '2rem', margin: '0.4rem 0', color: 'var(--ink)' }}>
               {cronTiming?.cronDurationMs ? `${(cronTiming.cronDurationMs / 1000).toFixed(2)}s` : 'N/D'}
             </h3>
-            <p style={{ margin: 0, fontSize: '0.85rem' }}>
+            <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--muted)' }}>
               {cronTiming?.updatedAt ? formatDateTime(cronTiming.updatedAt) : 'Sense dades de durada'}
             </p>
           </div>
 
-          <div className="stat-card" style={{ padding: '1.2rem', background: 'var(--color-surface-subtle, #f8f9fa)', borderRadius: '8px', border: '1px solid var(--color-border, #e0e0e0)' }}>
+          <div className="stat-card" style={{ padding: '1.2rem', background: 'var(--paper)', borderRadius: '8px', border: '1px solid var(--line-strong)' }}>
             <span className="section-tag">Peces Revisades / Publicades</span>
-            <h3 style={{ fontSize: '2rem', margin: '0.4rem 0' }}>
+            <h3 style={{ fontSize: '2rem', margin: '0.4rem 0', color: 'var(--ink)' }}>
               {cronTiming?.reviewedThisPass ?? 0} / {cronTiming?.publishedCount ?? 0}
             </h3>
-            <p style={{ margin: 0, fontSize: '0.85rem' }}>
+            <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--muted)' }}>
               Peces noves a l’última passada
             </p>
           </div>
