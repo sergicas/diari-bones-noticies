@@ -46,7 +46,7 @@ const cacheKey = 'latest'
 // finestra llarga deixava que notícies velles amb moltes paraules positives
 // dominessin la portada eternament. 5 dies (25-07-2026, abans 4) = prou marge
 // per a seccions lentes (ciència, cultura) sense fossilitzar-se. La portada en
-// mostra fins a 24 peces de < 5 dies (App.jsx); la resta va a l'Hemeroteca.
+// mostra fins a 25 peces de < 5 dies (App.jsx); la resta va a l'Hemeroteca.
 const maxLiveStoryAgeMs = 5 * 24 * 60 * 60 * 1000
 export function isStoryWithinLiveWindow(story, now = Date.now()) {
   if (story?.expiresAt) {

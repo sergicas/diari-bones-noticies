@@ -47,11 +47,13 @@ const defaultStoryImage = DEFAULT_STORY_IMAGE
 const currentLiveEditorialVersion = LIVE_EDITORIAL_VERSION
 const autoRefreshIntervalMs = 1 * 60 * 60 * 1000
 const liveTickerIntervalMs = 2 * 60 * 1000
-// Portada: fins a 5 dies d'antiguitat i un màxim de 24 peces (25-07-2026).
-// La resta passa a l'Hemeroteca.
+// Portada: fins a 5 dies d'antiguitat i un màxim de 25 peces (25-07-2026).
+// La resta passa a l'Hemeroteca. Només els formats de servei (verificacions,
+// dades i ajuts vigents) tenen finestres pròpies més llargues.
 const activeEditionMaxAgeMs = 5 * 24 * 60 * 60 * 1000
-const activeEditionMaxStories = 24
+const activeEditionMaxStories = 25
 const activeEditionFloor = 0
+const serviceEditionFormats = new Set(['verification', 'data', 'opportunity'])
 const maxStoredFeedStories = 40
 
 const seedArticlesPromise = import('./data/articles.js').then((m) =>
@@ -451,9 +453,13 @@ function mergeLiveStories(currentStories, liveArticles, seedStories = []) {
 function splitEditionStories(stories) {
   const now = Date.now()
 
+  // L'edat mana per a TOTHOM, també per a les peces editorials de llavor:
+  // l'antiga porta del darrere (origin === 'editorial') mantenia articles de
+  // mesos enrere a la portada. Només els formats de servei conserven les
+  // seves finestres llargues (el servidor ja les poda al seu termini).
   const candidates = stories.filter(
     (story) =>
-      story.origin === 'editorial' ||
+      serviceEditionFormats.has(story.editorialFormat) ||
       now - getStoryTimestamp(story) <= activeEditionMaxAgeMs,
   )
 
