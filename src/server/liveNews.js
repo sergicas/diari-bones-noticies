@@ -6,6 +6,7 @@ import { LIVE_EDITORIAL_VERSION } from '../lib/editorial-version.js'
 import { normalizeCategory, refineCategoryByContent } from '../lib/category.js'
 import { storyImagePath } from '../lib/story-image-path.js'
 import { applyOwnContent } from './storyText.js'
+import { attachRealPhotos } from './storyPhoto.js'
 import { feedStoryId } from '../lib/story-id.js'
 import {
   refreshIntervalMs,
@@ -1787,6 +1788,15 @@ export async function getLiveNewsPayload(kv, { force = false, env } = {}) {
   // buidar la portada.
   if (publishedStories.length === 0 && cached?.stories?.length) {
     return { ...cached, cache: 'stale-incomplete' }
+  }
+
+  // Pilot Fase 4: foto real de Wikimedia Commons per a les peces d'Agenda i
+  // Local amb lloc concret. Si Commons falla, la peça conserva el dibuix; el
+  // radar no s'atura mai per una foto.
+  try {
+    await attachRealPhotos(publishedStories)
+  } catch (error) {
+    console.warn('[fotos] No s’han pogut cercar fotos reals', error?.message)
   }
 
   // Marquem com a "vistes" NOMÉS les noves que de debò entren al lot. Una
