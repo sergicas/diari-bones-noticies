@@ -1,16 +1,16 @@
-// Fotos reals per a les seccions de proximitat (pilot Fase 4).
+// Fotos reals per a les peces amb lloc concret (Fase 4).
 //
-// Per a les peces d'AGENDA i LOCAL —les úniques on gairebé sempre hi ha un
-// lloc concret—, el radar intenta trobar una fotografia real del lloc a
-// Wikimedia Commons (llicències lliures, sense clau d'API). Si en troba una
-// de fiable, substitueix la il·lustració generada i hi afegeix el crèdit
-// obligatori (autor + llicència). Si no, la peça conserva el dibuix de casa:
-// mai una foto "aproximada" que pugui fer creure que és la foto del fet.
+// Per a QUALSEVOL peça del radar que esmenti un lloc concret (al titular o al
+// camp de lloc), es busca una fotografia real del lloc a Wikimedia Commons
+// (llicències lliures, sense clau d'API). Si en surt una de fiable,
+// substitueix la il·lustració generada i hi afegeix el crèdit obligatori
+// (autor + llicència). Si no, la peça conserva el dibuix de casa: mai una
+// foto "aproximada" que pugui fer creure que és la foto del fet.
+// (Nascut com a pilot d'Agenda i Local el 25-07-2026; ampliat a tot el diari
+// el mateix dia a petició de l'editor.)
 //
 // Criteri d'honestedat: la foto és sempre DEL LLOC (el poble, el mercat, el
 // teatre), mai pretén ser la foto de l'esdeveniment. El peu ho diu clar.
-
-import { getStorySection } from '../lib/sections.js'
 
 // Llocs massa genèrics per cercar-hi una foto: no identifiquen cap indret.
 const GENERIC_PLACES = new Set([
@@ -179,27 +179,41 @@ export async function findCommonsPhoto(place, { fetchFn = fetch, timeoutMs = 600
 }
 
 // Sostre de cerques per refresc: cada cerca és una subpetició i el radar ja
-// va just de pressupost (vegeu la rotació de fonts a liveNews.js).
+// va just de pressupost (vegeu la rotació de fonts a liveNews.js). Amb la
+// marca photoChecked, en pocs refrescos totes les peces queden mirades.
 const MAX_LOOKUPS_PER_RUN = 8
 
-export function qualifiesForRealPhoto(story) {
-  const sectionId = getStorySection(story)?.id
-  return sectionId === 'agenda' || sectionId === 'local'
+// Recorre les peces publicades i intenta posar foto real a les que tenen un
+// lloc concret i encara no s'han mirat. Marca photoChecked per no repetir la
+// cerca (i la subpetició) a cada refresc. Muta les peces i retorna quantes
+// fotos noves s'han trobat.
+function applyPhotoFields(story, photo) {
+  story.photo = photo
+  story.imageUrl = photo.url
+  story.imageAlt = `Fotografia de ${photo.place}`
+  story.imageCredit = `Foto: ${photo.author} · ${photo.license} · Wikimedia Commons (imatge del lloc, no de l’acte)`
 }
 
-// Recorre les peces publicades i intenta posar foto real a les d'Agenda i
-// Local que encara no s'han mirat. Marca photoChecked per no repetir la cerca
-// (i la subpetició) a cada refresc. Muta les peces i retorna quantes fotos
-// noves s'han trobat.
 export async function attachRealPhotos(stories, options = {}) {
   const { fetchFn = fetch, maxLookups = MAX_LOOKUPS_PER_RUN } = options
   let lookups = 0
   let found = 0
 
   for (const story of stories) {
-    if (lookups >= maxLookups) break
-    if (!story || story.photo || story.photoChecked) continue
-    if (!qualifiesForRealPhoto(story)) continue
+    if (!story) continue
+
+    // Peça arrossegada amb foto ja trobada: l'enriquiment de cada refresc li
+    // reescriu imageUrl/imageCredit amb el dibuix; es reapliquen els camps de
+    // la foto sense cap subpetició nova.
+    if (story.photo?.url) {
+      applyPhotoFields(story, story.photo)
+      continue
+    }
+
+    if (story.photoChecked) continue
+    // El sostre limita només les CERQUES noves (continue, no break: les
+    // reaplicacions d'amunt no gasten res i han d'arribar a totes les peces).
+    if (lookups >= maxLookups) continue
 
     const place = extractPlace(story)
     story.photoChecked = true
@@ -209,10 +223,7 @@ export async function attachRealPhotos(stories, options = {}) {
     const photo = await findCommonsPhoto(place, { fetchFn })
     if (!photo) continue
 
-    story.photo = photo
-    story.imageUrl = photo.url
-    story.imageAlt = `Fotografia de ${place}`
-    story.imageCredit = `Foto: ${photo.author} · ${photo.license} · Wikimedia Commons (imatge del lloc, no de l’acte)`
+    applyPhotoFields(story, photo)
     found += 1
   }
 

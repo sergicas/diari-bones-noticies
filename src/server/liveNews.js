@@ -44,10 +44,10 @@ const storyDetailTtlSeconds = 30 * 24 * 60 * 60
 const cacheKey = 'latest'
 // El Bon Diari és un DIARI: el radar només manté notícies de pocs dies. Una
 // finestra llarga deixava que notícies velles amb moltes paraules positives
-// dominessin la portada eternament. 4 dies = prou marge per a seccions lentes
-// (ciència, cultura) sense fossilitzar-se. La portada del web encara n'ensenya
-// les de < 2 dies; la resta van a l'Hemeroteca.
-const maxLiveStoryAgeMs = 4 * 24 * 60 * 60 * 1000
+// dominessin la portada eternament. 5 dies (25-07-2026, abans 4) = prou marge
+// per a seccions lentes (ciència, cultura) sense fossilitzar-se. La portada en
+// mostra fins a 24 peces de < 5 dies (App.jsx); la resta va a l'Hemeroteca.
+const maxLiveStoryAgeMs = 5 * 24 * 60 * 60 * 1000
 export function isStoryWithinLiveWindow(story, now = Date.now()) {
   if (story?.expiresAt) {
     const rawExpiry = String(story.expiresAt)

@@ -5,7 +5,6 @@ import {
   extractPlace,
   buildCommonsSearchUrl,
   pickBestCommonsPhoto,
-  qualifiesForRealPhoto,
   attachRealPhotos,
 } from '../storyPhoto.js'
 
@@ -96,16 +95,6 @@ describe('pickBestCommonsPhoto', () => {
   })
 })
 
-describe('qualifiesForRealPhoto', () => {
-  it('accepta Agenda i Local, rebutja la resta', () => {
-    expect(qualifiesForRealPhoto({ category: 'Agenda', title: 'x', location: 'Mataró' })).toBe(true)
-    expect(qualifiesForRealPhoto({ category: 'Local', title: 'x', location: 'Mataró' })).toBe(true)
-    expect(
-      qualifiesForRealPhoto({ category: 'Internacional', title: 'Acord de pau', location: 'Món' }),
-    ).toBe(false)
-  })
-})
-
 describe('attachRealPhotos', () => {
   const agendaStory = (title) => ({
     category: 'Agenda',
@@ -149,7 +138,50 @@ describe('attachRealPhotos', () => {
     expect(calls).toBe(3)
   })
 
-  it('ignora les peces que no són d’Agenda ni Local', async () => {
+  it('funciona per a qualsevol secció si la peça té un lloc concret', async () => {
+    const fetchFn = async () => ({
+      ok: true,
+      json: async () => commonsResponse([photoPage('File:Girona catedral.jpg')]),
+    })
+    const stories = [
+      { category: 'Cultura', title: 'Nou museu d’art contemporani', location: 'Girona, Gironès' },
+    ]
+    const found = await attachRealPhotos(stories, { fetchFn })
+    expect(found).toBe(1)
+    expect(stories[0].imageUrl).toContain('upload.wikimedia.org')
+  })
+
+  it('reaplica la foto d’una peça arrossegada quan l’enriquiment l’ha esborrada', async () => {
+    let calls = 0
+    const fetchFn = async () => {
+      calls += 1
+      return { ok: true, json: async () => commonsResponse([]) }
+    }
+    const stories = [
+      {
+        category: 'Local',
+        title: 'Òrrius celebra la festa',
+        location: 'Òrrius',
+        photoChecked: true,
+        photo: {
+          url: 'https://upload.wikimedia.org/foto-orrius.jpg',
+          author: 'Isidre blanc',
+          license: 'CC BY-SA 4.0',
+          place: 'òrrius',
+          source: 'wikimedia-commons',
+        },
+        // L'enriquiment del refresc ha tornat a posar el dibuix:
+        imageUrl: '/api/story-image/feed-abc?s=x',
+        imageCredit: 'El Bon Diari (il·lustració IA)',
+      },
+    ]
+    await attachRealPhotos(stories, { fetchFn })
+    expect(calls).toBe(0)
+    expect(stories[0].imageUrl).toBe('https://upload.wikimedia.org/foto-orrius.jpg')
+    expect(stories[0].imageCredit).toContain('Isidre blanc')
+  })
+
+  it('sense lloc concret no cerca res i la peça conserva el dibuix', async () => {
     let calls = 0
     const fetchFn = async () => {
       calls += 1
@@ -158,7 +190,9 @@ describe('attachRealPhotos', () => {
     const stories = [
       { category: 'Ciència', title: 'Descoberta astronòmica', location: 'Món' },
     ]
-    await attachRealPhotos(stories, { fetchFn })
+    const found = await attachRealPhotos(stories, { fetchFn })
     expect(calls).toBe(0)
+    expect(found).toBe(0)
+    expect(stories[0].photoChecked).toBe(true)
   })
 })

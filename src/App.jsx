@@ -47,7 +47,10 @@ const defaultStoryImage = DEFAULT_STORY_IMAGE
 const currentLiveEditorialVersion = LIVE_EDITORIAL_VERSION
 const autoRefreshIntervalMs = 1 * 60 * 60 * 1000
 const liveTickerIntervalMs = 2 * 60 * 1000
-const activeEditionMaxAgeMs = 2 * 24 * 60 * 60 * 1000
+// Portada: fins a 5 dies d'antiguitat i un màxim de 24 peces (25-07-2026).
+// La resta passa a l'Hemeroteca.
+const activeEditionMaxAgeMs = 5 * 24 * 60 * 60 * 1000
+const activeEditionMaxStories = 24
 const activeEditionFloor = 0
 const maxStoredFeedStories = 40
 
@@ -454,10 +457,11 @@ function splitEditionStories(stories) {
       now - getStoryTimestamp(story) <= activeEditionMaxAgeMs,
   )
 
-  const activeStories =
+  const activeStories = (
     candidates.length >= activeEditionFloor
       ? candidates
       : [...stories].sort(sortByPublishedAtDesc).slice(0, activeEditionFloor)
+  ).slice(0, activeEditionMaxStories)
 
   const activeIds = new Set(activeStories.map((story) => story.id))
 
