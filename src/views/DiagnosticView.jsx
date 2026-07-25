@@ -105,7 +105,7 @@ export function DiagnosticView() {
               </button>
             </div>
             {status === 'unauthorized' && inputToken ? (
-              <p className="error-note" style={{ color: 'var(--color-error, #d9534f)' }}>
+              <p className="error-note" style={{ color: 'var(--color-error)' }}>
                 Token d'accés no vàlid (401 Unauthorized).
               </p>
             ) : null}
@@ -195,7 +195,7 @@ export function DiagnosticView() {
             <h3 style={{ fontSize: '2rem', margin: '0.4rem 0', color: 'var(--ink)' }}>
               {healthyCount} / {totalCatalogFeeds}
             </h3>
-            <p style={{ margin: 0, fontSize: '0.85rem', color: pausedCount > 0 ? 'var(--color-warning, #f0ad4e)' : 'var(--accent, #34C759)' }}>
+            <p style={{ margin: 0, fontSize: '0.85rem', color: pausedCount > 0 ? 'var(--color-warning)' : 'var(--color-success)' }}>
               {pausedCount > 0 ? `${pausedCount} font(s) en circuit breaker` : '100% fonts operatives'}
             </p>
           </div>
@@ -258,9 +258,9 @@ export function DiagnosticView() {
                 const latency = rec.durationMs
                 const failures = rec.consecutiveFailures || 0
 
-                let latencyColor = '#5cb85c'
-                if (!latency || latency > 3000) latencyColor = '#d9534f'
-                else if (latency > 1500) latencyColor = '#f0ad4e'
+                let latencyColor = 'var(--color-success)'
+                if (!latency || latency > 3000) latencyColor = 'var(--color-error)'
+                else if (latency > 1500) latencyColor = 'var(--color-warning)'
 
                 return (
                   <tr key={feed.name} style={{ borderBottom: '1px solid var(--color-border-subtle, #eee)' }}>
@@ -275,11 +275,11 @@ export function DiagnosticView() {
                     <td style={{ padding: '0.8rem' }}>{failures}</td>
                     <td style={{ padding: '0.8rem' }}>
                       {isCircuitActive ? (
-                        <span className="paper-chip" style={{ background: '#f0ad4e', color: '#fff' }}>
+                        <span className="paper-chip" style={{ background: 'var(--color-warning)', color: '#fff' }}>
                           Pausat
                         </span>
                       ) : (
-                        <span className="paper-chip" style={{ background: '#5cb85c', color: '#fff' }}>
+                        <span className="paper-chip" style={{ background: 'var(--color-success)', color: '#fff' }}>
                           OK
                         </span>
                       )}
@@ -307,7 +307,7 @@ export function DiagnosticView() {
                     <div
                       style={{
                         height: `${heightPct}%`,
-                        background: 'var(--color-primary, #0275d8)',
+                        background: 'var(--color-primary)',
                         borderRadius: '4px 4px 0 0',
                       }}
                       title={`${snap.date}: ${count} notícies publicades`}

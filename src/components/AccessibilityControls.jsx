@@ -101,7 +101,7 @@ export function AccessibilityControls() {
         aria-label={highLegibility ? 'Desactivar alta llegibilitat' : 'Activar alta llegibilitat'}
         style={{
           fontWeight: highLegibility ? 'bold' : 'normal',
-          background: highLegibility ? 'var(--accent, #34C759)' : 'transparent',
+          background: highLegibility ? 'var(--color-success)' : 'transparent',
           color: highLegibility ? '#ffffff' : 'inherit',
           borderRadius: '12px',
           padding: '2px 8px',

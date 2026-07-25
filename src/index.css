@@ -19,6 +19,11 @@
   --hard-shadow: 0 20px 80px rgba(0, 0, 0, 0.12);
   --display-font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   color-scheme: light;
+  /* Colors d'estat amb contrast AA sobre fons clar (text i xips). */
+  --color-success: #1D7A3A;
+  --color-warning: #8A5A00;
+  --color-error: #B02A37;
+  --color-primary: #0B5CAD;
 }
 
 *,
@@ -51,24 +56,12 @@ html.high-legibility article {
   letter-spacing: 0.015em;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    color-scheme: dark;
-    --paper: #1c1c1e;
-    --ink: #f2f2f7;
-    --muted: #a1a1a6;
-    --accent: #30d158;
-    --secondary: #f2f2f7;
-    --line: rgba(255, 255, 255, 0.15);
-    --line-strong: rgba(255, 255, 255, 0.25);
-    --soft-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
-    --hard-shadow: 0 20px 80px rgba(0, 0, 0, 0.6);
-  }
-  body {
-    background: #000000;
-    color: #f2f2f7;
-  }
-}
+/* NOTA sobre el mode fosc: NO afegir aquí cap bloc
+   @media (prefers-color-scheme: dark) mentre App.css no estigui adaptat.
+   Es va provar (juliol 2026) i el resultat va ser text clar sobre les
+   targetes blanques d'App.css: portada il·legible per a qui navega en
+   fosc. El tema fosc complet és feina d'un bloc propi, no d'un pedaç.
+   La prova accessibilityBlock1.test.js vigila que no es repeteixi. */
 
 @media (prefers-reduced-motion: reduce) {
   html {
