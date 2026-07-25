@@ -5,7 +5,9 @@
 // foto real d'un fet real, cosa impròpia d'un diari). Es genera un sol cop per
 // peça i es cacheja al KV; les visites següents la serveixen del cache.
 //
-// Flux: el front demana `/api/story-image/<id>?s=<categoria|titol>`. La ruta:
+// Flux: el front demana `/api/story-image/<id>?s=<brief>&c=<categoria>&t=<titol>`.
+// `s` és el brief visual per a la IA; `c` i `t` només els fa servir la targeta
+// de reserva per compondre una portada pròpia de la peça. La ruta:
 //   1) si la té al cache (KV `img:<id>`), la retorna.
 //   2) si no, la genera amb la IA, la desa i la retorna.
 //   3) si la IA falla o s'ha superat el límit diari, retorna una targeta de
@@ -121,22 +123,159 @@ function base64ToBytes(b64) {
   return bytes
 }
 
-// Targeta de reserva amb els colors de la marca, per si la IA no respon o s'ha
-// arribat al sostre diari. Sempre és una imatge pròpia: cap risc legal.
-function fallbackSvg(seed) {
+// ---------------------------------------------------------------------------
+// TARGETA DE RESERVA
+// ---------------------------------------------------------------------------
+// Quan la IA no respon (o s'ha arribat al sostre diari) la peça no es pot quedar
+// amb un genèric repetit: 19 targetes idèntiques a la portada semblen un error.
+// Component una PORTADA EDITORIAL pròpia per notícia: verd de marca de fons,
+// color Mondrian de la secció i el titular compost. Cada peça surt diferent
+// perquè hi entren el titular, la categoria i un motiu geomètric determinista.
+// Sempre és una imatge nostra: cap risc de drets.
+
+// Mateixa paleta Mondrian que les seccions del web (vegeu App.css).
+const SECTION_COLORS = {
+  politica: ['#E72A30', '#FFFFFF'],
+  esports: ['#E72A30', '#FFFFFF'],
+  esport: ['#E72A30', '#FFFFFF'],
+  solidaritat: ['#E72A30', '#FFFFFF'],
+  opinio: ['#E72A30', '#FFFFFF'],
+  societat: ['#1E50A0', '#FFFFFF'],
+  mon: ['#1E50A0', '#FFFFFF'],
+  'mon digital': ['#1E50A0', '#FFFFFF'],
+  internacional: ['#1E50A0', '#FFFFFF'],
+  educacio: ['#1E50A0', '#FFFFFF'],
+  tecnologia: ['#1E50A0', '#FFFFFF'],
+  europa: ['#1E50A0', '#FFFFFF'],
+  dades: ['#1E50A0', '#FFFFFF'],
+  cultura: ['#FFE000', '#111111'],
+  salut: ['#FFE000', '#111111'],
+  'medi ambient': ['#FFE000', '#111111'],
+  ciencia: ['#FFE000', '#111111'],
+  agenda: ['#FFE000', '#111111'],
+  economia: ['#FFE000', '#111111'],
+  oportunitats: ['#FFE000', '#111111'],
+  default: ['#F4F1EA', '#111111'],
+}
+
+const BRAND_GREEN = '#146356'
+const BRAND_GREEN_DEEP = '#0d443b'
+
+function escapeXml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;')
+}
+
+// L'SVG no sap fer salts de línia sols: partim el titular per paraules amb una
+// amplada de caràcter estimada (Georgia ronda els 0,52 em de mitjana).
+export function wrapTitle(title, fontSize, maxWidth, maxLines) {
+  const words = String(title || '').trim().split(/\s+/).filter(Boolean)
+  if (!words.length) return []
+  const maxChars = Math.max(8, Math.floor(maxWidth / (fontSize * 0.52)))
+  const lines = []
+  let current = ''
+  // Una paraula més llarga que la línia (URL, mot compost) es parteix a pèl:
+  // si no, sortiria del marc de la portada.
+  const safeWords = []
+  for (const word of words) {
+    if (word.length <= maxChars) safeWords.push(word)
+    else for (let i = 0; i < word.length; i += maxChars) safeWords.push(word.slice(i, i + maxChars))
+  }
+  for (const word of safeWords) {
+    const candidate = current ? `${current} ${word}` : word
+    if (candidate.length <= maxChars) {
+      current = candidate
+      continue
+    }
+    if (current) lines.push(current)
+    current = word
+    if (lines.length === maxLines) break
+  }
+  if (current && lines.length < maxLines) lines.push(current)
+  if (lines.length === maxLines) {
+    const consumed = lines.join(' ').split(/\s+/).length
+    if (consumed < safeWords.length) {
+      const last = lines[maxLines - 1]
+      lines[maxLines - 1] = `${last.slice(0, Math.max(0, maxChars - 1)).trimEnd()}…`
+    }
+  }
+  return lines
+}
+
+// Motiu geomètric determinista: quatre composicions Mondrian discretes, triades
+// pel hash del titular. Dona varietat sense treure protagonisme al text.
+// Tots els motius viuen a la franja dreta (x ≥ 836) i per sobre del peu
+// (y ≤ 600): la columna de text i la signatura han de quedar sempre netes.
+function motifSvg(variant, accent) {
+  const shapes = [
+    `<rect x="836" y="0" width="188" height="210" fill="${accent}" opacity="0.9"/>
+     <rect x="836" y="210" width="188" height="12" fill="#FFFFFF" opacity="0.25"/>`,
+    `<rect x="836" y="150" width="188" height="240" fill="${accent}" opacity="0.85"/>
+     <rect x="836" y="404" width="188" height="12" fill="#FFFFFF" opacity="0.25"/>`,
+    `<circle cx="930" cy="196" r="74" fill="none" stroke="#FFFFFF" stroke-width="12" opacity="0.3"/>
+     <rect x="836" y="336" width="188" height="140" fill="${accent}" opacity="0.85"/>`,
+    `<rect x="836" y="64" width="188" height="164" fill="${accent}" opacity="0.85"/>
+     <rect x="836" y="252" width="188" height="72" fill="#FFFFFF" opacity="0.16"/>`,
+  ]
+  return shapes[variant % shapes.length]
+}
+
+export function fallbackSvg({ seed, category, title }) {
   const clean = sanitizeSeed(seed)
-  // Amb seed llegat "categoria|títol" mostrem la categoria; amb un brief lliure,
-  // una etiqueta neutra (el brief seria massa llarg per a la targeta).
-  const category = clean.includes('|') ? clean.split('|')[0] : ''
-  const label = (category || 'Bona notícia').replace(/&/g, '&amp;').replace(/</g, '&lt;')
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="768" viewBox="0 0 1024 768" role="img">
-  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-    <stop offset="0" stop-color="#e7d5ba"/><stop offset="1" stop-color="#b47a55"/>
+  // Categoria: del paràmetre `c`, o del seed llegat "categoria|títol".
+  const rawCategory = category || (clean.includes('|') ? clean.split('|')[0] : '')
+  const label = (rawCategory || 'Bona notícia').trim()
+  const [accent, accentInk] = SECTION_COLORS[normalizeKey(label)] || SECTION_COLORS.default
+
+  // Titular: del paràmetre `t`, o del seed llegat. El brief en anglès de la IA
+  // no s'imprimeix mai (descriu una escena, no la notícia).
+  const rawTitle = title || (clean.includes('|') ? clean.split('|')[1] : '')
+  const headline = sanitizeSeed(rawTitle)
+
+  // 720 px d'amplada de text: deixa lliure la franja dreta on van els motius.
+  const fontSize = headline.length <= 58 ? 62 : headline.length <= 104 ? 52 : 44
+  const lines = wrapTitle(headline, fontSize, 720, 4)
+  const lineHeight = Math.round(fontSize * 1.22)
+  // Bloc de text centrat verticalment dins la franja lliure de la portada.
+  const blockTop = 300 - ((lines.length - 1) * lineHeight) / 2
+  const variant = seedHash(headline || clean || label) % 4
+  // L'etiqueta es dibuixa amb textLength: les lletres s'ajusten EXACTAMENT a
+  // l'ample de la pastilla, així no se surt encara que el renderitzador no
+  // tingui la mateixa tipografia i calculi amplades diferents.
+  const pillWidth = Math.min(680, 44 + label.length * 24)
+
+  const tspans = lines
+    .map(
+      (line, index) =>
+        `<tspan x="88" y="${blockTop + index * lineHeight}">${escapeXml(line)}</tspan>`,
+    )
+    .join('\n    ')
+
+  const titleTag = escapeXml(headline || label)
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="768" viewBox="0 0 1024 768" role="img" aria-label="${titleTag}">
+  <title>${titleTag}</title>
+  <defs><linearGradient id="g" x1="0" y1="0" x2="0.4" y2="1">
+    <stop offset="0" stop-color="${BRAND_GREEN}"/><stop offset="1" stop-color="${BRAND_GREEN_DEEP}"/>
   </linearGradient></defs>
   <rect width="1024" height="768" fill="url(#g)"/>
-  <circle cx="512" cy="300" r="118" fill="none" stroke="#3a2a1e" stroke-width="6" opacity="0.55"/>
-  <text x="512" y="470" font-family="Georgia, 'Times New Roman', serif" font-size="46" fill="#3a2a1e" text-anchor="middle">El Bon Diari</text>
-  <text x="512" y="524" font-family="Georgia, 'Times New Roman', serif" font-size="26" fill="#5a4636" text-anchor="middle">${label}</text>
+  ${motifSvg(variant, accent)}
+  <rect x="88" y="104" width="${pillWidth}" height="52" fill="${accent}"/>
+  <text x="110" y="140" font-family="Helvetica, Arial, sans-serif" font-size="25" font-weight="bold" letter-spacing="2.5" fill="${accentInk}" textLength="${pillWidth - 44}" lengthAdjust="spacingAndGlyphs">${escapeXml(label.toUpperCase())}</text>
+  ${
+    lines.length
+      ? `<text font-family="Georgia, 'Times New Roman', serif" font-size="${fontSize}" fill="#FFFFFF">
+    ${tspans}
+  </text>`
+      : ''
+  }
+  <rect x="88" y="656" width="848" height="3" fill="#FFFFFF" opacity="0.4"/>
+  <text x="88" y="712" font-family="Georgia, 'Times New Roman', serif" font-size="30" fill="#FFFFFF">El Bon Diari</text>
+  <text x="936" y="712" font-family="Helvetica, Arial, sans-serif" font-size="19" letter-spacing="1.5" fill="#FFFFFF" opacity="0.75" text-anchor="end">bondiari.com</text>
 </svg>`
 }
 
@@ -145,8 +284,8 @@ const OK_HEADERS = {
   'cache-control': 'public, max-age=31536000, immutable',
 }
 
-function svgResponse(seed, status = 200) {
-  return new Response(fallbackSvg(seed), {
+function svgResponse(parts, status = 200) {
+  return new Response(fallbackSvg(parts), {
     status,
     headers: {
       'content-type': 'image/svg+xml; charset=utf-8',
@@ -156,25 +295,44 @@ function svgResponse(seed, status = 200) {
   })
 }
 
-async function underDailyCap(env, ctx) {
-  const day = new Date().toISOString().slice(0, 10)
-  const key = `imggen:${day}`
-  const current = parseInt((await env.LIVE_NEWS_KV.get(key)) || '0', 10)
-  if (current >= DAILY_GENERATION_CAP) return false
-  const bump = env.LIVE_NEWS_KV.put(key, String(current + 1), { expirationTtl: 3 * 24 * 3600 })
-  if (ctx?.waitUntil) ctx.waitUntil(bump)
-  else await bump
-  return true
+function dailyCapKey() {
+  return `imggen:${new Date().toISOString().slice(0, 10)}`
+}
+
+async function underDailyCap(env) {
+  const current = parseInt((await env.LIVE_NEWS_KV.get(dailyCapKey())) || '0', 10)
+  return current < DAILY_GENERATION_CAP
+}
+
+// El comptador només puja quan la IA ha lliurat una imatge de debò. Abans es
+// comptava en el moment de DEMANAR-LA, així que cada intent fallit (i cada
+// visita els repeteix, perquè els errors no es cachegen) cremava quota: n'hi
+// havia prou amb una estona d'errors per esgotar el sostre del dia i deixar tot
+// el diari servint la targeta de reserva fins l'endemà.
+function bumpDailyCount(env, ctx) {
+  const task = (async () => {
+    const key = dailyCapKey()
+    const current = parseInt((await env.LIVE_NEWS_KV.get(key)) || '0', 10)
+    await env.LIVE_NEWS_KV.put(key, String(current + 1), { expirationTtl: 3 * 24 * 3600 })
+  })()
+  if (ctx?.waitUntil) ctx.waitUntil(task)
+  return task
 }
 
 export async function handleStoryImage(request, env, ctx) {
   const url = new URL(request.url)
   const id = url.pathname.replace('/api/story-image/', '').replace(/\/+$/, '')
   const seed = url.searchParams.get('s') || ''
+  // Categoria i titular per a la targeta de reserva (la IA no els fa servir).
+  const parts = {
+    seed,
+    category: url.searchParams.get('c') || '',
+    title: url.searchParams.get('t') || '',
+  }
 
   // L'id ha de tenir la forma d'un id de peça del radar (feed-xxxx). Evita que
   // es puguin demanar generacions per a ids inventats.
-  if (!/^feed-[0-9a-z]+$/.test(id)) return svgResponse(seed, 404)
+  if (!/^feed-[0-9a-z]+$/.test(id)) return svgResponse(parts, 404)
 
   const key = KV_PREFIX + id
 
@@ -183,7 +341,7 @@ export async function handleStoryImage(request, env, ctx) {
   if (cached) return new Response(cached, { headers: OK_HEADERS })
 
   // Falta el binding d'IA o s'ha superat el sostre → reserva.
-  if (!env.AI || !(await underDailyCap(env, ctx))) return svgResponse(seed)
+  if (!env.AI || !(await underDailyCap(env))) return svgResponse(parts)
 
   // 2) Generació (un sol cop per peça)
   try {
@@ -194,9 +352,10 @@ export async function handleStoryImage(request, env, ctx) {
     const put = env.LIVE_NEWS_KV.put(key, bytes, { expirationTtl: CACHE_TTL_SECONDS })
     if (ctx?.waitUntil) ctx.waitUntil(put)
     else await put
+    bumpDailyCount(env, ctx)
     return new Response(bytes, { headers: OK_HEADERS })
   } catch (error) {
     console.error('[story-image]', error?.message || error)
-    return svgResponse(seed)
+    return svgResponse(parts)
   }
 }

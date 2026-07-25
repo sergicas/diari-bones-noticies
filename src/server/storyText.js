@@ -253,9 +253,13 @@ export async function applyOwnContent(stories, env) {
     const hasOwnContent = Boolean(own.title && own.body)
     const title = own.title || genericTitle(e.story)
     const body = own.body ? [own.body] : []
-    const imageUrl = own.brief
-      ? storyImagePath(e.story.url, { brief: own.brief })
-      : storyImagePath(e.story.url, { title: e.story.title, category: e.story.category })
+    // Encara que hi hagi brief per a la IA, passem sempre títol i categoria:
+    // són el que compon la targeta de reserva si la generació no arriba.
+    const imageUrl = storyImagePath(e.story.url, {
+      brief: own.brief || '',
+      title: title || e.story.title,
+      category: e.story.category,
+    })
     return {
       ...e.story,
       title,
