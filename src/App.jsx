@@ -23,7 +23,7 @@ import {
   serviceSectionIds,
   getStorySection,
 } from './lib/sections.js'
-import { formatDateTime } from './lib/viewHelpers.js'
+import { formatDate, formatDateTime } from './lib/viewHelpers.js'
 
 import PortadaView from './views/PortadaView.jsx'
 import StoryDetailView from './views/StoryDetailView.jsx'
@@ -471,107 +471,130 @@ function splitEditionStories(stories) {
   }
 }
 
+// Marca del propietari: només l'editor veu el botó de recarregar la portada.
+// (Es va perdre amb la modularització de la Fase 2 i es restaura amb el masthead.)
+function readOwnerFlag() {
+  if (typeof window === 'undefined') return false
+  try {
+    return window.localStorage.getItem('bondiari-owner') === '1'
+  } catch {
+    return false
+  }
+}
+
+// Capçalera original d'El Bon Diari (masthead Graphis amb el colibrí i la
+// graella Mondrian), restaurada tal com era abans de la modularització de la
+// Fase 2, que la va substituir per una estructura sense estils.
 function SiteHeader({ currentPage, isRefreshing, onNavigate, onRefresh }) {
+  const navItems = [
+    { href: '/', label: 'Portada', page: 'home' },
+    { href: '/manifest', label: 'Manifest', page: 'manifest' },
+    { href: '/hemeroteca', label: 'Hemeroteca', page: 'archive' },
+    { href: '/desats', label: 'Desats', page: 'saved' },
+  ]
+  const [isOwner] = useState(readOwnerFlag)
+
   return (
-    <header className="site-header">
-      <div className="site-header__main">
+    <header className="masthead">
+      <div className="masthead__top">
+        <div className="masthead__utility">
+          <p className="issue-chip">Edició del {formatDate(new Date())}</p>
+          <nav className="site-nav" aria-label="Navegació principal">
+            {navItems.map((item) => (
+              <a
+                key={item.href}
+                className={`site-nav__link ${
+                  currentPage === item.page ? 'is-active' : ''
+                }`}
+                href={item.href}
+                aria-current={currentPage === item.page ? 'page' : undefined}
+                onClick={(event) => {
+                  if (!canInterceptNavigation(event)) {
+                    return
+                  }
+
+                  event.preventDefault()
+                  onNavigate(item.href)
+                }}
+              >
+                {item.label}
+              </a>
+            ))}
+          </nav>
+        </div>
+
+        {isOwner ? (
+          <div className="masthead__actions">
+            <button
+              className={`button button--ghost ${isRefreshing ? 'is-loading' : ''}`}
+              type="button"
+              onClick={onRefresh}
+              disabled={isRefreshing}
+            >
+              {isRefreshing ? 'Recarregant…' : 'Recarregar portada'}
+            </button>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="masthead__brand masthead__brand--graphis">
+        <p className="section-tag">Periodisme constructiu i de servei</p>
+
         <a
-          className="brand"
+          className="graphis-title-band"
           href="/"
+          aria-label="Tornar a la portada d'El Bon Diari"
           onClick={(event) => {
             if (!canInterceptNavigation(event)) {
               return
             }
-
             event.preventDefault()
             onNavigate('/')
           }}
         >
-          <span className="brand__eyebrow">Edició digital</span>
-          <span className="brand__name">El Bon Diari</span>
-          <span className="brand__sub">Notícies constructives en català</span>
+          <span className="graphis-title">EL BON DIARI</span>
+          <span className="graphis-title-bird" aria-hidden="true">
+            <img
+              src="/logo-colibri.png?v=4"
+              alt=""
+              width="977"
+              height="829"
+              decoding="async"
+            />
+          </span>
         </a>
 
-        <div className="site-header__actions">
-          <button
-            type="button"
-            className={`refresh-button ${isRefreshing ? 'is-refreshing' : ''}`}
-            onClick={onRefresh}
-            aria-label="Actualitzar el radar en viu"
-            title="Recarrega el radar de notícies"
-          >
-            <svg
-              className="refresh-button__icon"
-              viewBox="0 0 24 24"
-              width="18"
-              height="18"
-              aria-hidden="true"
-            >
-              <path
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M20 11A8.1 8.1 0 0 0 4.5 9M4 5v4h4m-4 4a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4"
-              />
-            </svg>
-            <span className="refresh-button__label">
-              {isRefreshing ? 'Actualitzant…' : 'Actualitzar radar'}
-            </span>
-          </button>
+        <div className="mondrian-grid" aria-hidden="true">
+          <span className="m-cell m-red"></span>
+          <span className="m-cell m-blue"></span>
+          <span className="m-cell m-yellow"></span>
+          <span className="m-cell m-red"></span>
 
-          <a
-            className={`nav-link nav-link--saved ${
-              currentPage === 'saved' ? 'is-active' : ''
-            }`}
-            href="/desats"
-            onClick={(event) => {
-              if (!canInterceptNavigation(event)) {
-                return
-              }
+          <span className="m-cell m-black"></span>
+          <span className="m-cell m-center">
+            <img
+              src="/logo-colibri.png?v=4"
+              alt=""
+              width="977"
+              height="829"
+              decoding="async"
+            />
+          </span>
+          <span className="m-cell m-yellow"></span>
 
-              event.preventDefault()
-              onNavigate('/desats')
-            }}
-          >
-            Desats
-          </a>
+          <span className="m-cell m-red"></span>
+          <span className="m-cell m-blue"></span>
 
-          <a
-            className={`nav-link ${
-              currentPage === 'archive' ? 'is-active' : ''
-            }`}
-            href="/hemeroteca"
-            onClick={(event) => {
-              if (!canInterceptNavigation(event)) {
-                return
-              }
-
-              event.preventDefault()
-              onNavigate('/hemeroteca')
-            }}
-          >
-            Hemeroteca
-          </a>
-
-          <a
-            className={`nav-link ${
-              currentPage === 'manifest' ? 'is-active' : ''
-            }`}
-            href="/manifest"
-            onClick={(event) => {
-              if (!canInterceptNavigation(event)) {
-                return
-              }
-
-              event.preventDefault()
-              onNavigate('/manifest')
-            }}
-          >
-            Manifest
-          </a>
+          <span className="m-cell m-blue"></span>
+          <span className="m-cell m-yellow"></span>
+          <span className="m-cell m-white"></span>
+          <span className="m-cell m-black"></span>
         </div>
+
+        <p className="masthead__lead">
+          Històries que expliquen què funciona, comprovacions que separen els
+          fets del soroll i informació que pots convertir en una acció.
+        </p>
       </div>
     </header>
   )
