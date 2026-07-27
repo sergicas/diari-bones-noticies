@@ -600,6 +600,20 @@ const advertorialPhrasePatterns = [
   /\bsu\s+\d{1,3}\s*[ºo°]?\s*(cumpleaños|aniversari|aniversario)\b/i,
   /\b(baile\s+de\s+máscaras|alfombra\s+roja|red\s+carpet|photocall|paparazzi)\b/i,
   /\b\d[\d.,]*\s*(d[óo]lares|euros)\s+gastad[oa]s\b/i,
+  // RESULTATS D'EMPRESA (colat el 27/07: "Mango factura 1.852 milions d'euros
+  // en els primers sis mesos de l'any"). Una empresa que presenta comptes no és
+  // una bona notícia: és informació financera, i sovint arriba com a nota de
+  // premsa corporativa. El porter de positivitat no ho veia (cap paraula
+  // negativa) i el model l'aprovava. Es bloca pel senyal precís —la xifra amb
+  // el verb de facturació o el període comptable—, no per la paraula "empresa",
+  // perquè una cooperativa que crea llocs de treball ha de poder entrar.
+  /\b(factur(a|à|ó|aron|en)|ingress(a|à|en)|ingres(a|ó|an))\b[^.]{0,40}\b\d[\d.,]*\s*(mil|milers|miles|milions|millones|million|bilions)\b/i,
+  /\b(facturaci[óo]n?|xifra\s+de\s+negoci|cifra\s+de\s+negocio|volum\s+de\s+negoci|ebitda)\b/i,
+  /\b(benefici|beneficio|guanys|ganancias)\s+(net|neto|nets|netos)\b/i,
+  /\bresultad(os|es)?\s+(del\s+)?(primer|segon|segundo|tercer|cuarto|quart)\s+(trimestre|semestre)\b/i,
+  /\bresultats\s+(semestrals|anuals|del\s+(primer|segon|tercer|quart)\s+(trimestre|semestre))\b/i,
+  // Autopromoció de marca: "a través del seu programa X", "el seu nou servei X".
+  /\ba\s+trav[ée]s\s+(del|de)\s+(el\s+)?(seu|su|seus|sus)\s+(programa|servei|servicio|pla|plan|projecte|proyecto)\b/i,
 ]
 
 export function looksLikeAdvertorial({ url, title, summary }) {
@@ -676,6 +690,10 @@ function asArray(value) {
 function stripHtml(value) {
   return String(value || '')
     .replace(/<[^>]*>/g, ' ')
+    // Alguns mitjans deixen al titular el marcador d'objecte incrustat (U+FFFC,
+    // on hi havia una foto o un vídeo) o el símbol de caràcter il·legible
+    // (U+FFFD). Arribaven tal qual a la portada com un requadre buit.
+    .replace(/[\uFFF9-\uFFFD]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
 }

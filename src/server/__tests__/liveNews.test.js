@@ -109,6 +109,55 @@ describe('quota KV — escriptures acotades', () => {
   })
 })
 
+describe('resultats d’empresa — comptes, no bones notícies', () => {
+  const advertorial = (title) =>
+    looksLikeAdvertorial({ url: 'https://elmon.cat/peca', title, summary: '' })
+
+  // Colat el 27/07/2026 tant a la tira "Últimes incorporacions" com a la
+  // portada. El porter de positivitat no ho veia (cap paraula negativa) i el
+  // model ho aprovava, així que calia un bloc dur.
+  it('bloca la presentació de comptes i la nota de premsa corporativa', () => {
+    for (const title of [
+      'Mango factura 1.852 milions d’euros en els primers sis mesos de l’any',
+      'B. Braun reforça l’accés a la diàlisi durant les vacances a través del seu programa Holiday Dialysis',
+      'La facturación del grupo crece un 7,2%',
+      'El grupo presenta sus resultados del primer semestre',
+      'La companyia tanca l’exercici amb un benefici net rècord',
+    ]) {
+      expect(advertorial(title), title).toBe(true)
+    }
+  })
+
+  // El bloc mira el senyal financer precís, no la paraula "empresa": una bona
+  // notícia econòmica de veritat ha de continuar entrant.
+  it('deixa passar l’economia constructiva', () => {
+    for (const title of [
+      'Una cooperativa del Maresme crea vint llocs de treball al mercat municipal',
+      'La fàbrica de Sant Andreu reobre i recontracta cinquanta treballadors',
+      'Un poble de la Segarra recupera la seva escola amb un projecte comunitari',
+      'Els beneficis de caminar mitja hora al dia, segons un estudi',
+    ]) {
+      expect(advertorial(title), title).toBe(false)
+    }
+  })
+
+  it('neteja el marcador d’objecte incrustat que alguns mitjans deixen al titular', () => {
+    const story = normalizeFeedItem(
+      `
+      <title><![CDATA[La Fageda estima el valor social que genera ￼]]></title>
+      <link>https://elmon.cat/fageda</link>
+      <description><![CDATA[La cooperativa presenta el seu informe anual amb dades verificades.]]></description>
+      <pubDate>Mon, 27 Jul 2026 08:00:00 +0000</pubDate>
+      <media:thumbnail url="https://elmon.cat/foto.jpg" />
+    `,
+      { name: 'El Món', language: 'ca', defaultCategory: 'Actualitat' },
+    )
+
+    expect(story.title).toBe('La Fageda estima el valor social que genera')
+    expect(story.title).not.toContain('￼')
+  })
+})
+
 describe('arrossegament del lot — el diari ha d’acumular', () => {
   // Regressió del 27-07-2026: l'arrossegament tornava a passar el porter de
   // positivitat sobre el text PUBLICAT, però una peça publicada té el titular
