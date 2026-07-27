@@ -141,6 +141,44 @@ describe('resultats d’empresa — comptes, no bones notícies', () => {
     }
   })
 
+  // L'altre gènere de nota de premsa: no anuncia cap fet, l'organització es
+  // proclama referent o pionera. Colat el 27/07 a la tira d'últimes
+  // incorporacions ("GBSB Global consolida un model educatiu pioner...").
+  it('bloca l’autobombo institucional', () => {
+    for (const title of [
+      'GBSB Global consolida un model educatiu pioner per formar els professionals que exigeix la nova economia',
+      'Jorcar Titanium lidera la innovació a Lliçà de Vall amb reciclatge',
+      'La companyia es consolida com a referent del sector',
+      'La empresa se posiciona como líder en el mercado europeo',
+      'La firma apuesta por la excelencia en el servicio',
+    ]) {
+      expect(advertorial(title), title).toBe(true)
+    }
+  })
+
+  // Es bloca la col·locació sencera (verb de posicionament + superlatiu de
+  // màrqueting), no els verbs sols: liderar, consolidar i impulsar són verbs
+  // normals del periodisme.
+  it('no confon liderar, consolidar o impulsar amb autobombo', () => {
+    for (const title of [
+      "Un institut de Girona lidera un projecte europeu contra l'abandonament escolar",
+      'Una investigadora catalana lidera la missió europea a Mart',
+      'El barri consolida la seva xarxa de suport a la gent gran',
+      'El Govern impulsa un model educatiu inclusiu a les escoles rurals',
+      'La ciutat impulsa un pla de xoc contra la pobresa energètica',
+    ]) {
+      expect(advertorial(title), title).toBe(false)
+    }
+  })
+
+  // En JavaScript "ó" no és caràcter de paraula, així que /facturaci[óo]n?\b/
+  // casava amb el castellà "facturación" però NO amb el català "facturació".
+  // Els blocs es tanquen amb "no vingui cap més lletra".
+  it('bloca igual el català accentuat que el castellà', () => {
+    expect(advertorial('La facturació del grup creix un 7,2%')).toBe(true)
+    expect(advertorial('La facturación del grupo crece un 7,2%')).toBe(true)
+  })
+
   it('neteja el marcador d’objecte incrustat que alguns mitjans deixen al titular', () => {
     const story = normalizeFeedItem(
       `

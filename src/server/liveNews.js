@@ -607,13 +607,28 @@ const advertorialPhrasePatterns = [
   // negativa) i el model l'aprovava. Es bloca pel senyal precís —la xifra amb
   // el verb de facturació o el període comptable—, no per la paraula "empresa",
   // perquè una cooperativa que crea llocs de treball ha de poder entrar.
-  /\b(factur(a|à|ó|aron|en)|ingress(a|à|en)|ingres(a|ó|an))\b[^.]{0,40}\b\d[\d.,]*\s*(mil|milers|miles|milions|millones|million|bilions)\b/i,
-  /\b(facturaci[óo]n?|xifra\s+de\s+negoci|cifra\s+de\s+negocio|volum\s+de\s+negoci|ebitda)\b/i,
+  // ATENCIÓ amb \b darrere una vocal accentuada: en JavaScript, "ó" no és un
+  // caràcter de paraula, així que /facturaci[óo]n?\b/ NO casa amb "facturació"
+  // (sí amb el castellà "facturación"). Per això aquí es tanca amb un
+  // "no vingui cap més lletra" en lloc de \b.
+  /\b(factur(a|à|ó|aron|en)|ingress(a|à|en)|ingres(a|ó|an))(?![a-zà-ÿ])[^.]{0,40}\b\d[\d.,]*\s*(mil|milers|miles|milions|millones|million|bilions)\b/i,
+  /\b(facturaci[óo]n?|xifra\s+de\s+negoci|cifra\s+de\s+negocio|volum\s+de\s+negoci|ebitda)(?![a-zà-ÿ])/i,
   /\b(benefici|beneficio|guanys|ganancias)\s+(net|neto|nets|netos)\b/i,
   /\bresultad(os|es)?\s+(del\s+)?(primer|segon|segundo|tercer|cuarto|quart)\s+(trimestre|semestre)\b/i,
   /\bresultats\s+(semestrals|anuals|del\s+(primer|segon|tercer|quart)\s+(trimestre|semestre))\b/i,
   // Autopromoció de marca: "a través del seu programa X", "el seu nou servei X".
   /\ba\s+trav[ée]s\s+(del|de)\s+(el\s+)?(seu|su|seus|sus)\s+(programa|servei|servicio|pla|plan|projecte|proyecto)\b/i,
+  // AUTOBOMBO INSTITUCIONAL (colat el 27/07: "GBSB Global consolida un model
+  // educatiu pioner per formar els professionals que exigeix la nova economia").
+  // És el gènere de la nota de premsa que no anuncia cap fet: una organització
+  // es proclama referent, pionera o líder. Es bloca la COL·LOCACIÓ sencera
+  // —verb de posicionament + superlatiu de màrqueting—, no els verbs sols:
+  // "un institut lidera un projecte europeu" o "el barri consolida la seva
+  // xarxa de suport" són notícies i han de continuar entrant.
+  /\b(?:es|se)?\s*(?:consolida|posiciona|situa|erigeix|reafirma)\s+com[oa]?\s+(?:a\s+)?(?:un[ae]?\s+|el\s+|la\s+)?(?:referent|referente|l[íi]der|leader|pioner|pionero)(?![a-zà-ÿ])/i,
+  /\b(?:consolida|refor[çc]a|refuerza|impulsa|desplega|despliega)\s+(?:un|una|el|la)(?:\s+[\wÀ-ÿ·'’-]+){0,3}\s+(?:pioner|pionera|pioners|pioneres|pionero|innovador|innovadora|capdavanter|capdavantera|de\s+refer[èe]ncia|d[e'’]\s*[èe]xit)(?![a-zà-ÿ])/i,
+  /\blider(?:a|ant|ando)?\s+(?:la\s+)?(?:innovaci[óo]|transformaci[óo]|digitalitzaci[óo]|digitalizaci[óo]|sostenibilitat|sostenibilidad|excel·l[èe]ncia|excelencia)(?![a-zà-ÿ])/i,
+  /\b(?:aposta\s+per|apuesta\s+por)\s+(?:la\s+)?(?:innovaci[óo]|excel·l[èe]ncia|excelencia|transformaci[óo]\s+digital)(?![a-zà-ÿ])/i,
 ]
 
 export function looksLikeAdvertorial({ url, title, summary }) {
