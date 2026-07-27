@@ -1,7 +1,7 @@
 // Contingut propi d'El Bon Diari per a cada peça del radar. En una sola crida a
 // la IA (Llama, Workers AI) generem, per notícia, DUES coses:
 //
-//   1) TITULAR reescrit amb paraules pròpies (mateixa llengua, fidel als fets):
+//   1) TITULAR i COS reescrits amb paraules pròpies (mateixa llengua, fidelitat):
 //      per no reproduir el text protegit del mitjà (drets d'autor / dret dels
 //      editors de premsa). El resum copiat s'elimina (summary = '').
 //   2) ESCENA visual concreta (en anglès) per il·lustrar AQUESTA notícia: així
@@ -14,17 +14,22 @@
 
 import { feedStoryId } from '../lib/story-id.js'
 import { storyImagePath } from '../lib/story-image-path.js'
+import {
+  evaluateEditorialQuality,
+  isUsableRewrite,
+} from './editorialQuality.js'
 
 const AI_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast'
-const KV_PREFIX = 'own:'
+// v2 invalida els textos breus de l'etapa inicial. Les claus v1 caduquen soles.
+const KV_PREFIX = 'own:v2:'
 const CACHE_TTL_SECONDS = 90 * 24 * 3600
-const BATCH_SIZE = 8
-const MAX_BATCHES = 5 // sostre: fins a 40 peces noves per refresc
+const BATCH_SIZE = 5
+const MAX_BATCHES = 8 // sostre: fins a 40 peces noves per refresc
 
 const REWRITE_SYSTEM = [
   "Ets l'editor d'El Bon Diari, un mitjà de periodisme constructiu i de servei.",
   'Et passo peces numerades; cada número du la llengua i el tipus entre claudàtors, el',
-  'titular original i, sota, una línia "resum:" amb els fets de la font (si n\'hi ha).',
+  'titular original i, sota, una línia "context:" amb els fets disponibles de la font.',
   "Per a CADA número dona'm QUATRE línies EXACTAMENT amb aquest format:",
   'N titular: <titular reescrit>',
   'N cos: <cos reescrit>',
@@ -34,16 +39,21 @@ const REWRITE_SYSTEM = [
   'i què, sense inventar xifres, dades ni noms), to serè. Ha de ser una frase',
   'natural i llegible (no telegràfica ni tallada), de 6 a 16 paraules, sense',
   'cometes ni símbols, i EXACTAMENT en la llengua indicada (no el tradueixis).',
-  'COS: de 2 a 4 frases amb paraules TEVES que expliquin la notícia a partir NOMÉS',
-  "dels fets del titular i del resum donat. NO inventis xifres, dades, cites, llocs",
-  'ni noms que no apareguin al material; si hi ha poca informació, sigues sobri i',
-  'general en lloc d\'inventar. Mateixa llengua que el titular. Sense cometes.',
-  'Si el tipus és VERIFICACIÓ, conserva amb precisió la negació i no presentis',
-  'el rumor desmentit com un fet. Si és AGENDA o OPORTUNITAT, prioritza què pot',
-  'fer el lector i no ho converteixis artificialment en una bona notícia.',
+  'COS: de 4 a 6 frases i entre 80 i 150 paraules, amb paraules TEVES. Ha',
+  'd’explicar què ha passat, qui hi intervé, on o quan si consta al context, i',
+  'quin és el pas següent o el límit conegut. Utilitza almenys tres fets concrets',
+  'del context. NO inventis xifres, dades, cites, llocs ni noms. Si no hi ha prou',
+  'fets per escriure un cos rigorós, escriu exactament INFORMACIO_INSUFICIENT al',
+  'cos: és preferible no publicar que omplir amb frases buides.',
+  'Mateixa llengua que el titular. Sense cometes ni opinions.',
+  'Si el tipus és VERIFICACIÓ, estructura el cos amb afirmació comprovada,',
+  'veredicte i evidència; conserva amb precisió la negació i no presentis el',
+  'rumor desmentit com un fet. Si és AGENDA o OPORTUNITAT, prioritza dates,',
+  'lloc, destinataris, termini, accés i què pot fer el lector.',
   'Si és DADES, conserva exactament les xifres, unitats i períodes de referència.',
-  'IMPACTE: una sola frase breu que expliqui què permet entendre, comprovar o fer.',
-  'Mateixa llengua, sense cometes.',
+  'IMPACTE: una frase específica que expliqui per què aquesta peça importa al',
+  'lector. No comencis amb "Permet conèixer", "Informa sobre" ni "Aporta una',
+  'comprovació". Mateixa llengua, sense cometes.',
   'IMATGE: una escena visual concreta EN ANGLÈS per dibuixar la notícia; descriu',
   'objectes i entorn (exemple: "a modern tram on a tree-lined city avenue at',
   'sunrise"). Sense noms propis, sense marques, sense persones reals identificables',
@@ -122,50 +132,85 @@ async function aiOwnContentBatch(env, items) {
       const lang = LANG_NAMES[it.language] || 'català'
       const type = typeLabels[it.editorialFormat] || typeLabels.constructive
       const title = String(it.title || '').replace(/\s+/g, ' ').slice(0, 160)
-      // El resum de la font s'aporta NOMÉS com a context de fets perquè el cos
-      // sigui verídic; el model l'ha de reescriure amb paraules pròpies (no es
-      // publica mai copiat).
-      const summary = String(it.summary || '').replace(/\s+/g, ' ').slice(0, 320)
-      return summary
-        ? `${i + 1}. [${lang}; ${type}] ${title}\n   resum: ${summary}`
+      // El context de la font s'aporta NOMÉS com a material factual intern; el
+      // model l'ha de reescriure i el camp s'elimina abans de publicar.
+      const context = String(it.sourceContext || it.summary || '')
+        .replace(/\s+/g, ' ')
+        .slice(0, 1400)
+      return context
+        ? `${i + 1}. [${lang}; ${type}] ${title}\n   context: ${context}`
         : `${i + 1}. [${lang}; ${type}] ${title}`
     })
     .join('\n')
   const out = await env.AI.run(AI_MODEL, {
-    max_tokens: 2200,
+    max_tokens: 3600,
     messages: [
       { role: 'system', content: REWRITE_SYSTEM },
       { role: 'user', content: `Notícies:\n${list}` },
     ],
   })
-  const text = String(out?.response || '')
-  const result = items.map(() => ({ title: null, brief: null, body: null, impact: null }))
-  for (const line of text.split('\n')) {
-    const mt = line.match(/^\s*(\d{1,2})\s*[.)]?\s*titular\s*[:-]\s*(.+?)\s*$/i)
-    if (mt) {
-      const idx = parseInt(mt[1], 10) - 1
-      if (idx >= 0 && idx < result.length && !result[idx].title) result[idx].title = cleanTitle(mt[2])
+  return parseOwnContentBatch(String(out?.response || ''), items.length)
+}
+
+// Una línia de camp: "1 cos: ...", "1. cos: ...", "**cos**: ..." o simplement
+// "cos: ...". El número és OPCIONAL a propòsit.
+const FIELD_LINE =
+  /^[\s*#>–—-]*(?:(\d{1,2})\s*[.)]?\s*)?\**\s*(titular|cos|impacte|imatge)\**\s*[:–-]\s*(.*)$/i
+
+// Llegeix la resposta del model línia a línia.
+//
+// El parser anterior exigia el número a CADA línia. Però el model només ho fa
+// quan el lot és de dues o tres peces: amb els lots de cinc de producció escriu
+// el número al titular i deixa la resta indentada sota:
+//
+//   1. titular: Mataró inaugura un carril bici entre el centre i la platja
+//      cos: L'Ajuntament de Mataró ha estrenat un carril de 1,2 quilòmetres...
+//      impacte: ...
+//
+// Amb l'exigència del número, el "cos" no es trobava mai i totes les peces
+// sortien sense text. Aquí el número és opcional: quan no hi és, la línia
+// pertany a la peça que s'estava llegint, i un "titular" nou n'obre una altra.
+export function parseOwnContentBatch(text, count) {
+  const raw = Array.from({ length: count }, () => ({
+    titular: '',
+    cos: '',
+    impacte: '',
+    imatge: '',
+  }))
+  let index = -1
+  let field = null
+
+  for (const line of String(text).split('\n')) {
+    const match = line.match(FIELD_LINE)
+    if (match) {
+      const nextField = match[2].toLocaleLowerCase('ca')
+      if (match[1] !== undefined) {
+        const numbered = parseInt(match[1], 10) - 1
+        if (numbered >= 0) index = numbered
+      } else if (index < 0) {
+        index = 0
+      } else if (nextField === 'titular' && raw[index]?.titular) {
+        // Llista sense numerar: un titular nou vol dir peça nova.
+        index += 1
+      }
+      if (index < 0 || index >= raw.length) continue
+      field = nextField
+      raw[index][field] = match[3]
       continue
     }
-    const mc = line.match(/^\s*(\d{1,2})\s*[.)]?\s*cos\s*[:-]\s*(.+?)\s*$/i)
-    if (mc) {
-      const idx = parseInt(mc[1], 10) - 1
-      if (idx >= 0 && idx < result.length && !result[idx].body) result[idx].body = cleanProse(mc[2], 600)
-      continue
-    }
-    const mp = line.match(/^\s*(\d{1,2})\s*[.)]?\s*impacte\s*[:-]\s*(.+?)\s*$/i)
-    if (mp) {
-      const idx = parseInt(mp[1], 10) - 1
-      if (idx >= 0 && idx < result.length && !result[idx].impact) result[idx].impact = cleanProse(mp[2], 200)
-      continue
-    }
-    const mi = line.match(/^\s*(\d{1,2})\s*[.)]?\s*imatge\s*[:-]\s*(.+?)\s*$/i)
-    if (mi) {
-      const idx = parseInt(mi[1], 10) - 1
-      if (idx >= 0 && idx < result.length && !result[idx].brief) result[idx].brief = cleanBrief(mi[2])
+    // Continuació: un cos que ocupa més d'una línia.
+    const continuation = line.trim()
+    if (continuation && field && index >= 0 && index < raw.length) {
+      raw[index][field] = `${raw[index][field]} ${continuation}`.trim()
     }
   }
-  return result
+
+  return raw.map((entry) => ({
+    title: entry.titular ? cleanTitle(entry.titular) : null,
+    body: entry.cos ? cleanProse(entry.cos, 1600) : null,
+    impact: entry.impacte ? cleanProse(entry.impacte, 200) : null,
+    brief: entry.imatge ? cleanBrief(entry.imatge) : null,
+  }))
 }
 
 // Rep el lot final de peces i en torna una versió amb titular propi, il·lustració
@@ -177,14 +222,19 @@ export async function applyOwnContent(stories, env) {
     const existingBody = Array.isArray(s.body)
       ? s.body.filter(Boolean).join(' ')
       : ''
-    const own =
+    const existingOwn =
       s.ownContent && s.title && existingBody
-        ? {
-            title: s.title,
-            body: existingBody,
-            impact: s.impact || '',
-            brief: '',
-          }
+        ? { title: s.title, body: existingBody, impact: s.impact || '', brief: '' }
+        : null
+    const own =
+      existingOwn &&
+      isUsableRewrite({
+        ...s,
+        title: existingOwn.title,
+        body: [existingOwn.body],
+        impact: existingOwn.impact,
+      })
+        ? existingOwn
         : null
     return {
       story: s,
@@ -200,7 +250,15 @@ export async function applyOwnContent(stories, env) {
       if (e.own) return
       if (!cached[i]) return
       try {
-        e.own = JSON.parse(cached[i])
+        const candidate = JSON.parse(cached[i])
+        e.own = isUsableRewrite({
+          ...e.story,
+          title: candidate?.title,
+          body: candidate?.body ? [candidate.body] : [],
+          impact: candidate?.impact,
+        })
+          ? candidate
+          : null
       } catch {
         e.own = null
       }
@@ -221,18 +279,36 @@ export async function applyOwnContent(stories, env) {
             language: e.story.language,
             editorialFormat: e.story.editorialFormat,
             summary: e.story.summary,
+            sourceContext: e.story.sourceContext,
           })),
         )
         await Promise.all(
           group.map((e, j) => {
             const g = generated[j]
             if (!g || !g.title) return null
-            e.own = {
+            const candidate = {
               title: g.title,
               brief: g.brief || '',
               body: g.body || '',
               impact: g.impact || '',
             }
+            const rewritten = {
+              ...e.story,
+              title: candidate.title,
+              body: candidate.body ? [candidate.body] : [],
+              impact: candidate.impact,
+            }
+            if (!isUsableRewrite(rewritten)) {
+              console.warn(
+                JSON.stringify({
+                  event: 'editorial.rewrite.rejected',
+                  storyId: e.id,
+                  issues: evaluateEditorialQuality(rewritten).issues,
+                }),
+              )
+              return null
+            }
+            e.own = candidate
             return kv
               ? kv.put(KV_PREFIX + e.id, JSON.stringify(e.own), { expirationTtl: CACHE_TTL_SECONDS })
               : null
@@ -260,8 +336,10 @@ export async function applyOwnContent(stories, env) {
       title: title || e.story.title,
       category: e.story.category,
     })
+    // El context de font és material de treball, no contingut publicable.
+    const { sourceContext: _sourceContext, ...publicStory } = e.story
     return {
-      ...e.story,
+      ...publicStory,
       title,
       summary: '',
       body,

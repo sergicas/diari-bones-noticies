@@ -13,15 +13,23 @@ import {
   handleUnsubscribe,
   handleConfirm,
   handleNewsletterStats,
-  sendDailyDigest,
+  readNewsletterAudience,
 } from './server/newsletter.js'
 import { renderStoryPage, findStory } from './server/storyMeta.js'
 import { handleNewsSitemap } from './server/newsSitemap.js'
-import { handlePushSubscribe, handlePushUnsubscribe, sendPushToAll } from './server/push.js'
-import { handleApnsRegister, sendApnsToAll } from './server/apns.js'
+import { handlePushSubscribe, handlePushUnsubscribe } from './server/push.js'
+import { handleApnsRegister } from './server/apns.js'
 import { handleStoryImage } from './server/storyImage.js'
-import { feedStoryId } from './lib/story-id.js'
-import { announceFreshStories } from './server/social.js'
+import {
+  persistEditorialEdition,
+  readPipelineHealth,
+} from './server/editorialStore.js'
+import {
+  buildManualRefreshQueueMessage,
+  buildRefreshQueueMessage,
+  handlePipelineBatch,
+} from './server/pipelineQueue.js'
+import { buildOperationalHealth } from './server/operationsHealth.js'
 
 function jsonResponse(body, init = {}) {
   return new Response(JSON.stringify(body), {
@@ -126,7 +134,10 @@ async function handleLiveNews(request, env) {
     return methodNotAllowed('GET, HEAD')
   }
   try {
-    const payload = await getLiveNewsPayload(env.LIVE_NEWS_KV, { env })
+    const payload = await getLiveNewsPayload(env.LIVE_NEWS_KV, {
+      env,
+      allowRefresh: false,
+    })
     return new Response(JSON.stringify(payload), {
       status: 200,
       headers: {
@@ -166,9 +177,14 @@ async function handleRefreshNews(request, env) {
   }
   try {
     const payload = await getLiveNewsPayload(env.LIVE_NEWS_KV, { force: true, env })
+    const edition = await persistEditorialEdition(env, payload, {
+      slot: 'manual',
+      trigger: 'manual',
+    })
     return jsonResponse({
       ok: true,
       count: payload.stories.length,
+      editionId: edition.editionId,
       nextRefreshAt: payload.nextRefreshAt,
       updatedAt: payload.updatedAt,
     })
@@ -208,27 +224,75 @@ async function handleFeedHealth(request, env) {
     const isDashboard = url.searchParams.get('mode') === 'dashboard'
 
     if (isDashboard && kv) {
-      let cronTiming = null
-      const history = []
-      try {
-        cronTiming = await kv.get('cron-timing:latest', 'json')
-      } catch {
-        // Ignorar si no hi ha cron timing
+      const today = new Date()
+      const historyKeys = Array.from({ length: 30 }, (_, index) => {
+        const date = new Date(today.getTime() - index * 24 * 60 * 60 * 1000)
+        return `health-daily:${date.toISOString().slice(0, 10)}`
+      })
+      const safeKvJson = async (key) => {
+        try {
+          return await kv.get(key, 'json')
+        } catch {
+          return null
+        }
       }
-
-      try {
-        const today = new Date()
-        for (let i = 0; i < 30; i += 1) {
-          const date = new Date(today.getTime() - i * 24 * 60 * 60 * 1000)
-          const dateKey = date.toISOString().slice(0, 10)
-          const snapshot = await kv.get(`health-daily:${dateKey}`, 'json')
-          if (snapshot) {
-            history.push(snapshot)
+      const safeQueueMetrics = async (queue) => {
+        if (!queue?.metrics) return { available: false }
+        try {
+          return { available: true, ...(await queue.metrics()) }
+        } catch {
+          return { available: false }
+        }
+      }
+      const safePipelineHealth = async () => {
+        try {
+          return await readPipelineHealth(env)
+        } catch (error) {
+          console.error(
+            JSON.stringify({
+              event: 'pipeline.dashboard.database-failed',
+              error: error instanceof Error ? error.message : String(error),
+            }),
+          )
+          return { available: false }
+        }
+      }
+      const safeNewsletterAudience = async () => {
+        try {
+          return await readNewsletterAudience(env)
+        } catch (error) {
+          console.error(
+            JSON.stringify({
+              event: 'newsletter.dashboard.read-failed',
+              error: error instanceof Error ? error.message : String(error),
+            }),
+          )
+          return {
+            available: false,
+            confirmed: 0,
+            pending: 0,
+            expiredPending: 0,
+            total: 0,
+            subscribers: [],
           }
         }
-      } catch {
-        // Ignorar errors de cerca històrica
       }
+      const [
+        cronTiming,
+        pipelineDatabase,
+        ingestQueue,
+        distributionQueue,
+        audience,
+        ...historyResults
+      ] = await Promise.all([
+        safeKvJson('cron-timing:latest'),
+        safePipelineHealth(),
+        safeQueueMetrics(env.INGEST_QUEUE),
+        safeQueueMetrics(env.DISTRIBUTION_QUEUE),
+        safeNewsletterAudience(),
+        ...historyKeys.map(safeKvJson),
+      ])
+      const history = historyResults.filter(Boolean)
 
       const circuitBreakers = Object.values(stats || {}).filter(
         (rec) => rec && typeof rec === 'object' && isFeedPaused(rec),
@@ -242,6 +306,18 @@ async function handleFeedHealth(request, env) {
         defaultCategory: feed.defaultCategory,
         core: Boolean(feed.core),
       }))
+      const pipeline = {
+        database: pipelineDatabase,
+        queues: {
+          ingest: ingestQueue,
+          distribution: distributionQueue,
+        },
+      }
+      const operations = buildOperationalHealth({
+        cronTiming,
+        circuitBreakers,
+        pipeline,
+      })
 
       return jsonResponse(
         {
@@ -251,6 +327,9 @@ async function handleFeedHealth(request, env) {
           circuitBreakers,
           history,
           catalog,
+          pipeline,
+          audience,
+          operations,
         },
         { headers: { 'cache-control': 'no-store' } },
       )
@@ -263,11 +342,114 @@ async function handleFeedHealth(request, env) {
   }
 }
 
+async function handlePipelineHealth(request, env) {
+  if (request.method !== 'GET' && request.method !== 'HEAD') {
+    return methodNotAllowed('GET, HEAD')
+  }
+  if (!(await isFeedHealthAuthorized(request, env))) {
+    return jsonResponse(
+      { ok: false, error: 'unauthorized' },
+      {
+        status: 401,
+        headers: {
+          'cache-control': 'no-store',
+          'www-authenticate': 'Bearer realm="bondiari-pipeline"',
+        },
+      },
+    )
+  }
+  try {
+    const [database, ingestQueue, distributionQueue] = await Promise.all([
+      readPipelineHealth(env),
+      env.INGEST_QUEUE?.metrics?.() ?? null,
+      env.DISTRIBUTION_QUEUE?.metrics?.() ?? null,
+    ])
+    return jsonResponse(
+      {
+        ok: true,
+        environment: env.ENVIRONMENT || 'production',
+        database,
+        queues: {
+          ingest: ingestQueue,
+          distribution: distributionQueue,
+        },
+      },
+      { headers: { 'cache-control': 'no-store' } },
+    )
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        event: 'pipeline.health.failed',
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    )
+    return jsonResponse(
+      { ok: false, error: 'pipeline-health-failed' },
+      { status: 500 },
+    )
+  }
+}
+
+async function handlePipelineTrigger(request, env) {
+  if (request.method !== 'POST') return methodNotAllowed('POST')
+  if (!(await isRefreshAuthorized(request, env))) {
+    return jsonResponse(
+      { ok: false, error: 'unauthorized' },
+      {
+        status: 401,
+        headers: {
+          'cache-control': 'no-store',
+          'www-authenticate': 'Bearer realm="bondiari-pipeline"',
+        },
+      },
+    )
+  }
+  if (!env.INGEST_QUEUE) {
+    return jsonResponse(
+      { ok: false, error: 'queue-unavailable' },
+      { status: 503, headers: { 'cache-control': 'no-store' } },
+    )
+  }
+
+  let payload = {}
+  try {
+    payload = await request.json()
+  } catch {
+    // El cos és opcional: per defecte només s’ingereix i es persisteix.
+  }
+  const distribution = payload?.distribution || 'none'
+  if (!['none', 'daily', 'social'].includes(distribution)) {
+    return jsonResponse(
+      { ok: false, error: 'invalid-distribution' },
+      { status: 422, headers: { 'cache-control': 'no-store' } },
+    )
+  }
+  const requestedKey = request.headers.get('idempotency-key')?.trim()
+  const idempotencyKey =
+    requestedKey && requestedKey.length <= 160 ? requestedKey : undefined
+  const message = buildManualRefreshQueueMessage({
+    distribution,
+    idempotencyKey,
+  })
+  await env.INGEST_QUEUE.send(message, { contentType: 'json' })
+  return jsonResponse(
+    {
+      ok: true,
+      queued: true,
+      idempotencyKey: message.idempotencyKey,
+      distribution,
+    },
+    { status: 202, headers: { 'cache-control': 'no-store' } },
+  )
+}
+
 async function route(request, env, ctx) {
   const url = new URL(request.url)
   const path = url.pathname
 
   if (path === '/api/feed-health') return handleFeedHealth(request, env)
+  if (path === '/api/pipeline-health') return handlePipelineHealth(request, env)
+  if (path === '/api/pipeline-trigger') return handlePipelineTrigger(request, env)
 
   // Il·lustració editorial pròpia de cada peça (generada per IA i cachejada).
   // Substitueix les fotos de premsa de tercers: cap risc de drets d'autor.
@@ -379,41 +561,41 @@ export default {
   },
 
   async scheduled(event, env, ctx) {
-    // El cron del butlletí (cada dia 05:00 UTC = 07:00 a Madrid) refresca el
-    // radar i envia el digest diari amb les bones notícies del dia.
-    // La resta de crons només refresquen el radar de notícies.
-    if (event.cron === '0 5 * * *') {
+    const message = buildRefreshQueueMessage(event)
+    if (env.INGEST_QUEUE) {
+      ctx.waitUntil(
+        env.INGEST_QUEUE.send(message, { contentType: 'json' }).then(() => {
+          console.log(
+            JSON.stringify({
+              event: 'cron.refresh.queued',
+              cron: event.cron,
+              idempotencyKey: message.idempotencyKey,
+            }),
+          )
+        }),
+      )
+    } else {
       ctx.waitUntil(
         getLiveNewsPayload(env.LIVE_NEWS_KV, { force: true, env })
-          .then(async (p) => {
-            const digest = await sendDailyDigest(env)
-            console.log(`[cron][newsletter] sent=${digest.sent} failed=${digest.failed} logged=${digest.logged}`)
-            const top = (p.stories || [])[0]
-            if (top) {
-              const notif = {
-                title: 'La peça destacada del dia',
-                body: top.title,
-                url: `https://bondiari.com/noticia/${feedStoryId(top.url)}`,
-              }
-              const push = await sendPushToAll(env, notif)
-              console.log(`[cron][push] sent=${push.sent} failed=${push.failed} removed=${push.removed}`)
-              const apns = await sendApnsToAll(env, notif)
-              console.log(`[cron][apns] sent=${apns.sent} failed=${apns.failed} removed=${apns.removed}`)
-            }
-          })
-          .catch((err) => console.error('[cron][newsletter/push] error', err)),
+          .then((payload) =>
+            persistEditorialEdition(env, payload, {
+              slot: message.slot,
+              trigger: 'cron-fallback',
+            }),
+          )
+          .catch((error) => {
+            console.error(
+              JSON.stringify({
+                event: 'cron.refresh.fallback-failed',
+                error: error instanceof Error ? error.message : String(error),
+              }),
+            )
+          }),
       )
-      return
     }
-    ctx.waitUntil(
-      getLiveNewsPayload(env.LIVE_NEWS_KV, { force: true, env })
-        .then(async (p) => {
-          console.log(`[cron] radar refrescat: ${p.stories.length} notícies`)
-          // Publiquem les peces noves a Bluesky/Mastodon (si hi ha credencials).
-          const social = await announceFreshStories(env, p.stories)
-          console.log('[cron][social]', JSON.stringify(social))
-        })
-        .catch((err) => console.error('[cron] error refrescant radar', err)),
-    )
+  },
+
+  async queue(batch, env) {
+    await handlePipelineBatch(batch, env)
   },
 }

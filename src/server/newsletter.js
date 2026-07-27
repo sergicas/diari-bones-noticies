@@ -8,6 +8,11 @@
 // - Cron diari (configurat a wrangler.jsonc) que llegeix els subscriptors
 //   confirmats, composa el digest HTML i l'envia per Resend.
 
+import {
+  deleteNewsletterSubscriberMirror,
+  mirrorNewsletterSubscriber,
+} from './editorialStore.js'
+
 const subscriberPrefix = 'subscriber:'
 const actionTokenPrefix = 'newsletter-action:'
 const rateLimitIpPrefix = 'rl:subscribe:ip:'
@@ -16,6 +21,7 @@ const RATE_LIMIT_PER_IP = 5
 const RATE_LIMIT_GLOBAL = 50
 const RATE_LIMIT_WINDOW_SECONDS = 3600
 const PENDING_TTL_SECONDS = 7 * 24 * 60 * 60
+const ADMIN_SUBSCRIBER_LIMIT = 250
 
 function jsonResponse(body, init = {}) {
   return new Response(JSON.stringify(body), {
@@ -75,6 +81,24 @@ async function persistSubscriber(kv, key, record, { pending = false } = {}) {
     kv.put(actionTokenPrefix + actionToken, key, options),
   ])
   return next
+}
+
+async function mirrorSubscriberSafely(env, key, record) {
+  try {
+    await mirrorNewsletterSubscriber(
+      env,
+      key.replace(subscriberPrefix, ''),
+      record,
+    )
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        event: 'newsletter.d1-mirror.failed',
+        subscriberId: key.slice(-8),
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    )
+  }
 }
 
 async function resolveSubscriber(kv, token) {
@@ -171,6 +195,7 @@ export async function handleSubscribe(request, env) {
     source: payload?.source || 'web',
     actionToken: existing?.actionToken,
   }, { pending: true })
+  await mirrorSubscriberSafely(env, key, record)
 
   // Enviem el correu de confirmació si la API key està configurada.
   const apiKey = env.RESEND_API_KEY
@@ -245,7 +270,8 @@ export async function handleConfirm(request, env) {
   }
   const { key, record: existing } = resolved
   if (existing.status === 'confirmed') {
-    await persistSubscriber(env.STATS_KV, key, existing)
+    const confirmed = await persistSubscriber(env.STATS_KV, key, existing)
+    await mirrorSubscriberSafely(env, key, confirmed)
     return htmlResponse(
       confirmationPageHtml({
         title: 'Ja estàs confirmat',
@@ -258,6 +284,7 @@ export async function handleConfirm(request, env) {
     status: 'confirmed',
     confirmedAt: new Date().toISOString(),
   })
+  await mirrorSubscriberSafely(env, key, updated)
 
   // Correu de BENVINGUDA (best-effort): no bloqueja ni trenca la confirmació si
   // Resend falla. Fidelitza el nou subscriptor i el convida a compartir.
@@ -297,28 +324,99 @@ export async function handleConfirm(request, env) {
 // --- Stats públiques del butlletí (per al formulari) ---------------------
 
 export async function handleNewsletterStats(request, env) {
+  const audience = await readNewsletterAudience(env)
+  return jsonResponse(
+    {
+      confirmed: audience.confirmed,
+      pending: audience.pending,
+    },
+    { headers: { 'cache-control': 'public, max-age=300, stale-while-revalidate=3600' } },
+  )
+}
+
+function normalizedSubscriberStatus(record) {
+  if (record?.status === 'pending') return 'pending'
+  if (record?.status === 'unsubscribed') return 'unsubscribed'
+  return 'confirmed'
+}
+
+function isExpiredPending(record, now = Date.now()) {
+  if (normalizedSubscriberStatus(record) !== 'pending') return false
+  const reference = Date.parse(record?.lastPendingAt || record?.subscribedAt || '')
+  if (!Number.isFinite(reference)) return false
+  return now - reference > PENDING_TTL_SECONDS * 1000
+}
+
+/**
+ * Retorna una vista administrativa sanejada de la llista canònica del
+ * butlletí. Deliberadament no inclou actionToken ni cap clau interna.
+ */
+export async function readNewsletterAudience(env, { limit = ADMIN_SUBSCRIBER_LIMIT } = {}) {
+  if (!env?.STATS_KV?.list || !env?.STATS_KV?.get) {
+    return {
+      available: false,
+      confirmed: 0,
+      pending: 0,
+      expiredPending: 0,
+      total: 0,
+      truncated: false,
+      subscribers: [],
+    }
+  }
+
+  const safeLimit = Math.max(1, Math.min(ADMIN_SUBSCRIBER_LIMIT, Number(limit) || 1))
   let cursor
-  let confirmed = 0
-  let pending = 0
+  let truncated = false
+  const subscribers = []
+
   do {
     const list = await env.STATS_KV.list({ prefix: subscriberPrefix, cursor })
     for (const key of list.keys) {
-      const data = await env.STATS_KV.get(key.name, 'json')
-      if (!data?.email) continue
-      // Els legacy (sense camp status) compten com a confirmats — vam crear-los
-      // amb el sistema antic sense double opt-in.
-      if (data.status === 'confirmed' || data.status === undefined) {
-        confirmed += 1
-      } else if (data.status === 'pending') {
-        pending += 1
+      if (subscribers.length >= safeLimit) {
+        truncated = true
+        break
       }
+
+      const record = await env.STATS_KV.get(key.name, 'json')
+      if (!record?.email) continue
+      const status = normalizedSubscriberStatus(record)
+      subscribers.push({
+        email: record.email,
+        language: record.language || 'ca',
+        status,
+        source: record.source || 'legacy',
+        subscribedAt: record.subscribedAt || null,
+        confirmedAt: record.confirmedAt || null,
+        lastPendingAt: record.lastPendingAt || null,
+        expired: isExpiredPending(record),
+      })
     }
+
+    if (truncated) break
     cursor = list.list_complete ? null : list.cursor
   } while (cursor)
-  return jsonResponse(
-    { confirmed, pending },
-    { headers: { 'cache-control': 'public, max-age=300, stale-while-revalidate=3600' } },
-  )
+
+  subscribers.sort((left, right) => {
+    const leftDate = Date.parse(left.confirmedAt || left.subscribedAt || '') || 0
+    const rightDate = Date.parse(right.confirmedAt || right.subscribedAt || '') || 0
+    return rightDate - leftDate
+  })
+
+  const confirmed = subscribers.filter((record) => record.status === 'confirmed').length
+  const pending = subscribers.filter((record) => record.status === 'pending').length
+  const expiredPending = subscribers.filter(
+    (record) => record.status === 'pending' && record.expired,
+  ).length
+
+  return {
+    available: true,
+    confirmed,
+    pending,
+    expiredPending,
+    total: subscribers.length,
+    truncated,
+    subscribers,
+  }
 }
 
 // --- Unsubscribe -----------------------------------------------------------
@@ -344,6 +442,20 @@ export async function handleUnsubscribe(request, env) {
         ? env.STATS_KV.delete(actionTokenPrefix + resolved.record.actionToken)
         : Promise.resolve(),
     ])
+    try {
+      await deleteNewsletterSubscriberMirror(
+        env,
+        resolved.key.replace(subscriberPrefix, ''),
+      )
+    } catch (error) {
+      console.error(
+        JSON.stringify({
+          event: 'newsletter.d1-delete.failed',
+          subscriberId: resolved.key.slice(-8),
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      )
+    }
   }
   return htmlResponse(
     confirmationPageHtml({
@@ -699,4 +811,34 @@ export async function sendDailyDigest(env) {
 
   console.log(`[newsletter] sent=${sent} failed=${failed} logged-only=${logged} skipped-unconfirmed=${skippedUnconfirmed}`)
   return { sent, failed, logged, skippedUnconfirmed }
+}
+
+export async function backfillNewsletterSubscribers(env) {
+  let cursor
+  let mirrored = 0
+  let skipped = 0
+  do {
+    const list = await env.STATS_KV.list({ prefix: subscriberPrefix, cursor })
+    for (const key of list.keys) {
+      const record = await env.STATS_KV.get(key.name, 'json')
+      if (!record?.email) {
+        skipped += 1
+        continue
+      }
+      const normalized = isSecureActionToken(record.actionToken)
+        ? record
+        : await persistSubscriber(env.STATS_KV, key.name, record)
+      await mirrorNewsletterSubscriber(
+        env,
+        key.name.replace(subscriberPrefix, ''),
+        {
+          ...normalized,
+          status: normalized.status || 'confirmed',
+        },
+      )
+      mirrored += 1
+    }
+    cursor = list.list_complete ? null : list.cursor
+  } while (cursor)
+  return { mirrored, skipped }
 }

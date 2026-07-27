@@ -14,9 +14,18 @@ createRoot(document.getElementById('root')).render(
 void initNativePush()
 
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  let isReloadingForUpdate = false
+
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (isReloadingForUpdate) return
+    isReloadingForUpdate = true
+    window.location.reload()
+  })
+
   window.addEventListener('load', () => {
     navigator.serviceWorker
-      .register('/sw.js')
+      .register('/sw.js', { updateViaCache: 'none' })
+      .then((registration) => registration.update())
       .catch((error) => console.warn('[bondiari] No s’ha pogut registrar el service worker', error))
   })
 } else if ('serviceWorker' in navigator) {

@@ -2,8 +2,11 @@ import { describe, it, expect } from 'vitest'
 import { rssFeeds, allowedSourceNames } from '../rss/feedsConfig.js'
 
 describe('rssFeeds catalog integrity', () => {
-  it('contains at least 70 RSS feeds', () => {
-    expect(rssFeeds.length).toBeGreaterThanOrEqual(70)
+  it('manté un catàleg ampli sense convertir el volum en objectiu editorial', () => {
+    expect(rssFeeds.length).toBeGreaterThanOrEqual(50)
+    const feedNames = rssFeeds.map((feed) => feed.name)
+    expect(feedNames).not.toContain('ARA')
+    expect(feedNames).not.toContain('La Vanguardia')
   })
 
   it('includes essential core and science/tech feeds', () => {

@@ -9,6 +9,7 @@ import {
   passesEditorialFilter,
   looksLikeAdvertorial,
   applyDiversityCap,
+  capPerCategory,
   UNIVERSAL_NEG,
   POLITICAL_MARKERS,
   normalizeFeedItem,
@@ -18,6 +19,8 @@ import {
   isStoryWithinLiveWindow,
   isTickerCacheFresh,
   storiesRequiringDetailPersistence,
+  getLiveNewsPayload,
+  keepsEditorialClearance,
 } from '../liveNews.js'
 import {
   normalizeCategory,
@@ -66,6 +69,92 @@ describe('quota KV — escriptures acotades', () => {
     expect(
       storiesRequiringDetailPersistence(stories, ['https://bondiari.com/nova']),
     ).toEqual([{ url: 'https://bondiari.com/nova' }])
+  })
+
+  it('la lectura pública respon immediatament si no hi ha caché', async () => {
+    const kv = {
+      get: async () => null,
+      put: async () => {
+        throw new Error('una lectura pública no ha d’escriure')
+      },
+    }
+
+    await expect(
+      getLiveNewsPayload(kv, { allowRefresh: false }),
+    ).resolves.toMatchObject({
+      stories: [],
+      cache: 'miss-readonly',
+    })
+  })
+
+  it('la lectura pública serveix la caché antiga sense regenerar-la', async () => {
+    const cached = {
+      updatedAt: '2025-01-01T00:00:00.000Z',
+      nextRefreshAt: '2025-01-01T12:00:00.000Z',
+      stories: [{ id: 'edicio-estable', editorialVersion: 1 }],
+    }
+    const kv = {
+      get: async () => cached,
+      put: async () => {
+        throw new Error('una lectura pública no ha d’escriure')
+      },
+    }
+
+    await expect(
+      getLiveNewsPayload(kv, { allowRefresh: false }),
+    ).resolves.toEqual({
+      ...cached,
+      cache: 'stale-readonly',
+    })
+  })
+})
+
+describe('arrossegament del lot — el diari ha d’acumular', () => {
+  // Regressió del 27-07-2026: l'arrossegament tornava a passar el porter de
+  // positivitat sobre el text PUBLICAT, però una peça publicada té el titular
+  // reescrit i el resum esborrat. Cap titular no duia paraula positiva, així
+  // que el lot es buidava a cada refresc (10 peces → 7 en tres minuts) i el
+  // diari no acumulava mai.
+  it('conserva una peça ja aprovada encara que el titular no dugui cap paraula positiva', () => {
+    const publicada = {
+      title: 'El Castell de Montjuïc obre fins tard per veure l’eclipsi solar',
+      summary: '', // applyOwnContent l'esborra per no reproduir el text del mitjà
+      language: 'ca',
+      editorialFormat: 'constructive',
+      editorialVersion: 18,
+    }
+    // El porter, tot sol, la faria caure: aquest és l'error que es corregeix.
+    expect(passesEditorialFilter(publicada.title, 'ca').passes).toBe(false)
+    expect(keepsEditorialClearance(publicada, 18)).toBe(true)
+  })
+
+  it('conserva les peces que va rescatar la IA, que mai no passaven per paraula clau', () => {
+    const rescatadaPerIa = {
+      title: 'Experts suggest searching for alien signals in new ways',
+      summary: '',
+      language: 'en',
+      editorialFormat: 'constructive',
+      editorialScore: 0, // neutra: va entrar pel veredicte de la IA
+      editorialVersion: 18,
+    }
+    expect(keepsEditorialClearance(rescatadaPerIa, 18)).toBe(true)
+  })
+
+  it('descarta el lot quan es pugen les regles editorials', () => {
+    const velles = {
+      title: 'Una peça aprovada amb les regles anteriors',
+      editorialFormat: 'constructive',
+      editorialVersion: 17,
+    }
+    expect(keepsEditorialClearance(velles, 18)).toBe(false)
+  })
+
+  it('els formats de servei no depenen del porter de positivitat', () => {
+    for (const format of ['verification', 'data', 'agenda', 'opportunity']) {
+      expect(
+        keepsEditorialClearance({ editorialFormat: format, editorialVersion: 1 }, 18),
+      ).toBe(true)
+    }
   })
 })
 
@@ -229,6 +318,7 @@ describe('formats editorials de servei', () => {
     <title><![CDATA[No, aquesta imatge de Trump durant la guerra no és real]]></title>
     <link>https://www.verificat.cat/comprovacio-exemple/</link>
     <description><![CDATA[La fotografia viral ha estat generada amb intel·ligència artificial.]]></description>
+    <content:encoded><![CDATA[Els verificadors han comparat la imatge amb fotografies originals i han localitzat errors visuals incompatibles amb l’escena real.]]></content:encoded>
     <pubDate>Thu, 23 Jul 2026 08:00:00 +0000</pubDate>
     <media:thumbnail url="https://www.verificat.cat/imatge.jpg" />
   `
@@ -249,9 +339,10 @@ describe('formats editorials de servei', () => {
       source: 'Verificat',
       sourceTier: 'B',
       curated: true,
-      ownContent: true,
     })
-    expect(story.body).toHaveLength(2)
+    expect(story.ownContent).toBeUndefined()
+    expect(story.body).toBeUndefined()
+    expect(story.sourceContext).toContain('errors visuals')
   })
 
   it('manté el mateix contingut fora del radar positiu si no és una verificació', () => {
@@ -269,7 +360,7 @@ describe('formats editorials de servei', () => {
       `
         <title>Les Santes de Mataró</title>
         <link>https://agenda.cultura.gencat.cat:443/activitat</link>
-        <description>Programa de la festa major del 25 al 29 de juliol.</description>
+        <description>Programa de la festa major del 25 al 29 de juliol, amb concerts al Parc Central, activitats familiars, cultura popular i accés gratuït a la majoria dels actes.</description>
       `,
       '2026-07-23T08:00:00.000Z',
     )
@@ -279,8 +370,9 @@ describe('formats editorials de servei', () => {
       editorialFormat: 'agenda',
       location: 'Mataró, Maresme',
       sourceTier: 'A',
-      ownContent: true,
+      ownContent: false,
     })
+    expect(story.sourceContext).toContain('Parc Central')
     expect(story.url).not.toContain(':443')
   })
 
@@ -303,6 +395,7 @@ describe('formats editorials de servei', () => {
       ownContent: true,
     })
     expect(story.summary).toContain('400.000')
+    expect(story.body.join(' ')).toContain('31/7/2026')
   })
 
   it('converteix una actualització d’Idescat en una peça d’El marcador', () => {
@@ -380,7 +473,21 @@ describe('formats editorials de servei', () => {
       ownContent: true,
       editorialFormat: 'opportunity',
     })
-    expect(published.body[0]).toContain('Destinataris')
+    expect(published.body.join(' ')).toContain('Entitats sense ànim de lucre')
+  })
+})
+
+describe('capPerCategory — varietat temàtica', () => {
+  it('limita Cultura i Verificació sense reordenar la resta', () => {
+    const stories = [
+      ...Array.from({ length: 5 }, (_, i) => ({ category: 'Cultura', id: `c${i}` })),
+      ...Array.from({ length: 4 }, (_, i) => ({ category: 'Verificació', id: `v${i}` })),
+      { category: 'Ciència', id: 's1' },
+    ]
+    const result = capPerCategory(stories)
+    expect(result.filter((story) => story.category === 'Cultura')).toHaveLength(3)
+    expect(result.filter((story) => story.category === 'Verificació')).toHaveLength(2)
+    expect(result.at(-1).id).toBe('s1')
   })
 })
 

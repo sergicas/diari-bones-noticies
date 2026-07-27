@@ -15,49 +15,62 @@ export function StoryDetailView({ story, sourceLink, imageLink, relatedStories, 
 
   return (
     <>
-      <PageHero
-        headingLevel="h1"
-        tag="Pàgina d'article"
-        title={story.title}
-        description={story.summary || story.impact}
-        actions={
-          <>
-            <a
-              className="button button--ghost"
-              href="/"
-              onClick={(event) => {
-                if (!canInterceptNavigation(event)) {
-                  return
-                }
+      <div className="no-print">
+        <PageHero
+          headingLevel="h1"
+          tag="Pàgina d'article"
+          title={story.title}
+          description={story.summary || story.impact}
+          actions={
+            <>
+              <a
+                className="button button--ghost"
+                href="/"
+                onClick={(event) => {
+                  if (!canInterceptNavigation(event)) {
+                    return
+                  }
 
-                event.preventDefault()
-                onNavigate('/')
-              }}
-            >
-              Tornar a la portada
-            </a>
-            <button
-              type="button"
-              className="button button--ghost no-print"
-              onClick={() => window.print()}
-              aria-label="Imprimir article o desar com a PDF per a aules"
-            >
-              🖨️ Imprimir / Desar PDF
-            </button>
-            <a
-              className="button button--primary"
-              href={sourceLink.href}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              {sourceLink.label}
-            </a>
-          </>
-        }
-      />
+                  event.preventDefault()
+                  onNavigate('/')
+                }}
+              >
+                Tornar a la portada
+              </a>
+              <button
+                type="button"
+                className="button button--ghost"
+                onClick={() => window.print()}
+                aria-label="Imprimir article o desar com a PDF per a aules"
+              >
+                Imprimir / Desar PDF
+              </button>
+              <a
+                className="button button--primary"
+                href={sourceLink.href}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {sourceLink.label}
+              </a>
+            </>
+          }
+        />
+      </div>
 
       <article className="article-page">
-        <div className="article-page__header">
+        <header className="article-print-header print-only">
+          <p className="article-print-header__kicker">El Bon Diari</p>
+          <h1>{story.title}</h1>
+          <p className="article-print-header__summary">
+            {story.summary || story.impact}
+          </p>
+          <p className="article-print-header__meta">
+            Font: {story.source} · Publicada: {formatDate(story.publishedAt)}
+          </p>
+        </header>
+
+        <div className="article-page__header no-print">
           <div className="story-modal__chips">
             <span className="paper-chip">{storySection.label}</span>
             <span className="paper-chip paper-chip--subtle">
@@ -70,7 +83,7 @@ export function StoryDetailView({ story, sourceLink, imageLink, relatedStories, 
           <p className="article-page__kicker">{story.kicker}</p>
         </div>
 
-        <div className="article-page__lead">
+        <div className="article-page__lead no-print">
           <div className="article-page__media">
             <a
               className="story-image-link"
@@ -126,13 +139,15 @@ export function StoryDetailView({ story, sourceLink, imageLink, relatedStories, 
           ))}
         </div>
 
-        <div className="article-page__save">
+        <div className="article-page__save no-print">
           <SaveButton story={story} />
         </div>
 
-        <ShareRow story={story} />
+        <div className="no-print">
+          <ShareRow story={story} />
+        </div>
 
-        <div className="article-page__footer">
+        <div className="article-page__footer no-print">
           <div className="story-modal__source">
             <span>Font</span>
             <a
@@ -183,7 +198,7 @@ export function StoryDetailView({ story, sourceLink, imageLink, relatedStories, 
       </article>
 
       {relatedStories.length > 0 ? (
-        <section className="section-block">
+        <section className="section-block no-print">
           <div className="section-heading">
             <div>
               <p className="section-tag">Relacionades</p>

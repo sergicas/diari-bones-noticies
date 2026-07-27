@@ -6,7 +6,10 @@ import { LIVE_EDITORIAL_VERSION } from '../lib/editorial-version.js'
 import { normalizeCategory, refineCategoryByContent } from '../lib/category.js'
 import { storyImagePath } from '../lib/story-image-path.js'
 import { applyOwnContent } from './storyText.js'
-import { attachRealPhotos } from './storyPhoto.js'
+import { attachRealPhotos, sanitizeStoryPhotos } from './storyPhoto.js'
+import {
+  selectPublishableStories,
+} from './editorialQuality.js'
 import { feedStoryId } from '../lib/story-id.js'
 import {
   refreshIntervalMs,
@@ -73,6 +76,32 @@ export function isStoryWithinLiveWindow(story, now = Date.now()) {
   )
 }
 const liveEditorialVersion = LIVE_EDITORIAL_VERSION
+
+// Decideix si una peça que ja és al lot s'hi pot quedar al refresc següent.
+//
+// El porter editorial (passesEditorialFilter) NO es pot tornar a passar aquí:
+// una peça publicada ja no conserva el text amb què es va jutjar. El titular
+// està reescrit i el resum s'esborra a applyOwnContent (summary = '') per no
+// reproduir el text del mitjà. Revalidar el titular reescrit tot sol feia caure
+// gairebé tot —un titular rarament du paraula positiva— i les peces rescatades
+// per la IA no en sobrevivien mai, perquè aquella revisió només mirava paraules
+// clau i no consultava el veredicte. Efecte observat el 27-07-2026: el lot no
+// acumulava i cada refresc tornava a començar de zero (10 peces → 7 en tres
+// minuts).
+//
+// La decisió editorial ja es va prendre quan la peça va entrar, amb el text
+// sencer i amb la IA. Aquí només comprovem que les REGLES no hagin canviat des
+// de llavors, i la marca editorialVersion és exactament aquest senyal: per
+// endurir el filtre cal pujar LIVE_EDITORIAL_VERSION, i llavors el lot sencer
+// es renova sota les regles noves.
+export function keepsEditorialClearance(story, currentVersion) {
+  // Els formats de servei (verificacions, dades, agenda, oportunitats) no
+  // passen pel porter de positivitat: hi confiem per la font.
+  if (story?.editorialFormat && story.editorialFormat !== 'constructive') {
+    return true
+  }
+  return story?.editorialVersion === currentVersion
+}
 
 // --- Diccionaris editorials per idioma -------------------------------------
 // CRITERI de les paraules POSITIVES: només hi entren mots que denoten BONDAT en
@@ -783,6 +812,7 @@ function normalizeThreeCatStory(item, section) {
     category,
     location: detectLocation(fullText.toLowerCase()),
     summary: summarySnippet,
+    sourceContext: description.slice(0, 1400),
     impact:
       'El radar automàtic l’ha detectada com a notícia constructiva de proximitat.',
     source: '3CatInfo',
@@ -891,6 +921,19 @@ function extractPrimaryCategory(block, fallback) {
     if (value) return normalizeCategory(value, fallback)
   }
   return normalizeCategory(null, fallback)
+}
+
+function buildSourceContext(...values) {
+  const unique = []
+  const seen = new Set()
+  for (const value of values) {
+    const clean = decodeHtmlEntities(stripHtml(value))
+    const key = clean.toLocaleLowerCase()
+    if (!clean || seen.has(key)) continue
+    seen.add(key)
+    unique.push(clean)
+  }
+  return unique.join(' ').replace(/\s+/g, ' ').trim().slice(0, 1400)
 }
 
 // Marcadors de contingut POLÍTIC tens (partits, procés electoral o parlamentari,
@@ -1009,8 +1052,13 @@ export function normalizeFeedItem(block, feed) {
   const title = decodeHtmlEntities(stripHtml(extractTag(block, 'title')))
   const linkTag = extractTag(block, 'link')
   const link = decodeHtmlEntities(linkTag || extractAtomLink(block))
-  const descriptionHtml = extractTag(block, 'description') || extractTag(block, 'summary') || extractTag(block, 'content')
+  const descriptionHtml =
+    extractTag(block, 'description') ||
+    extractTag(block, 'summary') ||
+    extractTag(block, 'content')
+  const contentEncodedHtml = extractTag(block, 'content:encoded')
   const description = decodeHtmlEntities(stripHtml(descriptionHtml))
+  const contentEncoded = decodeHtmlEntities(stripHtml(contentEncodedHtml))
   const subtitle = decodeHtmlEntities(stripHtml(extractTag(block, 'subtitle')))
   const publishedAt =
     parseRfc822Date(extractTag(block, 'pubDate')) ||
@@ -1031,7 +1079,12 @@ export function normalizeFeedItem(block, feed) {
 
   if (!title || !link || !publishedAt || !imageUrl) return null
 
-  const summarySource = subtitle || description || title
+  const summarySource = subtitle || description || contentEncoded || title
+  const sourceContext = buildSourceContext(
+    subtitle,
+    descriptionHtml,
+    contentEncodedHtml,
+  )
   const summarySnippet = `${summarySource.slice(0, 180)}${summarySource.length > 180 ? '...' : ''}`
   // Correcció per contingut: si el títol/resum tenen un senyal temàtic clar,
   // sobreescrivim la categoria heretada del feed (evita, p. ex., que un tema de
@@ -1077,6 +1130,7 @@ export function normalizeFeedItem(block, feed) {
     category,
     location: detectLocation(fullText.toLowerCase()),
     summary: summarySnippet,
+    sourceContext,
     impact:
       impactByFormat[editorialFormat] ||
       'El radar automàtic l’ha detectada com a notícia constructiva.',
@@ -1103,12 +1157,10 @@ export function normalizeFeedItem(block, feed) {
     editorialVersion: liveEditorialVersion,
     publishedAt,
   }
-  if (isTrustedService) {
+  // Verificacions i agenda també necessiten una reescriptura específica: la
+  // plantilla genèrica antiga produïa quatre cossos idèntics a portada.
+  if (editorialFormat === 'opportunity' || editorialFormat === 'data') {
     const ownSummaryByFormat = {
-      verification:
-        `${feed.name} ha publicat una comprovació documentada sobre aquesta afirmació.`,
-      agenda:
-        `${feed.name} inclou aquesta activitat entre les propostes disponibles.`,
       opportunity:
         `${feed.name} recull aquesta convocatòria i n’ofereix la informació oficial.`,
       data:
@@ -1477,6 +1529,16 @@ async function aiReview(env, candidates, { failOpen = true } = {}) {
 
 // --- Recol·lecció combinada -----------------------------------------------
 
+function sourceMaterialScore(story) {
+  const contextWords = String(story?.sourceContext || '')
+    .trim()
+    .split(/\s+/u)
+    .filter(Boolean).length
+  const tierScore = story?.sourceTier === 'A' ? 3 : story?.sourceTier === 'B' ? 2 : 1
+  const localScore = story?.location && story.location !== 'Món' ? 2 : 0
+  return tierScore + localScore + Math.min(5, Math.floor(contextWords / 40))
+}
+
 export async function collectLivePositiveNews(env) {
   const now = Date.now()
   const healthStats = await readFeedHealthStats(env)
@@ -1546,7 +1608,11 @@ export async function collectLivePositiveNews(env) {
       const dayBucket =
         Math.floor(timeRight / 86400000) - Math.floor(timeLeft / 86400000)
       if (dayBucket !== 0) return dayBucket
-      return right.editorialScore - left.editorialScore || timeRight - timeLeft
+      return (
+        sourceMaterialScore(right) - sourceMaterialScore(left) ||
+        right.editorialScore - left.editorialScore ||
+        timeRight - timeLeft
+      )
     })
 
   // La IA revisa les candidates: veta les dolentes que han colat per paraula clau
@@ -1597,7 +1663,9 @@ async function setCachedPayload(kv, stories) {
 
 // --- Memòria d'URLs ja servides (perquè cada dia hi hagi peces noves) -----
 
-const seenUrlsKey = 'seen-urls-v3'
+// v4 permet reavaluar les URL de l'edició antiga amb els nous criteris de
+// qualitat i el context de font ampliat.
+const seenUrlsKey = 'seen-urls-v4'
 const seenUrlsRetentionMs = 14 * 24 * 60 * 60 * 1000
 const minFreshStoriesForFullRefresh = 10
 
@@ -1667,6 +1735,25 @@ const guaranteedCategories = [
   'Tecnologia', 'Ciència', 'Salut', 'Medi ambient', 'Educació',
 ]
 
+const categoryLimits = {
+  Cultura: 3,
+  Verificació: 2,
+  Agenda: 2,
+  Local: 4,
+}
+
+export function capPerCategory(stories, defaultLimit = 3) {
+  const counts = new Map()
+  return stories.filter((story) => {
+    const category = story?.category || 'Actualitat'
+    const limit = categoryLimits[category] || defaultLimit
+    const count = counts.get(category) || 0
+    if (count >= limit) return false
+    counts.set(category, count + 1)
+    return true
+  })
+}
+
 // Garanteix que cada secció de la llista, si té alguna peça disponible al
 // conjunt, tingui com a mínim una notícia al lot final. Si cal fer lloc, treu
 // l'última peça d'una categoria sobre-representada (mai buida una secció).
@@ -1695,11 +1782,15 @@ function ensureCategoryCoverage(capped, pool, limit) {
   return result
 }
 
-export async function getLiveNewsPayload(kv, { force = false, env } = {}) {
+export async function getLiveNewsPayload(
+  kv,
+  { force = false, env, allowRefresh = true } = {},
+) {
   const runStartTime = Date.now()
   let cached = null
   try {
     cached = await getCachedPayload(kv)
+    sanitizeStoryPhotos(cached?.stories)
   } catch (error) {
     console.warn('No s’ha pogut llegir la memòria de notícies', error)
   }
@@ -1707,8 +1798,29 @@ export async function getLiveNewsPayload(kv, { force = false, env } = {}) {
   if (!force) {
     const updatedAt = cached?.updatedAt ? new Date(cached.updatedAt).getTime() : 0
     const isFresh = updatedAt && Date.now() - updatedAt < refreshIntervalMs
-    if (cached?.stories && isFresh) {
+    const usesCurrentEditorialVersion =
+      cached?.stories?.length > 0 &&
+      cached.stories.every(
+        (story) => story.editorialVersion === liveEditorialVersion,
+      )
+    if (cached?.stories && isFresh && usesCurrentEditorialVersion) {
       return { ...cached, cache: 'hit' }
+    }
+
+    // La ruta pública només ha de llegir. Recollir desenes de fonts, passar-les
+    // per IA i escriure KV és feina del cron, la cua o l'endpoint manual. Si la
+    // caché és vella la servim igualment; si encara no n'hi ha, responem buit en
+    // lloc de deixar el visitant esperant una regeneració llarga.
+    if (!allowRefresh) {
+      if (cached?.stories) {
+        return { ...cached, cache: 'stale-readonly' }
+      }
+      return {
+        updatedAt: null,
+        nextRefreshAt: null,
+        stories: [],
+        cache: 'miss-readonly',
+      }
     }
   }
 
@@ -1743,22 +1855,20 @@ export async function getLiveNewsPayload(kv, { force = false, env } = {}) {
     // CADUCITAT: les notícies surten del lot quan passen de la finestra (4 dies),
     // perquè no s'arrosseguin eternament i fossilitzin la portada.
     .filter((s) => isStoryWithinLiveWindow(s))
-    // Revalidem contra el filtre editorial ACTUAL (si l'hem endurit, les velles
-    // que ara no passen cauen aquí en lloc d'arrossegar-se).
-    .filter(
-      (s) =>
-        (s.editorialFormat && s.editorialFormat !== 'constructive') ||
-        passesEditorialFilter(`${s.title} ${s.summary || ''}`, s.language).passes,
-    )
+    .filter((s) => keepsEditorialClearance(s, liveEditorialVersion))
     // Descartem l'arrossegament de fonts que ja no són a la llista (p. ex. mitjans
     // de pagament retirats): així desapareixen a la primera, sense esperar 4 dies.
     .filter((s) => allowedSourceNames.has(s.source))
-    .map(({ isFresh: _isFresh, ...rest }) => rest)
+    .map(({ isFresh: _isFresh, ...rest }) => ({
+      ...rest,
+      editorialVersion: liveEditorialVersion,
+    }))
   const preDiversity = [...freshStories, ...carryover]
   // Acotem les llengües foranes ABANS de la diversitat per font, perquè el
   // català i el castellà mai no quedin fora encara que un dia hi hagi allau de
   // notícies europees.
-  const balanced = capPerLanguage(preDiversity, maxStoriesPerLanguage)
+  const languageBalanced = capPerLanguage(preDiversity, maxStoriesPerLanguage)
+  const balanced = capPerCategory(languageBalanced)
   const finalStories = ensureCategoryCoverage(
     applyDiversityCap(balanced, maxStoriesPerSource, targetStoryLimit),
     balanced,
@@ -1775,24 +1885,48 @@ export async function getLiveNewsPayload(kv, { force = false, env } = {}) {
   // peces, així que cap foto de tercers pot colar-se. Vegeu src/server/storyText.js.
   const enrichedStories = await applyOwnContent(finalStories, env)
 
-  // NO publiquem les peces sense contingut propi real (titular + cos generats per
-  // la IA). Abans, quan la IA encara no havia reescrit una peça (o s'exhauria la
-  // quota), sortia a portada amb el titular genèric "Una bona notícia · X" i una
-  // pàgina de detall buida. Ara es retenen fins que tenen contingut: com que
-  // s'arrosseguen entre refrescs i el contingut es cacheja (own:<id>), la portada
-  // s'omple igualment amb peces completes en comptes de mig-fetes.
-  const publishedStories = enrichedStories.filter((story) => story.ownContent)
+  // Una peça generada no és automàticament publicable. La barrera editorial
+  // exigeix profunditat, frases específiques, impacte útil i font identificada.
+  let qualityRejectedCount = 0
+  const qualityRejectedByIssue = {}
+  const publishedStories = selectPublishableStories(enrichedStories, {
+    onReject: (story, result) => {
+      qualityRejectedCount += 1
+      for (const issue of result.issues) {
+        qualityRejectedByIssue[issue] =
+          (qualityRejectedByIssue[issue] || 0) + 1
+      }
+      console.warn(
+        JSON.stringify({
+          event: 'editorial.story.rejected',
+          storyId: feedStoryId(story.url),
+          source: story.source,
+          issues: result.issues,
+          bodyWords: result.metrics.bodyWords,
+        }),
+      )
+    },
+  })
 
   // Xarxa de seguretat: si en aquesta passada cap peça no ha assolit contingut
   // propi (p. ex. la IA no està disponible), mantenim el lot anterior en lloc de
   // buidar la portada.
   if (publishedStories.length === 0 && cached?.stories?.length) {
-    return { ...cached, cache: 'stale-incomplete' }
+    const safeCachedStories = selectPublishableStories(cached.stories)
+    if (safeCachedStories.length > 0) {
+      return {
+        ...cached,
+        stories: safeCachedStories,
+        cache: 'stale-incomplete',
+        qualityRejectedCount,
+        qualityRejectedByIssue,
+      }
+    }
   }
 
-  // Pilot Fase 4: foto real de Wikimedia Commons per a les peces d'Agenda i
-  // Local amb lloc concret. Si Commons falla, la peça conserva el dibuix; el
-  // radar no s'atura mai per una foto.
+  // Fase 4: foto real de Wikimedia Commons només per a peces centrades en un
+  // lloc concret. Els actes conserven la il·lustració pròpia; si Commons falla,
+  // el radar no s'atura mai per una foto.
   try {
     await attachRealPhotos(publishedStories)
   } catch (error) {
@@ -1840,6 +1974,8 @@ export async function getLiveNewsPayload(kv, { force = false, env } = {}) {
       reviewedThisPass,
       publishedCount: shownFreshUrls.length,
       totalStories: publishedStories.length,
+      qualityRejectedCount,
+      qualityRejectedByIssue,
       updatedAt: new Date().toISOString(),
     }
 
@@ -1874,6 +2010,8 @@ export async function getLiveNewsPayload(kv, { force = false, env } = {}) {
       totalCandidates: allStories.length,
       reviewedThisPass,
       cronDurationMs,
+      qualityRejectedCount,
+      qualityRejectedByIssue,
     }
   } catch (error) {
     console.warn('No s’ha pogut escriure la memòria de notícies', error)
@@ -1883,6 +2021,8 @@ export async function getLiveNewsPayload(kv, { force = false, env } = {}) {
       nextRefreshAt: new Date(Date.now() + refreshIntervalMs).toISOString(),
       stories: publishedStories,
       cache: 'transient',
+      qualityRejectedCount,
+      qualityRejectedByIssue,
     }
   }
 }

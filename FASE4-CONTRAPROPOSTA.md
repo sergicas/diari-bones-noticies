@@ -6,7 +6,12 @@ calma, proximitat), amb tres correccions: la portada no es reordena mai, la
 promesa de privacitat es diu amb honestedat, i cap funció no es dona per feta
 fins que s'ha vist funcionar a bondiari.com.
 
-Data: 24 de juliol de 2026 · Estat: proposta per aprovar
+Data: 24 de juliol de 2026 · Estat: en pausa després del Bloc 1
+
+> Pausa editorial acordada el 27 de juliol de 2026. Abans d’implementar els
+> blocs 2 i 3, el projecte ha de superar els criteris de
+> [`docs/QUALITAT-EDITORIAL.md`](docs/QUALITAT-EDITORIAL.md). Personalitzar o
+> distribuir una portada de peces superficials amplificaria el problema.
 
 ---
 

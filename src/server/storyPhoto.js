@@ -1,16 +1,14 @@
-// Fotos reals per a les peces amb lloc concret (Fase 4).
+// Fotos reals per a les peces centrades en un lloc concret (Fase 4).
 //
-// Per a QUALSEVOL peça del radar que esmenti un lloc concret (al titular o al
-// camp de lloc), es busca una fotografia real del lloc a Wikimedia Commons
-// (llicències lliures, sense clau d'API). Si en surt una de fiable,
-// substitueix la il·lustració generada i hi afegeix el crèdit obligatori
-// (autor + llicència). Si no, la peça conserva el dibuix de casa: mai una
-// foto "aproximada" que pugui fer creure que és la foto del fet.
-// (Nascut com a pilot d'Agenda i Local el 25-07-2026; ampliat a tot el diari
-// el mateix dia a petició de l'editor.)
+// Per a una peça que parla DEL LLOC es pot cercar una fotografia lliure a
+// Wikimedia Commons. Una simple menció del municipi no n'hi ha prou: festivals,
+// concerts, festes i altres actes conserven la il·lustració editorial pròpia,
+// perquè una vista genèrica del poble faria pensar que mostra l'esdeveniment.
 //
-// Criteri d'honestedat: la foto és sempre DEL LLOC (el poble, el mercat, el
-// teatre), mai pretén ser la foto de l'esdeveniment. El peu ho diu clar.
+// Criteri d'honestedat: el peu de foto ajuda, però la relació visual amb la
+// notícia ha de ser honesta per ella mateixa.
+
+import { storyImagePath } from '../lib/story-image-path.js'
 
 // Llocs massa genèrics per cercar-hi una foto: no identifiquen cap indret.
 const GENERIC_PLACES = new Set([
@@ -61,6 +59,22 @@ const KNOWN_PLACES = [
 const BANNED_TITLE_WORDS =
   /escut|coat of arms|mapa|map of|locator|bandera|flag|logo|segell|seal|senyera|blas(o|ó)n|diagram|chart|plànol|plano/i
 
+// Una foto genèrica del municipi no és una imatge prou relacionada amb un acte.
+// Incloem plurals i formats culturals, esportius i comunitaris habituals.
+const EVENT_WORDS =
+  /\b(festivals?|concerts?|festes?|actes?|agenda|espectacles?|tallers?|jornades?|fires?|exposicions?|mostres?|entrades?|recitals?|projeccions?|cicles?|musica|teatre|dansa|curses?|partits?|campionats?|presentacions?|premis?|gales?)\b/i
+
+// En dades, verificacions i oportunitats, una foto genèrica del municipi no
+// explica el fet i pot produir coincidències semàntiques falses (p. ex.
+// «Mataró» també és el nom d'una locomotora històrica). Aquests formats fan
+// servir sempre una il·lustració editorial vinculada al titular.
+const PLACE_PHOTO_EXCLUDED_FORMATS = new Set([
+  'agenda',
+  'data',
+  'opportunity',
+  'verification',
+])
+
 function normalize(text) {
   return String(text || '')
     .toLowerCase()
@@ -99,6 +113,28 @@ export function extractPlace(story) {
   }
 
   return null
+}
+
+// Només una peça realment centrada en el territori pot rebre una foto genèrica
+// del lloc. Agenda ja és, per definició, una col·lecció d'actes.
+export function isPlacePhotoEligible(story) {
+  if (!extractPlace(story)) return false
+  if (normalize(story?.category) === 'agenda') return false
+  if (
+    PLACE_PHOTO_EXCLUDED_FORMATS.has(normalize(story?.editorialFormat))
+  ) {
+    return false
+  }
+
+  const subject = normalize(
+    [
+      story?.title,
+      story?.summary,
+      story?.impact,
+      ...(Array.isArray(story?.body) ? story.body : []),
+    ].join(' '),
+  )
+  return !EVENT_WORDS.test(subject)
 }
 
 function stripHtml(value) {
@@ -194,6 +230,32 @@ function applyPhotoFields(story, photo) {
   story.imageCredit = `Foto: ${photo.author} · ${photo.license} · Wikimedia Commons (imatge del lloc, no de l’acte)`
 }
 
+// Retira una foto de lloc que una versió anterior ja havia guardat per a un
+// acte i restaura la ruta de la il·lustració pròpia. Això saneja tant la portada
+// en memòria com el detall persistent sense haver d'esperar un nou refresc.
+export function sanitizeStoryPhoto(story) {
+  if (!story || isPlacePhotoEligible(story)) return story
+  if (story.photo?.source !== 'wikimedia-commons') return story
+
+  delete story.photo
+  story.photoChecked = true
+  story.imageUrl = storyImagePath(story.url, {
+    title: story.title,
+    category: story.category,
+    brief: story.imageBrief,
+  })
+  story.imageAlt = `Il·lustració editorial de la notícia: ${story.title}`
+  story.imageCredit = 'El Bon Diari (il·lustració IA)'
+  story.imageAttributionUrl = ''
+  return story
+}
+
+export function sanitizeStoryPhotos(stories) {
+  if (!Array.isArray(stories)) return stories
+  stories.forEach(sanitizeStoryPhoto)
+  return stories
+}
+
 export async function attachRealPhotos(stories, options = {}) {
   const { fetchFn = fetch, maxLookups = MAX_LOOKUPS_PER_RUN } = options
   let lookups = 0
@@ -201,6 +263,14 @@ export async function attachRealPhotos(stories, options = {}) {
 
   for (const story of stories) {
     if (!story) continue
+
+    // Primer saneja fotografies persistides amb el criteri antic. Si la peça
+    // és un acte, no es cerca ni es reaplica cap foto genèrica del municipi.
+    if (!isPlacePhotoEligible(story)) {
+      sanitizeStoryPhoto(story)
+      story.photoChecked = true
+      continue
+    }
 
     // Peça arrossegada amb foto ja trobada: l'enriquiment de cada refresc li
     // reescriu imageUrl/imageCredit amb el dibuix; es reapliquen els camps de

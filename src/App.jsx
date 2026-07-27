@@ -1,6 +1,7 @@
 import { useEffect, useState, lazy, Suspense } from 'react'
 import { flushSync } from 'react-dom'
 import './App.css'
+import './styles/professional-shell.css'
 import { fetchLivePositiveNewsPayload, fetchLiveTicker } from './api/rssFeed'
 import { LIVE_EDITORIAL_VERSION } from './lib/editorial-version.js'
 import { feedStoryId } from './lib/story-id.js'
@@ -23,10 +24,12 @@ import {
   serviceSectionIds,
   getStorySection,
 } from './lib/sections.js'
-import { formatDate, formatDateTime } from './lib/viewHelpers.js'
+import { formatDateTime } from './lib/viewHelpers.js'
 
 import PortadaView from './views/PortadaView.jsx'
 import StoryDetailView from './views/StoryDetailView.jsx'
+import SiteHeader from './components/SiteHeader.jsx'
+import SiteFooter from './components/SiteFooter.jsx'
 import { AccessibilityControls } from './components/AccessibilityControls.jsx'
 
 const ArchiveView = lazy(() => import('./views/ArchiveView.jsx'))
@@ -51,8 +54,12 @@ const liveTickerIntervalMs = 2 * 60 * 1000
 // La resta passa a l'Hemeroteca. Només els formats de servei (verificacions,
 // dades i ajuts vigents) tenen finestres pròpies més llargues.
 const activeEditionMaxAgeMs = 5 * 24 * 60 * 60 * 1000
+const featuredStoryMaxAgeMs = 14 * 24 * 60 * 60 * 1000
 const activeEditionMaxStories = 25
-const activeEditionFloor = 0
+// L'edició del dia NO es completa mai amb articles vells. Si el radar porta
+// poques peces, la portada surt curta: val més un diari breu i d'avui que un
+// diari ple d'articles de fa setmanes. L'Hemeroteca segueix sent accessible
+// com a secció pròpia (/hemeroteca), amb la data original ben visible.
 const serviceEditionFormats = new Set(['verification', 'data', 'opportunity'])
 const maxStoredFeedStories = 40
 
@@ -439,7 +446,12 @@ function mergeLiveStories(currentStories, liveArticles, seedStories = []) {
   const mergedStories = [...currentById.values()]
     .filter((story) => {
       const storyAge = now - getStoryTimestamp(story)
-      return storyAge <= 4 * 24 * 60 * 60 * 1000
+      // Mateixa finestra que l'edició (5 dies): si aquí es podava abans, una
+      // peça del cinquè dia desapareixia del navegador tot i ser encara vigent.
+      return (
+        serviceEditionFormats.has(story.editorialFormat) ||
+        storyAge <= activeEditionMaxAgeMs
+      )
     })
     .sort(sortByPublishedAtDesc)
     .slice(0, maxStoredFeedStories)
@@ -463,11 +475,12 @@ function splitEditionStories(stories) {
       now - getStoryTimestamp(story) <= activeEditionMaxAgeMs,
   )
 
-  const activeStories = (
-    candidates.length >= activeEditionFloor
-      ? candidates
-      : [...stories].sort(sortByPublishedAtDesc).slice(0, activeEditionFloor)
-  ).slice(0, activeEditionMaxStories)
+  // L'hemeroteca no es barreja mai amb l'edició activa. Abans, quan hi havia
+  // poques peces recents, aquesta funció omplia fins a sis posicions amb
+  // articles antics i una d'elles podia acabar com a destacada.
+  const activeStories = [...candidates]
+    .sort(sortByPublishedAtDesc)
+    .slice(0, activeEditionMaxStories)
 
   const activeIds = new Set(activeStories.map((story) => story.id))
 
@@ -481,206 +494,6 @@ function splitEditionStories(stories) {
   }
 }
 
-// Marca del propietari: només l'editor veu el botó de recarregar la portada.
-// (Es va perdre amb la modularització de la Fase 2 i es restaura amb el masthead.)
-function readOwnerFlag() {
-  if (typeof window === 'undefined') return false
-  try {
-    return window.localStorage.getItem('bondiari-owner') === '1'
-  } catch {
-    return false
-  }
-}
-
-// Capçalera original d'El Bon Diari (masthead Graphis amb el colibrí i la
-// graella Mondrian), restaurada tal com era abans de la modularització de la
-// Fase 2, que la va substituir per una estructura sense estils.
-function SiteHeader({ currentPage, isRefreshing, onNavigate, onRefresh }) {
-  const navItems = [
-    { href: '/', label: 'Portada', page: 'home' },
-    { href: '/manifest', label: 'Manifest', page: 'manifest' },
-    { href: '/hemeroteca', label: 'Hemeroteca', page: 'archive' },
-    { href: '/desats', label: 'Desats', page: 'saved' },
-  ]
-  const [isOwner] = useState(readOwnerFlag)
-
-  return (
-    <header className="masthead">
-      <div className="masthead__top">
-        <div className="masthead__utility">
-          <p className="issue-chip">Edició del {formatDate(new Date())}</p>
-          <nav className="site-nav" aria-label="Navegació principal">
-            {navItems.map((item) => (
-              <a
-                key={item.href}
-                className={`site-nav__link ${
-                  currentPage === item.page ? 'is-active' : ''
-                }`}
-                href={item.href}
-                aria-current={currentPage === item.page ? 'page' : undefined}
-                onClick={(event) => {
-                  if (!canInterceptNavigation(event)) {
-                    return
-                  }
-
-                  event.preventDefault()
-                  onNavigate(item.href)
-                }}
-              >
-                {item.label}
-              </a>
-            ))}
-          </nav>
-        </div>
-
-        {isOwner ? (
-          <div className="masthead__actions">
-            <button
-              className={`button button--ghost ${isRefreshing ? 'is-loading' : ''}`}
-              type="button"
-              onClick={onRefresh}
-              disabled={isRefreshing}
-            >
-              {isRefreshing ? 'Recarregant…' : 'Recarregar portada'}
-            </button>
-          </div>
-        ) : null}
-      </div>
-
-      <div className="masthead__brand masthead__brand--graphis">
-        <p className="section-tag">Periodisme constructiu i de servei</p>
-
-        <a
-          className="graphis-title-band"
-          href="/"
-          aria-label="Tornar a la portada d'El Bon Diari"
-          onClick={(event) => {
-            if (!canInterceptNavigation(event)) {
-              return
-            }
-            event.preventDefault()
-            onNavigate('/')
-          }}
-        >
-          <span className="graphis-title">EL BON DIARI</span>
-          <span className="graphis-title-bird" aria-hidden="true">
-            <img
-              src="/logo-colibri.png?v=4"
-              alt=""
-              width="977"
-              height="829"
-              decoding="async"
-            />
-          </span>
-        </a>
-
-        <div className="mondrian-grid" aria-hidden="true">
-          <span className="m-cell m-red"></span>
-          <span className="m-cell m-blue"></span>
-          <span className="m-cell m-yellow"></span>
-          <span className="m-cell m-red"></span>
-
-          <span className="m-cell m-black"></span>
-          <span className="m-cell m-center">
-            <img
-              src="/logo-colibri.png?v=4"
-              alt=""
-              width="977"
-              height="829"
-              decoding="async"
-            />
-          </span>
-          <span className="m-cell m-yellow"></span>
-
-          <span className="m-cell m-red"></span>
-          <span className="m-cell m-blue"></span>
-
-          <span className="m-cell m-blue"></span>
-          <span className="m-cell m-yellow"></span>
-          <span className="m-cell m-white"></span>
-          <span className="m-cell m-black"></span>
-        </div>
-
-        <p className="masthead__lead">
-          Històries que expliquen què funciona, comprovacions que separen els
-          fets del soroll i informació que pots convertir en una acció.
-        </p>
-      </div>
-    </header>
-  )
-}
-
-function FooterNote({ onNavigate }) {
-  return (
-    <footer className="site-footer">
-      <div className="site-footer__content">
-        <p>
-          <strong>El Bon Diari</strong> · Edició digital en català. Selecció
-          editorial i desenvolupament a càrrec de Sergi Castillo.
-        </p>
-        <div className="site-footer__links">
-          <a
-            href="/manifest"
-            onClick={(event) => {
-              if (!canInterceptNavigation(event) || !onNavigate) return
-              event.preventDefault()
-              onNavigate('/manifest')
-            }}
-          >
-            Manifest
-          </a>
-          <a
-            href="/hemeroteca"
-            onClick={(event) => {
-              if (!canInterceptNavigation(event) || !onNavigate) return
-              event.preventDefault()
-              onNavigate('/hemeroteca')
-            }}
-          >
-            Hemeroteca
-          </a>
-          <a
-            href="/estadistiques"
-            onClick={(event) => {
-              if (!canInterceptNavigation(event) || !onNavigate) return
-              event.preventDefault()
-              onNavigate('/estadistiques')
-            }}
-          >
-            Estadístiques
-          </a>
-          <a
-            href="/sobre"
-            onClick={(event) => {
-              if (!canInterceptNavigation(event) || !onNavigate) return
-              event.preventDefault()
-              onNavigate('/sobre')
-            }}
-          >
-            Sobre el diari
-          </a>
-          <a
-            href="/privacitat"
-            onClick={(event) => {
-              if (!canInterceptNavigation(event) || !onNavigate) return
-              event.preventDefault()
-              onNavigate('/privacitat')
-            }}
-          >
-            Privacitat
-          </a>
-          <a href="/feed.xml" target="_blank" rel="noopener noreferrer">
-            RSS (Feed)
-          </a>
-        </div>
-        <div style={{ marginTop: '1rem', textAlign: 'center' }}>
-          <AccessibilityControls />
-        </div>
-      </div>
-    </footer>
-  )
-}
-
 function App() {
   const initialFilterState = getFilterStateFromPath(getCurrentPath())
   const [liveStories, setLiveStories] = useState([])
@@ -690,6 +503,7 @@ function App() {
     () => getRoute(getCurrentPath()).page === 'story',
   )
   const [liveTicker, setLiveTicker] = useState([])
+  const [editionReferenceTime] = useState(() => Date.now())
   const [searchTerm, setSearchTerm] = useState(initialFilterState.search)
   const [activeCategory, setActiveCategory] = useState(
     initialFilterState.category,
@@ -937,47 +751,46 @@ function waitForSwController() {
 
     return matchesCategory && searchableContent.includes(normalizedQuery)
   }
-  const withinDistance = (story) =>
-    getDistanceBand(story).rank <= activeDistanceOption.maxRank
-
   let filteredStories = distanceFilteredStories.filter(matchesFilters)
-  let sectionFromArchive = false
   let sectionShowingGeneral = false
   const activeSection = editorialSections.find(
     (section) => section.label === activeCategory,
   )
   const isServiceSection = serviceSectionIds.has(activeSection?.id)
-  if (activeCategory !== 'Totes' && filteredStories.length === 0) {
-    const archiveSorted = [...archiveStories].sort(sortByPublishedAtDesc)
-    const rescueWithDistance = archiveSorted.filter(
-      (story) => withinDistance(story) && matchesFilters(story),
-    )
-    const rescue = rescueWithDistance.length
-      ? rescueWithDistance
-      : archiveSorted.filter(matchesFilters)
-    if (rescue.length > 0) {
-      filteredStories = rescue
-      sectionFromArchive = true
-    } else if (normalizedQuery === '' && !isServiceSection) {
-      const general = [...activeStories].sort(sortByDistanceAndDate)
-      if (general.length > 0) {
-        filteredStories = general
-        sectionShowingGeneral = true
-      }
+  // Una secció sense novetats ja NO es rescata de l'hemeroteca: això treia a
+  // portada peces de fa setmanes. Si no hi ha res recent del tema, s'ofereix la
+  // selecció del dia (tota ella dins la finestra de 5 dies) i prou.
+  if (
+    activeCategory !== 'Totes' &&
+    filteredStories.length === 0 &&
+    normalizedQuery === '' &&
+    !isServiceSection
+  ) {
+    const general = [...activeStories].sort(sortByDistanceAndDate)
+    if (general.length > 0) {
+      filteredStories = general
+      sectionShowingGeneral = true
     }
   }
 
-  const nearestAvailableBand = filteredStories[0]
-    ? getDistanceBand(filteredStories[0])
+  // Una peça de servei pot continuar vigent durant setmanes, però això no li
+  // dona dret a encapçalar la portada indefinidament. La destacada té un límit
+  // propi i mai no es rescata des de l'hemeroteca.
+  const headlineEligibleStories = filteredStories.filter(
+    (story) =>
+      editionReferenceTime - getStoryTimestamp(story) <= featuredStoryMaxAgeMs,
+  )
+  const nearestAvailableBand = headlineEligibleStories[0]
+    ? getDistanceBand(headlineEligibleStories[0])
     : null
 
   const featuredStory =
-    filteredStories.find(
+    headlineEligibleStories.find(
       (story) =>
         story.featured &&
         getDistanceBand(story).rank === nearestAvailableBand?.rank,
     ) ??
-    filteredStories[0] ??
+    headlineEligibleStories[0] ??
     null
 
   const shouldShowFeaturedInResults =
@@ -1346,7 +1159,6 @@ function waitForSwController() {
                     featuredSourceLink={featuredSourceLink}
                     resetFilters={resetFilters}
                     sectionShowingGeneral={sectionShowingGeneral}
-                    sectionFromArchive={sectionFromArchive}
                     headlineCount={headlineCount}
                     isServiceSection={isServiceSection}
                     navigate={navigate}
@@ -1354,7 +1166,7 @@ function waitForSwController() {
                     distanceFilterOptions={distanceFilterOptions}
                     applyDistanceFilter={applyDistanceFilter}
                     activeDistanceOption={activeDistanceOption}
-                    allStories={allStories}
+                    editionStories={activeStories}
                     portadaStories={portadaStories}
                   />
                 ) : null}
@@ -1374,7 +1186,9 @@ function waitForSwController() {
             </ErrorBoundary>
           </main>
 
-          <FooterNote onNavigate={navigate} />
+          <SiteFooter onNavigate={navigate}>
+            <AccessibilityControls />
+          </SiteFooter>
         </div>
       </PullToRefresh>
     </div>

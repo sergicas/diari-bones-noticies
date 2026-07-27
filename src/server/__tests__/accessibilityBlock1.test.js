@@ -36,6 +36,8 @@ describe('Fase 4 – Bloc 1: mida de lletra i alta llegibilitat', () => {
     expect(controls).toContain('font-size-large')
     expect(controls).toContain('font-size-xlarge')
     expect(controls).toContain('high-legibility')
+    expect(controls).toContain('aria-pressed')
+    expect(controls).toContain('aria-live')
   })
 
   it('el component està muntat a App.jsx (cap funció fantasma)', () => {
@@ -51,6 +53,8 @@ describe('Fase 4 – Bloc 1: impressió neta per a aules', () => {
 
   it('la fitxa d’article té el botó d’imprimir', () => {
     expect(storyDetail).toContain('window.print()')
+    expect(storyDetail).toContain('article-print-header')
+    expect(storyDetail).toContain('Font:')
   })
 })
 
@@ -59,6 +63,10 @@ describe('Colors d’estat accessibles', () => {
     for (const name of ['--color-success', '--color-warning', '--color-error', '--color-primary']) {
       expect(indexCss).toContain(`${name}:`)
     }
+  })
+
+  it('el text secundari té un color fosc amb contrast AA sobre blanc', () => {
+    expect(indexCss).toContain('--muted: #56565C')
   })
 })
 

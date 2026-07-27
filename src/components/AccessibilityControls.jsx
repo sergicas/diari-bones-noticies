@@ -1,15 +1,41 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
+import '../styles/accessibility.css'
+
+const fontSizeStorageKey = 'bondiari-font-size'
+const highLegibilityStorageKey = 'bondiari-high-legibility'
+const fontOptions = [
+  { value: 'normal', label: 'Normal', shortLabel: 'A' },
+  { value: 'large', label: 'Gran', shortLabel: 'A+' },
+  { value: 'xlarge', label: 'Molt gran', shortLabel: 'A++' },
+]
+
+function readStoredValue(key, fallback) {
+  if (typeof window === 'undefined') return fallback
+  try {
+    return window.localStorage.getItem(key) || fallback
+  } catch {
+    return fallback
+  }
+}
+
+function writeStoredValue(key, value) {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(key, value)
+  } catch {
+    // Les preferències continuen funcionant durant la sessió encara que el
+    // navegador bloquegi localStorage.
+  }
+}
 
 export function AccessibilityControls() {
-  const [fontSize, setFontSize] = useState(() => {
-    if (typeof window === 'undefined') return 'normal'
-    return window.localStorage.getItem('bondiari-font-size') || 'normal'
-  })
-
-  const [highLegibility, setHighLegibility] = useState(() => {
-    if (typeof window === 'undefined') return false
-    return window.localStorage.getItem('bondiari-high-legibility') === 'true'
-  })
+  const [fontSize, setFontSize] = useState(() =>
+    readStoredValue(fontSizeStorageKey, 'normal'),
+  )
+  const [highLegibility, setHighLegibility] = useState(
+    () => readStoredValue(highLegibilityStorageKey, 'false') === 'true',
+  )
+  const [announcement, setAnnouncement] = useState('')
 
   useEffect(() => {
     if (typeof document === 'undefined') return
@@ -17,99 +43,93 @@ export function AccessibilityControls() {
     root.classList.remove('font-size-large', 'font-size-xlarge')
     if (fontSize === 'large') root.classList.add('font-size-large')
     if (fontSize === 'xlarge') root.classList.add('font-size-xlarge')
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem('bondiari-font-size', fontSize)
-    }
+    writeStoredValue(fontSizeStorageKey, fontSize)
   }, [fontSize])
 
   useEffect(() => {
     if (typeof document === 'undefined') return
     const root = document.documentElement
-    if (highLegibility) {
-      root.classList.add('high-legibility')
-    } else {
-      root.classList.remove('high-legibility')
-    }
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem('bondiari-high-legibility', String(highLegibility))
-    }
+    root.classList.toggle('high-legibility', highLegibility)
+    writeStoredValue(highLegibilityStorageKey, String(highLegibility))
   }, [highLegibility])
 
+  const chooseFontSize = (option) => {
+    setFontSize(option.value)
+    setAnnouncement(`Mida de lletra: ${option.label}.`)
+  }
+
+  const toggleLegibility = () => {
+    setHighLegibility((current) => {
+      const next = !current
+      setAnnouncement(
+        next
+          ? 'Alta llegibilitat activada.'
+          : 'Alta llegibilitat desactivada.',
+      )
+      return next
+    })
+  }
+
+  const resetPreferences = () => {
+    setFontSize('normal')
+    setHighLegibility(false)
+    setAnnouncement('Preferències de lectura restablertes.')
+  }
+
   return (
-    <div
+    <section
+      id="accessibilitat"
       className="accessibility-controls no-print"
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: '0.5rem',
-        padding: '0.4rem 0.8rem',
-        borderRadius: '999px',
-        border: '1px solid var(--line-strong, rgba(0,0,0,0.15))',
-        background: 'var(--paper, #ffffff)',
-        color: 'var(--ink, #000000)',
-        fontSize: '0.85rem',
-      }}
-      aria-label="Controls d'accessibilitat de lectura"
+      aria-labelledby="accessibility-controls-title"
     >
-      <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--muted, #888)' }}>
-        Mida:
-      </span>
-      <button
-        type="button"
-        onClick={() => setFontSize('normal')}
-        aria-label="Mida de font normal"
-        style={{
-          fontWeight: fontSize === 'normal' ? 'bold' : 'normal',
-          textDecoration: fontSize === 'normal' ? 'underline' : 'none',
-          padding: '2px 6px',
-        }}
-      >
-        A
-      </button>
-      <button
-        type="button"
-        onClick={() => setFontSize('large')}
-        aria-label="Mida de font gran"
-        style={{
-          fontSize: '1rem',
-          fontWeight: fontSize === 'large' ? 'bold' : 'normal',
-          textDecoration: fontSize === 'large' ? 'underline' : 'none',
-          padding: '2px 6px',
-        }}
-      >
-        A+
-      </button>
-      <button
-        type="button"
-        onClick={() => setFontSize('xlarge')}
-        aria-label="Mida de font molt gran"
-        style={{
-          fontSize: '1.15rem',
-          fontWeight: fontSize === 'xlarge' ? 'bold' : 'normal',
-          textDecoration: fontSize === 'xlarge' ? 'underline' : 'none',
-          padding: '2px 6px',
-        }}
-      >
-        A++
-      </button>
+      <div className="accessibility-controls__intro">
+        <p id="accessibility-controls-title">Preferències de lectura</p>
+        <span>Es guarden només en aquest dispositiu.</span>
+      </div>
 
-      <span style={{ color: 'var(--line-strong, #ccc)', margin: '0 4px' }}>|</span>
+      <div
+        className="accessibility-controls__sizes"
+        role="group"
+        aria-label="Mida de lletra"
+      >
+        {fontOptions.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            className={`accessibility-choice ${
+              fontSize === option.value ? 'is-active' : ''
+            }`}
+            onClick={() => chooseFontSize(option)}
+            aria-label={`Mida de lletra ${option.label.toLowerCase()}`}
+            aria-pressed={fontSize === option.value}
+          >
+            {option.shortLabel}
+          </button>
+        ))}
+      </div>
 
       <button
         type="button"
-        onClick={() => setHighLegibility(!highLegibility)}
-        aria-label={highLegibility ? 'Desactivar alta llegibilitat' : 'Activar alta llegibilitat'}
-        style={{
-          fontWeight: highLegibility ? 'bold' : 'normal',
-          background: highLegibility ? 'var(--color-success)' : 'transparent',
-          color: highLegibility ? '#ffffff' : 'inherit',
-          borderRadius: '12px',
-          padding: '2px 8px',
-        }}
+        className={`accessibility-toggle ${highLegibility ? 'is-active' : ''}`}
+        onClick={toggleLegibility}
+        aria-pressed={highLegibility}
       >
         Alta llegibilitat
       </button>
-    </div>
+
+      <button
+        type="button"
+        className="accessibility-reset"
+        onClick={resetPreferences}
+        disabled={fontSize === 'normal' && !highLegibility}
+      >
+        Restablir
+      </button>
+
+      <p className="sr-only" aria-live="polite">
+        {announcement}
+      </p>
+    </section>
   )
 }
 

@@ -36,7 +36,12 @@ function decodeHtmlEntities(str = '') {
 }
 
 function stripHtml(html = '') {
-  return html.replace(/<[^>]*>/g, '').trim()
+  return html
+    .replace(/^<!\[CDATA\[/, '')
+    .replace(/\]\]>$/, '')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 function extractTag(xmlBlock, tagName) {
@@ -61,9 +66,12 @@ function serviceStory({
   editorialFormat,
   expiresAt,
   location = 'Catalunya',
+  body,
+  sourceContext = '',
+  requiresRewrite = false,
 }) {
   if (!title || !url || !publishedAt) return null
-  const ownBody = [summary, impact].filter(Boolean)
+  const ownBody = Array.isArray(body) ? body.filter(Boolean) : []
   return {
     title,
     category,
@@ -81,8 +89,9 @@ function serviceStory({
     imageAttributionUrl: '',
     editorialScore: 1,
     curated: true,
-    body: ownBody,
-    ownContent: ownBody.length > 0,
+    body: requiresRewrite ? [] : ownBody,
+    ownContent: !requiresRewrite && ownBody.length > 0,
+    ...(sourceContext ? { sourceContext } : {}),
     editorialVersion: liveEditorialVersion,
     publishedAt,
     ...(expiresAt ? { expiresAt } : {}),
@@ -142,20 +151,29 @@ export function normalizeAgendaItem(block, publishedAt = new Date().toISOString(
     'agenda.cultura.gencat.cat:443',
     'agenda.cultura.gencat.cat',
   )
-  const summary =
-    `L’Agenda Cultural de la Generalitat inclou «${title}» entre les ` +
-    'activitats disponibles a Mataró.'
+  const details = decodeHtmlEntities(
+    stripHtml(
+      extractTag(block, 'description') ||
+      extractTag(block, 'summary') ||
+      extractTag(block, 'content:encoded'),
+    ),
+  )
+  // Una agenda sense data, lloc o descripció no és encara una peça de servei.
+  if (details.split(/\s+/u).filter(Boolean).length < 20) return null
+  const summary = details.slice(0, 260)
   return serviceStory({
     title,
     category: 'Agenda',
     summary,
     impact:
-      'Afegeix una proposta cultural de proximitat a l’agenda del lector.',
+      'La fitxa permet decidir si l’activitat encaixa per data, lloc i condicions d’accés.',
     source: 'Agenda Cultural',
     url,
     publishedAt,
     editorialFormat: 'agenda',
     location: 'Mataró, Maresme',
+    sourceContext: details.slice(0, 1400),
+    requiresRewrite: true,
   })
 }
 
@@ -212,23 +230,36 @@ export function normalizeRaiscOpportunity(record) {
     ''
   const url = record.seu_electr_nica || record.url_diari_oficial || ''
   const deadline = record.data_fi_termini_presentaci_sol_licitud || ''
+  const beneficiaries =
+    record.tipus_de_beneficiaris || 'les persones i entitats que compleixin les bases'
+  const agency =
+    record.entitat_oo_aa_o_departament_1 || 'l’organisme convocant'
+  const purpose =
+    record.finalitat_publica || record.objecte_de_la_convocat_ria || title
+  const deadlineLabel = deadline
+    ? new Date(deadline).toLocaleDateString('ca-ES')
+    : 'el termini indicat a les bases'
+  const amount = record.import_total_convocat_ria
+    ? formatEuros(record.import_total_convocat_ria)
+    : ''
   const parts = [
-    record.tipus_de_beneficiaris
-      ? `Destinataris: ${record.tipus_de_beneficiaris}`
-      : '',
+    `Destinataris: ${beneficiaries}`,
     deadline
-      ? `Termini: ${new Date(deadline).toLocaleDateString('ca-ES')}`
+      ? `Termini: ${deadlineLabel}`
       : '',
-    record.import_total_convocat_ria
-      ? `Dotació: ${formatEuros(record.import_total_convocat_ria)}`
-      : '',
+    amount ? `Dotació: ${amount}` : '',
   ].filter(Boolean)
+  const body = [
+    `La convocatòria té com a finalitat ${purpose} i s’adreça a ${beneficiaries}.`,
+    `El termini de sol·licitud acaba el ${deadlineLabel}${amount ? ` i la dotació total anunciada és de ${amount}` : ''}.`,
+    `${agency} n’és l’organisme responsable. Les bases i el document oficial enllaçat detallen els requisits, la documentació i el procediment de sol·licitud.`,
+  ]
   return serviceStory({
     title,
     category: 'Oportunitats',
     summary: parts.join(' · '),
     impact:
-      'Resumeix una convocatòria oberta amb termini, destinataris i document oficial.',
+      `Les persones destinatàries poden comprovar ara si compleixen els requisits abans del ${deadlineLabel}.`,
     source: 'Dades Obertes de Catalunya · RAISC',
     url,
     publishedAt:
@@ -236,6 +267,7 @@ export function normalizeRaiscOpportunity(record) {
     editorialFormat: 'opportunity',
     expiresAt: deadline,
     location: record.regio_apli || 'Catalunya',
+    body,
   })
 }
 
@@ -310,6 +342,7 @@ export function normalizeIdescatUpdate(table) {
     const localValue = String(row.v).split(',')[0]
     return `${row.c}: ${localValue}${row.u ? ` ${row.u}` : ''}`
   })
+  const period = table.r || 'el darrer període publicat'
   const title = `Idescat actualitza ${table.c} a Mataró`
   const versionUrl = `${table.l}#actualitzacio-${table.updated.slice(0, 10)}`
   return serviceStory({
@@ -317,12 +350,17 @@ export function normalizeIdescatUpdate(table) {
     category: 'Dades',
     summary: `${table.c}${table.r ? ` (${table.r})` : ''}: ${facts.join(' · ')}`,
     impact:
-      'Actualitza un indicador públic de Mataró amb període, xifra i font originals.',
+      `La nova sèrie permet seguir l’evolució de ${table.c.toLocaleLowerCase('ca')} a Mataró amb dades oficials.`,
     source: 'Idescat',
     url: versionUrl,
     publishedAt: table.updated,
     editorialFormat: 'data',
     location: 'Mataró, Maresme',
+    body: [
+      `Idescat ha actualitzat la taula «${table.c}» corresponent a ${period}.`,
+      `Els valors publicats per a Mataró són: ${facts.join(' · ')}.`,
+      'L’enllaç oficial permet consultar la sèrie completa, la metodologia i les revisions posteriors de les dades.',
+    ],
   })
 }
 

@@ -10,8 +10,8 @@
   -moz-osx-font-smoothing: grayscale;
   --paper: #FFFFFF;
   --ink: #000000;
-  --muted: #8E8E93;
-  --accent: #34C759;
+  --muted: #56565C;
+  --accent: #1D7A3A;
   --secondary: #000000;
   --line: rgba(0, 0, 0, 0.1);
   --line-strong: rgba(0, 0, 0, 0.15);
@@ -119,8 +119,22 @@ p {
   color: var(--ink);
 }
 
+.print-only {
+  display: none;
+}
+
 /* Full d'estil d'impressió neta per a aules i tallers educatius */
 @media print {
+  @page {
+    margin: 18mm;
+  }
+
+  html,
+  html.font-size-large,
+  html.font-size-xlarge {
+    font-size: 12pt !important;
+  }
+
   body {
     background: #ffffff !important;
     color: #000000 !important;
@@ -142,6 +156,18 @@ p {
     display: none !important;
   }
 
+  .print-only {
+    display: block !important;
+  }
+
+  #root,
+  .app-shell,
+  .page-shell,
+  .site-main {
+    display: block !important;
+    min-height: 0 !important;
+  }
+
   .page-shell,
   .section-block,
   .masthead,
@@ -154,18 +180,51 @@ p {
     max-width: 100% !important;
   }
 
+  .article-page {
+    font-family: Georgia, "Times New Roman", serif !important;
+  }
+
+  .article-print-header {
+    margin-bottom: 18pt;
+    padding-bottom: 12pt;
+    border-bottom: 1.5pt solid #000000;
+  }
+
+  .article-print-header h1 {
+    margin: 5pt 0 9pt !important;
+    font-size: 22pt !important;
+    line-height: 1.12 !important;
+  }
+
+  .article-print-header__kicker,
+  .article-print-header__meta {
+    font-family: Arial, Helvetica, sans-serif !important;
+    font-size: 9.5pt !important;
+    font-weight: 700;
+  }
+
+  .article-print-header__summary {
+    margin: 0 0 9pt !important;
+    font-size: 13pt !important;
+    line-height: 1.45 !important;
+  }
+
+  .article-page__body {
+    display: block !important;
+    margin: 0 !important;
+  }
+
   a {
     text-decoration: none !important;
     color: #000000 !important;
   }
 
-  article h1 {
-    font-size: 20pt !important;
-    margin-bottom: 12px !important;
-  }
-
-  article p {
+  .article-page__body p {
     font-size: 12pt !important;
-    margin-bottom: 12px !important;
+    line-height: 1.55 !important;
+    margin: 0 0 10pt !important;
+    color: #000000 !important;
+    orphans: 3;
+    widows: 3;
   }
 }

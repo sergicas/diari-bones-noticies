@@ -6,6 +6,8 @@
 
 import { seedArticles } from '../data/articles.js'
 import { feedStoryId } from '../lib/story-id.js'
+import { findStoryInEditorialStore } from './editorialStore.js'
+import { sanitizeStoryPhoto } from './storyPhoto.js'
 
 const baseUrl = 'https://bondiari.com'
 const siteName = 'El Bon Diari'
@@ -37,11 +39,17 @@ export async function findStory(id, env) {
     const liveStory = (cached?.stories || []).find(
       (story) => feedStoryId(story.url) === id,
     )
-    if (liveStory) return liveStory
+    if (liveStory) return sanitizeStoryPhoto(liveStory)
     const stored = await env.LIVE_NEWS_KV.get(`story:${id}`, 'json')
-    if (stored) return stored
+    if (stored) return sanitizeStoryPhoto(stored)
   } catch {
     // Si el KV falla, encara podem mirar els editorials.
+  }
+  try {
+    const durableStory = await findStoryInEditorialStore(env, id)
+    if (durableStory) return sanitizeStoryPhoto(durableStory)
+  } catch {
+    // D1 és l'hemeroteca durable; KV continua sent la font de l'edició actual.
   }
   return seedArticles.find((story) => story.id === id) || null
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   handleConfirm,
+  readNewsletterAudience,
   handleSubscribe,
   handleUnsubscribe,
 } from '../newsletter.js'
@@ -25,6 +26,16 @@ class MemoryKv {
 
   async delete(key) {
     this.values.delete(key)
+  }
+
+  async list({ prefix = '' } = {}) {
+    return {
+      keys: [...this.values.keys()]
+        .filter((key) => key.startsWith(prefix))
+        .map((name) => ({ name })),
+      list_complete: true,
+      cursor: null,
+    }
   }
 }
 
@@ -105,5 +116,44 @@ describe('newsletter action tokens', () => {
       { STATS_KV: kv },
     )
     expect(response.status).toBe(404)
+  })
+})
+
+describe('newsletter private audience snapshot', () => {
+  it('returns real subscribers without exposing action tokens', async () => {
+    const kv = new MemoryKv()
+    await subscribe(kv)
+    const snapshot = await readNewsletterAudience({ STATS_KV: kv })
+
+    expect(snapshot).toMatchObject({
+      available: true,
+      confirmed: 0,
+      pending: 1,
+      total: 1,
+    })
+    expect(snapshot.subscribers[0]).toMatchObject({
+      email: 'lectora@example.com',
+      language: 'ca',
+      status: 'pending',
+    })
+    expect(snapshot.subscribers[0]).not.toHaveProperty('actionToken')
+  })
+
+  it('counts legacy subscribers as confirmed', async () => {
+    const kv = new MemoryKv()
+    kv.values.set(
+      'subscriber:legacy',
+      JSON.stringify({
+        email: 'legacy@example.com',
+        language: 'ca',
+        subscribedAt: '2026-07-01T07:00:00.000Z',
+      }),
+    )
+
+    await expect(readNewsletterAudience({ STATS_KV: kv })).resolves.toMatchObject({
+      confirmed: 1,
+      pending: 0,
+      subscribers: [{ email: 'legacy@example.com', status: 'confirmed' }],
+    })
   })
 })

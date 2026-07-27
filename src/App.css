@@ -319,11 +319,13 @@
 .button:focus-visible,
 .brand-mark:focus-visible,
 .link-button:focus-visible,
+.site-nav__link:focus-visible,
+.graphis-title-band:focus-visible,
 .category-pill:focus-visible,
 .distance-pill:focus-visible,
 .story-card:focus-visible,
 .search-field input:focus-visible {
-  outline: 3px solid rgba(16, 99, 82, 0.24);
+  outline: 3px solid var(--color-primary);
   outline-offset: 3px;
 }
 
