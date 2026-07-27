@@ -2,7 +2,7 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "bondiari",
   "main": "src/worker.js",
-  "compatibility_date": "2026-06-08",
+  "compatibility_date": "2026-07-23",
   "compatibility_flags": ["nodejs_compat"],
   "assets": {
     "directory": "./dist",
@@ -15,12 +15,55 @@
     "run_worker_first": true
   },
   "observability": {
-    "enabled": true
+    "enabled": true,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 0.1
+    }
+  },
+  "vars": {
+    "ENVIRONMENT": "production"
   },
   "kv_namespaces": [
     { "binding": "LIVE_NEWS_KV", "id": "8dccac0ffa434f75b13ba6a7890646af" },
     { "binding": "STATS_KV", "id": "08a529af25eb41eca09d26276cba77d2" }
   ],
+  "d1_databases": [
+    {
+      "binding": "EDITORIAL_DB",
+      "database_name": "bondiari-editorial",
+      "database_id": "b2776783-5d4e-483f-b609-c67e641671f9",
+      "migrations_dir": "./migrations"
+    }
+  ],
+  "queues": {
+    "producers": [
+      { "binding": "INGEST_QUEUE", "queue": "bondiari-ingest" },
+      { "binding": "DISTRIBUTION_QUEUE", "queue": "bondiari-distribute" }
+    ],
+    "consumers": [
+      {
+        "queue": "bondiari-ingest",
+        "max_batch_size": 5,
+        "max_batch_timeout": 5,
+        "max_retries": 3,
+        "dead_letter_queue": "bondiari-ingest-dlq",
+        "retry_delay": 30
+      },
+      {
+        "queue": "bondiari-distribute",
+        "max_batch_size": 2,
+        "max_batch_timeout": 10,
+        "max_retries": 3,
+        "dead_letter_queue": "bondiari-distribute-dlq",
+        "retry_delay": 60
+      }
+    ]
+  },
   // Workers AI: segona capa del filtre editorial (jutja les notícies neutres).
   "ai": { "binding": "AI" },
   "triggers": {
@@ -31,5 +74,54 @@
     // La secció "En directe" (/api/live-ticker) es refresca a part, a demanda,
     // amb una cache curta; no depèn d'aquests crons.
     "crons": ["0 5 * * *", "0 17 * * *"]
+  },
+  "env": {
+    // Staging té dades i cues pròpies, i deliberadament no té cap cron.
+    "staging": {
+      "name": "bondiari-staging",
+      "triggers": {
+        "crons": []
+      },
+      "vars": {
+        "ENVIRONMENT": "staging"
+      },
+      "kv_namespaces": [
+        { "binding": "LIVE_NEWS_KV", "id": "3763eba40f604b528c8c968ba2280131" },
+        { "binding": "STATS_KV", "id": "6d3084f174a249d4b2dcf9686e8f98de" }
+      ],
+      "d1_databases": [
+        {
+          "binding": "EDITORIAL_DB",
+          "database_name": "bondiari-editorial-staging",
+          "database_id": "8433faec-5027-4ccc-8a65-1f2de89e3748",
+          "migrations_dir": "./migrations"
+        }
+      ],
+      "queues": {
+        "producers": [
+          { "binding": "INGEST_QUEUE", "queue": "bondiari-ingest-staging" },
+          { "binding": "DISTRIBUTION_QUEUE", "queue": "bondiari-distribute-staging" }
+        ],
+        "consumers": [
+          {
+            "queue": "bondiari-ingest-staging",
+            "max_batch_size": 5,
+            "max_batch_timeout": 5,
+            "max_retries": 3,
+            "dead_letter_queue": "bondiari-ingest-staging-dlq",
+            "retry_delay": 30
+          },
+          {
+            "queue": "bondiari-distribute-staging",
+            "max_batch_size": 2,
+            "max_batch_timeout": 10,
+            "max_retries": 3,
+            "dead_letter_queue": "bondiari-distribute-staging-dlq",
+            "retry_delay": 60
+          }
+        ]
+      },
+      "ai": { "binding": "AI" }
+    }
   }
 }

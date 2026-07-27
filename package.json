@@ -6,10 +6,17 @@
   "scripts": {
     "dev": "vite",
     "dev:worker": "wrangler dev",
+    "db:migrate:local": "wrangler d1 migrations apply EDITORIAL_DB --local",
+    "db:migrate:staging": "wrangler d1 migrations apply EDITORIAL_DB --remote --env staging",
+    "db:migrate:production": "wrangler d1 migrations apply EDITORIAL_DB --remote --env=\"\"",
     "check:articles": "node scripts/check-articles.mjs",
+    "check:worker": "wrangler deploy --dry-run --env=\"\" --outdir .wrangler/dry-run/production",
+    "check:worker:staging": "wrangler deploy --dry-run --env staging --outdir .wrangler/dry-run/staging",
     "build": "vite build && node scripts/generate-sitemap.mjs",
-    "deploy": "npm run build && wrangler deploy",
+    "deploy": "npm run build && wrangler deploy --env=\"\"",
+    "deploy:staging": "npm run build && wrangler deploy --env staging",
     "lint": "eslint .",
+    "verify": "npm run lint && npm test && npm run check:articles && npm run build && npm run check:worker && npm run check:worker:staging",
     "preview": "vite preview",
     "refresh": "node scripts/refresh-news.mjs",
     "seccions": "node scripts/renova-seccions.mjs",
@@ -17,6 +24,7 @@
     "sitemap": "node scripts/generate-sitemap.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
+    "types:worker": "wrangler types worker-configuration.d.ts",
     "ios:assets": "capacitor-assets generate --ios",
     "ios:sync": "cap sync ios",
     "ios:open": "cap open ios"
@@ -43,7 +51,7 @@
     "globals": "^17.4.0",
     "vite": "^8.0.4",
     "vitest": "^4.1.8",
-    "wrangler": "^4.98.0"
+    "wrangler": "^4.114.0"
   },
   "overrides": {
     "xcode": {

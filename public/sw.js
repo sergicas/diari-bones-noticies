@@ -1,7 +1,8 @@
 // Service worker mínim per a bondiari.com.
 // - Cache-first per a assets estàtics (fonts, imatges, CSS, JS).
 // - Network-first amb fallback al cache per a la portada (HTML).
-// - Bypass total per a /api/* perquè el radar mai serveixi notícies velles.
+// - Network-first amb fallback al darrer radar per a /api/live-news.
+// - Bypass per a la resta de /api/*, que no s'han de reproduir offline.
 // - Esborra caches antigues quan canviem la versió.
 
 // __BUILD_HASH__ es substitueix pel plugin de Vite (vite.config.js) durant
@@ -40,7 +41,25 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(request.url)
   if (url.origin !== self.location.origin) return
-  if (url.pathname.startsWith('/api/')) return // El radar mai ha de servir cache obsolet
+
+  if (url.pathname === '/api/live-news') {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (!response.ok) throw new Error(`live-news-${response.status}`)
+          const copy = response.clone()
+          caches
+            .open(CACHE_VERSION)
+            .then((cache) => cache.put(request, copy))
+            .catch(() => undefined)
+          return response
+        })
+        .catch(() => caches.match(request)),
+    )
+    return
+  }
+
+  if (url.pathname.startsWith('/api/')) return
 
   if (request.mode === 'navigate') {
     event.respondWith(

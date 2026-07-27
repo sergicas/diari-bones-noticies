@@ -1,0 +1,108 @@
+.accessibility-controls {
+  display: grid;
+  grid-template-columns: minmax(12rem, 1fr) auto auto auto;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem;
+  border: 2px solid var(--ink);
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.accessibility-controls__intro p,
+.accessibility-controls__intro span {
+  margin: 0;
+}
+
+.accessibility-controls__intro p {
+  font-weight: 850;
+}
+
+.accessibility-controls__intro span {
+  display: block;
+  margin-top: 0.2rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.accessibility-controls__sizes {
+  display: inline-flex;
+  border: 2px solid var(--ink);
+}
+
+.accessibility-choice,
+.accessibility-toggle,
+.accessibility-reset {
+  min-height: 2.75rem;
+  padding: 0.55rem 0.75rem;
+  border: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-weight: 800;
+}
+
+.accessibility-choice + .accessibility-choice {
+  border-left: 1px solid var(--ink);
+}
+
+.accessibility-choice:nth-child(2) {
+  font-size: 1.08rem;
+}
+
+.accessibility-choice:nth-child(3) {
+  font-size: 1.18rem;
+}
+
+.accessibility-choice.is-active,
+.accessibility-toggle.is-active {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.accessibility-toggle {
+  border: 2px solid var(--ink);
+}
+
+.accessibility-reset {
+  text-decoration: underline;
+  text-underline-offset: 0.2rem;
+}
+
+.accessibility-reset:disabled {
+  cursor: default;
+  opacity: 0.5;
+  text-decoration: none;
+}
+
+.accessibility-choice:focus-visible,
+.accessibility-toggle:focus-visible,
+.accessibility-reset:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline: 3px solid var(--color-primary);
+  outline-offset: 3px;
+}
+
+html.high-legibility .article-page__body,
+html.high-legibility .page-hero__content,
+html.high-legibility .story-card__summary {
+  max-width: 68ch;
+}
+
+html.high-legibility .article-page__body p,
+html.high-legibility .page-hero p,
+html.high-legibility .story-card p {
+  line-height: 2;
+}
+
+@media (max-width: 760px) {
+  .accessibility-controls {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .accessibility-controls__sizes {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+  }
+}

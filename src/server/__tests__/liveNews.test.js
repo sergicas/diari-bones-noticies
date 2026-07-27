@@ -9,10 +9,18 @@ import {
   passesEditorialFilter,
   looksLikeAdvertorial,
   applyDiversityCap,
+  capPerCategory,
   UNIVERSAL_NEG,
   POLITICAL_MARKERS,
+  normalizeFeedItem,
+  normalizeAgendaItem,
+  normalizeRaiscOpportunity,
+  normalizeIdescatUpdate,
+  isStoryWithinLiveWindow,
   isTickerCacheFresh,
   storiesRequiringDetailPersistence,
+  getLiveNewsPayload,
+  keepsEditorialClearance,
 } from '../liveNews.js'
 import {
   normalizeCategory,
@@ -27,6 +35,7 @@ import {
 } from '../storyMeta.js'
 import { buildNewsSitemap } from '../newsSitemap.js'
 import { composePostText, storyLink } from '../social.js'
+import { applyOwnContent } from '../storyText.js'
 
 const SEO_STORY = {
   title: 'Una cooperativa <crea> vint llocs de treball',
@@ -60,6 +69,179 @@ describe('quota KV — escriptures acotades', () => {
     expect(
       storiesRequiringDetailPersistence(stories, ['https://bondiari.com/nova']),
     ).toEqual([{ url: 'https://bondiari.com/nova' }])
+  })
+
+  it('la lectura pública respon immediatament si no hi ha caché', async () => {
+    const kv = {
+      get: async () => null,
+      put: async () => {
+        throw new Error('una lectura pública no ha d’escriure')
+      },
+    }
+
+    await expect(
+      getLiveNewsPayload(kv, { allowRefresh: false }),
+    ).resolves.toMatchObject({
+      stories: [],
+      cache: 'miss-readonly',
+    })
+  })
+
+  it('la lectura pública serveix la caché antiga sense regenerar-la', async () => {
+    const cached = {
+      updatedAt: '2025-01-01T00:00:00.000Z',
+      nextRefreshAt: '2025-01-01T12:00:00.000Z',
+      stories: [{ id: 'edicio-estable', editorialVersion: 1 }],
+    }
+    const kv = {
+      get: async () => cached,
+      put: async () => {
+        throw new Error('una lectura pública no ha d’escriure')
+      },
+    }
+
+    await expect(
+      getLiveNewsPayload(kv, { allowRefresh: false }),
+    ).resolves.toEqual({
+      ...cached,
+      cache: 'stale-readonly',
+    })
+  })
+})
+
+describe('resultats d’empresa — comptes, no bones notícies', () => {
+  const advertorial = (title) =>
+    looksLikeAdvertorial({ url: 'https://elmon.cat/peca', title, summary: '' })
+
+  // Colat el 27/07/2026 tant a la tira "Últimes incorporacions" com a la
+  // portada. El porter de positivitat no ho veia (cap paraula negativa) i el
+  // model ho aprovava, així que calia un bloc dur.
+  it('bloca la presentació de comptes i la nota de premsa corporativa', () => {
+    for (const title of [
+      'Mango factura 1.852 milions d’euros en els primers sis mesos de l’any',
+      'B. Braun reforça l’accés a la diàlisi durant les vacances a través del seu programa Holiday Dialysis',
+      'La facturación del grupo crece un 7,2%',
+      'El grupo presenta sus resultados del primer semestre',
+      'La companyia tanca l’exercici amb un benefici net rècord',
+    ]) {
+      expect(advertorial(title), title).toBe(true)
+    }
+  })
+
+  // El bloc mira el senyal financer precís, no la paraula "empresa": una bona
+  // notícia econòmica de veritat ha de continuar entrant.
+  it('deixa passar l’economia constructiva', () => {
+    for (const title of [
+      'Una cooperativa del Maresme crea vint llocs de treball al mercat municipal',
+      'La fàbrica de Sant Andreu reobre i recontracta cinquanta treballadors',
+      'Un poble de la Segarra recupera la seva escola amb un projecte comunitari',
+      'Els beneficis de caminar mitja hora al dia, segons un estudi',
+    ]) {
+      expect(advertorial(title), title).toBe(false)
+    }
+  })
+
+  // L'altre gènere de nota de premsa: no anuncia cap fet, l'organització es
+  // proclama referent o pionera. Colat el 27/07 a la tira d'últimes
+  // incorporacions ("GBSB Global consolida un model educatiu pioner...").
+  it('bloca l’autobombo institucional', () => {
+    for (const title of [
+      'GBSB Global consolida un model educatiu pioner per formar els professionals que exigeix la nova economia',
+      'Jorcar Titanium lidera la innovació a Lliçà de Vall amb reciclatge',
+      'La companyia es consolida com a referent del sector',
+      'La empresa se posiciona como líder en el mercado europeo',
+      'La firma apuesta por la excelencia en el servicio',
+    ]) {
+      expect(advertorial(title), title).toBe(true)
+    }
+  })
+
+  // Es bloca la col·locació sencera (verb de posicionament + superlatiu de
+  // màrqueting), no els verbs sols: liderar, consolidar i impulsar són verbs
+  // normals del periodisme.
+  it('no confon liderar, consolidar o impulsar amb autobombo', () => {
+    for (const title of [
+      "Un institut de Girona lidera un projecte europeu contra l'abandonament escolar",
+      'Una investigadora catalana lidera la missió europea a Mart',
+      'El barri consolida la seva xarxa de suport a la gent gran',
+      'El Govern impulsa un model educatiu inclusiu a les escoles rurals',
+      'La ciutat impulsa un pla de xoc contra la pobresa energètica',
+    ]) {
+      expect(advertorial(title), title).toBe(false)
+    }
+  })
+
+  // En JavaScript "ó" no és caràcter de paraula, així que /facturaci[óo]n?\b/
+  // casava amb el castellà "facturación" però NO amb el català "facturació".
+  // Els blocs es tanquen amb "no vingui cap més lletra".
+  it('bloca igual el català accentuat que el castellà', () => {
+    expect(advertorial('La facturació del grup creix un 7,2%')).toBe(true)
+    expect(advertorial('La facturación del grupo crece un 7,2%')).toBe(true)
+  })
+
+  it('neteja el marcador d’objecte incrustat que alguns mitjans deixen al titular', () => {
+    const story = normalizeFeedItem(
+      `
+      <title><![CDATA[La Fageda estima el valor social que genera ￼]]></title>
+      <link>https://elmon.cat/fageda</link>
+      <description><![CDATA[La cooperativa presenta el seu informe anual amb dades verificades.]]></description>
+      <pubDate>Mon, 27 Jul 2026 08:00:00 +0000</pubDate>
+      <media:thumbnail url="https://elmon.cat/foto.jpg" />
+    `,
+      { name: 'El Món', language: 'ca', defaultCategory: 'Actualitat' },
+    )
+
+    expect(story.title).toBe('La Fageda estima el valor social que genera')
+    expect(story.title).not.toContain('￼')
+  })
+})
+
+describe('arrossegament del lot — el diari ha d’acumular', () => {
+  // Regressió del 27-07-2026: l'arrossegament tornava a passar el porter de
+  // positivitat sobre el text PUBLICAT, però una peça publicada té el titular
+  // reescrit i el resum esborrat. Cap titular no duia paraula positiva, així
+  // que el lot es buidava a cada refresc (10 peces → 7 en tres minuts) i el
+  // diari no acumulava mai.
+  it('conserva una peça ja aprovada encara que el titular no dugui cap paraula positiva', () => {
+    const publicada = {
+      title: 'El Castell de Montjuïc obre fins tard per veure l’eclipsi solar',
+      summary: '', // applyOwnContent l'esborra per no reproduir el text del mitjà
+      language: 'ca',
+      editorialFormat: 'constructive',
+      editorialVersion: 18,
+    }
+    // El porter, tot sol, la faria caure: aquest és l'error que es corregeix.
+    expect(passesEditorialFilter(publicada.title, 'ca').passes).toBe(false)
+    expect(keepsEditorialClearance(publicada, 18)).toBe(true)
+  })
+
+  it('conserva les peces que va rescatar la IA, que mai no passaven per paraula clau', () => {
+    const rescatadaPerIa = {
+      title: 'Experts suggest searching for alien signals in new ways',
+      summary: '',
+      language: 'en',
+      editorialFormat: 'constructive',
+      editorialScore: 0, // neutra: va entrar pel veredicte de la IA
+      editorialVersion: 18,
+    }
+    expect(keepsEditorialClearance(rescatadaPerIa, 18)).toBe(true)
+  })
+
+  it('descarta el lot quan es pugen les regles editorials', () => {
+    const velles = {
+      title: 'Una peça aprovada amb les regles anteriors',
+      editorialFormat: 'constructive',
+      editorialVersion: 17,
+    }
+    expect(keepsEditorialClearance(velles, 18)).toBe(false)
+  })
+
+  it('els formats de servei no depenen del porter de positivitat', () => {
+    for (const format of ['verification', 'data', 'agenda', 'opportunity']) {
+      expect(
+        keepsEditorialClearance({ editorialFormat: format, editorialVersion: 1 }, 18),
+      ).toBe(true)
+    }
   })
 })
 
@@ -215,6 +397,184 @@ describe('POLITICAL_MARKERS — maniobra de partit', () => {
     expect(
       POLITICAL_MARKERS.test('comença la vacunació gratuïta contra la grip al barri'),
     ).toBe(false)
+  })
+})
+
+describe('formats editorials de servei', () => {
+  const verificationItem = `
+    <title><![CDATA[No, aquesta imatge de Trump durant la guerra no és real]]></title>
+    <link>https://www.verificat.cat/comprovacio-exemple/</link>
+    <description><![CDATA[La fotografia viral ha estat generada amb intel·ligència artificial.]]></description>
+    <content:encoded><![CDATA[Els verificadors han comparat la imatge amb fotografies originals i han localitzat errors visuals incompatibles amb l’escena real.]]></content:encoded>
+    <pubDate>Thu, 23 Jul 2026 08:00:00 +0000</pubDate>
+    <media:thumbnail url="https://www.verificat.cat/imatge.jpg" />
+  `
+
+  it('admet una verificació fiable encara que citi el rumor que desmenteix', () => {
+    const story = normalizeFeedItem(verificationItem, {
+      name: 'Verificat',
+      language: 'ca',
+      defaultCategory: 'Verificació',
+      forceCategory: true,
+      editorialMode: 'verification',
+      sourceTier: 'B',
+    })
+
+    expect(story).toMatchObject({
+      category: 'Verificació',
+      editorialFormat: 'verification',
+      source: 'Verificat',
+      sourceTier: 'B',
+      curated: true,
+    })
+    expect(story.ownContent).toBeUndefined()
+    expect(story.body).toBeUndefined()
+    expect(story.sourceContext).toContain('errors visuals')
+  })
+
+  it('manté el mateix contingut fora del radar positiu si no és una verificació', () => {
+    const story = normalizeFeedItem(verificationItem, {
+      name: 'Mitjà generalista',
+      language: 'ca',
+      defaultCategory: 'Actualitat',
+    })
+
+    expect(story).toBeNull()
+  })
+
+  it('normalitza l’Agenda Cultural com a proposta local accionable', () => {
+    const story = normalizeAgendaItem(
+      `
+        <title>Les Santes de Mataró</title>
+        <link>https://agenda.cultura.gencat.cat:443/activitat</link>
+        <description>Programa de la festa major del 25 al 29 de juliol, amb concerts al Parc Central, activitats familiars, cultura popular i accés gratuït a la majoria dels actes.</description>
+      `,
+      '2026-07-23T08:00:00.000Z',
+    )
+
+    expect(story).toMatchObject({
+      category: 'Agenda',
+      editorialFormat: 'agenda',
+      location: 'Mataró, Maresme',
+      sourceTier: 'A',
+      ownContent: false,
+    })
+    expect(story.sourceContext).toContain('Parc Central')
+    expect(story.url).not.toContain(':443')
+  })
+
+  it('converteix una convocatòria RAISC oberta en una oportunitat', () => {
+    const story = normalizeRaiscOpportunity({
+      objecte_de_la_convocat_ria: 'Ajuts per a projectes culturals',
+      url_diari_oficial: 'https://dogc.gencat.cat/ajut',
+      data_diari_oficial: '2026-07-20T00:00:00.000',
+      data_fi_termini_presentaci_sol_licitud: '2026-07-31T00:00:00.000',
+      tipus_de_beneficiaris: 'Entitats sense ànim de lucre',
+      import_total_convocat_ria: '400000',
+      regio_apli: 'CATALUNYA',
+    })
+
+    expect(story).toMatchObject({
+      category: 'Oportunitats',
+      editorialFormat: 'opportunity',
+      expiresAt: '2026-07-31T00:00:00.000',
+      source: 'Dades Obertes de Catalunya · RAISC',
+      ownContent: true,
+    })
+    expect(story.summary).toContain('400.000')
+    expect(story.body.join(' ')).toContain('31/7/2026')
+  })
+
+  it('converteix una actualització d’Idescat en una peça d’El marcador', () => {
+    const story = normalizeIdescatUpdate({
+      id: 't12',
+      c: "Construcció d'habitatges",
+      r: '2025',
+      updated: '2026-07-20T10:00:00+00:00',
+      l: 'https://www.idescat.cat/pub/?id=habit',
+      ff: {
+        f: [
+          { c: 'Habitatges protegits iniciats', v: '34,188,3128' },
+          { c: 'Habitatges iniciats', v: '187,840,15589' },
+        ],
+      },
+    })
+
+    expect(story).toMatchObject({
+      category: 'Dades',
+      editorialFormat: 'data',
+      source: 'Idescat',
+      ownContent: true,
+    })
+    expect(story.summary).toContain('Habitatges iniciats: 187')
+  })
+
+  it('manté una oportunitat a portada fins al final del dia del termini', () => {
+    const story = {
+      publishedAt: '2026-07-01T00:00:00.000Z',
+      expiresAt: '2026-07-23T00:00:00.000Z',
+    }
+    expect(
+      isStoryWithinLiveWindow(story, Date.parse('2026-07-23T20:00:00.000Z')),
+    ).toBe(true)
+    expect(
+      isStoryWithinLiveWindow(story, Date.parse('2026-07-24T00:00:00.000Z')),
+    ).toBe(false)
+  })
+
+  it('manté vigents les verificacions i els indicadors més enllà de quatre dies', () => {
+    const now = Date.parse('2026-07-23T12:00:00.000Z')
+    expect(
+      isStoryWithinLiveWindow(
+        {
+          publishedAt: '2026-07-01T12:00:00.000Z',
+          editorialFormat: 'verification',
+        },
+        now,
+      ),
+    ).toBe(true)
+    expect(
+      isStoryWithinLiveWindow(
+        {
+          publishedAt: '2026-01-01T12:00:00.000Z',
+          editorialFormat: 'data',
+        },
+        now,
+      ),
+    ).toBe(true)
+  })
+
+  it('publica el contingut de servei ja normalitzat sense tornar a dependre de la IA', async () => {
+    const story = normalizeRaiscOpportunity({
+      objecte_de_la_convocat_ria: 'Ajuts per a projectes culturals',
+      url_diari_oficial: 'https://dogc.gencat.cat/ajut',
+      data_diari_oficial: '2026-07-20T00:00:00.000',
+      data_fi_termini_presentaci_sol_licitud: '2026-07-31T00:00:00.000',
+      tipus_de_beneficiaris: 'Entitats sense ànim de lucre',
+    })
+
+    const [published] = await applyOwnContent([story], {})
+
+    expect(published).toMatchObject({
+      title: 'Ajuts per a projectes culturals',
+      ownContent: true,
+      editorialFormat: 'opportunity',
+    })
+    expect(published.body.join(' ')).toContain('Entitats sense ànim de lucre')
+  })
+})
+
+describe('capPerCategory — varietat temàtica', () => {
+  it('limita Cultura i Verificació sense reordenar la resta', () => {
+    const stories = [
+      ...Array.from({ length: 5 }, (_, i) => ({ category: 'Cultura', id: `c${i}` })),
+      ...Array.from({ length: 4 }, (_, i) => ({ category: 'Verificació', id: `v${i}` })),
+      { category: 'Ciència', id: 's1' },
+    ]
+    const result = capPerCategory(stories)
+    expect(result.filter((story) => story.category === 'Cultura')).toHaveLength(3)
+    expect(result.filter((story) => story.category === 'Verificació')).toHaveLength(2)
+    expect(result.at(-1).id).toBe('s1')
   })
 })
 

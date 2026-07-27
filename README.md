@@ -1,12 +1,13 @@
 # El Bon Diari
 
-Diari constructiu en català amb portada React, radar de notícies, hemeroteca,
-butlletí, notificacions web/iOS i backend a Cloudflare Workers.
+Mitjà constructiu en català amb portada React, radar de notícies, verificacions,
+dades públiques, oportunitats, agenda local, hemeroteca, butlletí,
+notificacions web/iOS i backend a Cloudflare Workers.
 
 ## Stack
 
 - React 19 i Vite 8
-- Cloudflare Workers, Static Assets, KV i Workers AI
+- Cloudflare Workers, Static Assets, D1, Queues, KV i Workers AI
 - Capacitor 7 per a l’app iOS
 - Vitest i ESLint
 
@@ -14,20 +15,27 @@ butlletí, notificacions web/iOS i backend a Cloudflare Workers.
 
 ```bash
 npm ci
+npm run dev:worker
+```
+
+En una segona terminal:
+
+```bash
 npm run dev
 ```
 
-El servidor de Vite envia `/api/*` al Worker desplegat. Per provar també el
-backend localment, usa `npm run dev:worker` després d’haver configurat els
-bindings i secrets de desenvolupament.
+El servidor de Vite envia `/api/*` a `http://127.0.0.1:8787` per defecte. Es pot
+canviar amb `BONDIARI_API_TARGET`, però apuntar al domini de producció exigeix
+també `BONDIARI_ALLOW_PRODUCTION_API=1`. Això evita que una sessió local executi
+mutacions sobre dades reals per accident.
+
+Copia `.env.example` a `.env.local` només si necessites personalitzar la
+destinació. No versionis secrets ni valors d’entorn locals.
 
 ## Verificació
 
 ```bash
-npm run lint
-npm test
-npm run check:articles
-npm run build
+npm run verify
 ```
 
 `npm run check:articles` comprova que cada peça editorial tingui `imageUrl` i
@@ -39,6 +47,14 @@ npm run build
 No s’accepten placeholders ni SVG genèrics de categoria. La font de veritat de
 aquestes regles és `src/lib/imageRules.js`.
 
+La mateixa verificació s’executa automàticament a GitHub Actions per a cada
+push i pull request.
+
+El radar en viu també aplica una barrera de profunditat, especificitat i
+utilitat abans de publicar una peça generada. Els criteris i l’estat de la fase
+editorial prioritària són a
+[`docs/QUALITAT-EDITORIAL.md`](docs/QUALITAT-EDITORIAL.md).
+
 ## Publicació
 
 ```bash
@@ -49,8 +65,22 @@ El build genera els HTML estàtics de les notícies, `sitemap.xml`, `feed.xml` i
 el service worker versionat. Wrangler publica el Worker i els assets de `dist/`
 segons `wrangler.jsonc`.
 
+Per validar o publicar staging:
+
+```bash
+npm run check:worker:staging
+npm run deploy:staging
+```
+
 Els secrets (Resend, xarxes socials, VAPID, APNs i refresc manual) no han d’anar
 mai al repositori. Es configuren amb `wrangler secret put`.
+
+L’operativa de D1, cues, migracions, diagnòstic i recuperació és a
+[`docs/PHASE2-OPERATIONS.md`](docs/PHASE2-OPERATIONS.md).
+
+El centre privat que resumeix si el sistema funciona correctament és a
+`/diagnostic`. La guia d’ús i els llindars d’alerta són a
+[`docs/PHASE3-CENTRE-OPERACIONS.md`](docs/PHASE3-CENTRE-OPERACIONS.md).
 
 ## Refresc manual protegit
 
@@ -66,6 +96,17 @@ BONDIARI_REFRESH_TOKEN="..." npm run refresh
 `npm run seccions` fa servir el mateix secret. El navegador només rellegeix
 l’edició publicada; les passades cares de fonts i IA queden limitades als crons
 i als scripts autenticats.
+
+Per provar el pipeline asíncron sense enviar cap notificació ni correu:
+
+```bash
+curl -X POST \
+  -H "Authorization: Bearer $BONDIARI_REFRESH_TOKEN" \
+  -H "Idempotency-Key: prova-manual-1" \
+  -H "Content-Type: application/json" \
+  --data '{"distribution":"none"}' \
+  https://bondiari-staging.sergicas.workers.dev/api/pipeline-trigger
+```
 
 ## App iOS
 

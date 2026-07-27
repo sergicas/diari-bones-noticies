@@ -66,11 +66,11 @@ export default function NewsletterForm({ defaultLanguage = 'ca', variant = 'full
     >
       <div className="newsletter-block__inner">
         <p className="newsletter-block__kicker">El butlletí</p>
-        <h2 id={headingId}>Les bones notícies, cada matí a les 7</h2>
+        <h2 id={headingId}>La selecció útil, cada matí a les 7</h2>
         <p className="newsletter-block__intro">
           {isCompact
-            ? 'Rep les millors notícies del dia al correu. Gratis, sense soroll i sense publicitat.'
-            : "Una selecció breu i curada de les millors notícies del dia, sense soroll ni publicitat. T'arriba al correu cada matí a les 7. Et pots donar de baixa en qualsevol moment amb un sol clic."}
+            ? 'Rep solucions, verificacions i informació útil. Gratis, sense soroll ni publicitat.'
+            : "Una selecció breu de peces constructives, verificacions i informació pràctica. T'arriba al correu cada matí a les 7, sense soroll ni publicitat. Et pots donar de baixa en qualsevol moment amb un sol clic."}
         </p>
         {typeof subscriberCount === 'number' && subscriberCount > 0 ? (
           <p className="newsletter-block__count" aria-live="polite">
@@ -129,7 +129,7 @@ export default function NewsletterForm({ defaultLanguage = 'ca', variant = 'full
         ) : null}
         {!isCompact ? (
           <p className="newsletter-block__note">
-            Mai compartim la teva adreça. Només el rebran les bones notícies de bondiari.
+            Mai compartim la teva adreça. Només rebràs la selecció de Bondiari.
           </p>
         ) : null}
       </div>

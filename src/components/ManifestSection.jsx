@@ -1,4 +1,4 @@
-import { editorialValues } from '../data/articles'
+import { editorialValues } from '../data/editorial.js'
 
 export default function ManifestSection() {
   return (

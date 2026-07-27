@@ -6,176 +6,101 @@ import { LIVE_EDITORIAL_VERSION } from '../lib/editorial-version.js'
 import { normalizeCategory, refineCategoryByContent } from '../lib/category.js'
 import { storyImagePath } from '../lib/story-image-path.js'
 import { applyOwnContent } from './storyText.js'
+import { attachRealPhotos, sanitizeStoryPhotos } from './storyPhoto.js'
+import {
+  selectPublishableStories,
+} from './editorialQuality.js'
 import { feedStoryId } from '../lib/story-id.js'
+import {
+  refreshIntervalMs,
+  targetStoryLimit,
+  maxStoriesPerSource,
+  collectionPoolSize,
+  maxStoriesPerLanguage,
+  sections,
+  rssFeeds,
+  allowedSourceNames,
+  selectFeedsForRun,
+  tickerFeedNames,
+} from './rss/feedsConfig.js'
+import {
+  normalizeAgendaItem,
+  collectAgendaStories,
+  normalizeRaiscOpportunity,
+  collectRaiscOpportunities,
+  normalizeIdescatUpdate,
+  collectIdescatUpdates,
+} from './rss/serviceFeeds.js'
+
+export {
+  refreshIntervalMs,
+  normalizeAgendaItem,
+  normalizeRaiscOpportunity,
+  normalizeIdescatUpdate,
+}
 
 // Les peces publicades es desen també sota una clau estable story:<id> perquè la
 // seva pàgina de detall es pugui resoldre encara que surtin de la portada (finestra
 // de 30 peces / 4 dies). Així els enllaços compartits o indexats no fan 404.
 const storyDetailTtlSeconds = 30 * 24 * 60 * 60
 
-export const refreshIntervalMs = 12 * 60 * 60 * 1000
-
 const cacheKey = 'latest'
 // El Bon Diari és un DIARI: el radar només manté notícies de pocs dies. Una
 // finestra llarga deixava que notícies velles amb moltes paraules positives
-// dominessin la portada eternament. 4 dies = prou marge per a seccions lentes
-// (ciència, cultura) sense fossilitzar-se. La portada del web encara n'ensenya
-// les de < 2 dies; la resta van a l'Hemeroteca.
-const maxLiveStoryAgeMs = 4 * 24 * 60 * 60 * 1000
-const liveEditorialVersion = LIVE_EDITORIAL_VERSION
-const targetStoryLimit = 50
-const maxStoriesPerSource = 8
-const collectionPoolSize = 80
-// Bondiari és un diari de Catalunya. Proporcions OBJECTIU sobre el lot
-// (targetStoryLimit = 50): català ~60% (sense sostre: omple la resta de la
-// portada), castellà ~20% (6), anglès ~10% (3) i la resta de llengües ~10% en
-// conjunt (francès/italià/portuguès, una cadascuna). Així el català domina la
-// portada i cap llengua forana no la pot inundar.
-const maxStoriesPerLanguage = { es: 6, en: 3, fr: 1, it: 1, pt: 1 }
-
-// Els feeds per secció de 3cat van quedar TRENCATS el 2026 (ara són pàgines
-// HTML, no RSS): donaven 0 notícies i malgastaven una subpetició cadascun. Les
-// seccions s'alimenten ara dels feeds dedicats de rssFeeds (El País Cultura/
-// Tecnologia/Ciència, ARA Cultura, etc.).
-const sections = []
-
-// Llista mestra de fonts en SIS llengües (ca, es, en, pt, fr, it). És massa
-// gran per baixar-la sencera en un sol refresc sense petar el límit de
-// subpeticions del pla gratuït (~50), així que les marcades amb `core: true`
-// es baixen SEMPRE (una àncora per llengua perquè cap quedi muda) i la resta
-// ROTEN: cada refresc n'agafa una finestra diferent (vegeu selectFeedsForRun).
-// Totes les URLs estan validades (responen RSS/Atom amb peces fresques).
-const rssFeeds = [
-  // ===== FONTS AMPLIADES (jul. 2026): proximitat CAT, estatal i europeu =====
-  { name: 'ARA', url: 'https://www.ara.cat/rss/latest/', language: 'ca', defaultCategory: 'Actualitat', core: true },
-  { name: 'ARA Internacional', url: 'https://www.ara.cat/rss/internacional/', language: 'ca', defaultCategory: 'Internacional' },
-  { name: 'ARA Cultura', url: 'https://www.ara.cat/rss/cultura/', language: 'ca', defaultCategory: 'Cultura' },
-  { name: 'ARA Societat', url: 'https://www.ara.cat/rss/societat/', language: 'ca', defaultCategory: 'Societat' },
-  { name: 'ARA Economia', url: 'https://www.ara.cat/rss/economia/', language: 'ca', defaultCategory: 'Economia' },
-  { name: 'El 9 Nou Osona', url: 'https://el9nou.cat/feed/?post_type=post&edicio=osona-ripolles', language: 'ca', defaultCategory: 'Comarcal' },
-  { name: 'El 9 Nou Valles', url: 'https://el9nou.cat/feed/?post_type=post&edicio=valles-oriental', language: 'ca', defaultCategory: 'Comarcal' },
-  { name: 'AnoiaDiari', url: 'https://www.anoiadiari.cat/rss', language: 'ca', defaultCategory: 'Comarcal' },
-  { name: "La Veu de l'Anoia", url: 'https://veuanoia.cat/feed/', language: 'ca', defaultCategory: 'Comarcal' },
-  { name: "L'Independent de Gracia", url: 'https://www.independent.cat/rss', language: 'ca', defaultCategory: 'Local' },
-  { name: 'Diari Mes', url: 'https://www.diarimes.com/ca/rss/home.xml', language: 'ca', defaultCategory: 'Comarcal' },
-  { name: 'Aguaita', url: 'https://www.aguaita.cat/rss', language: 'ca', defaultCategory: 'Comarcal' },
-  { name: 'Segre', url: 'https://www.segre.com/ca/rss/home.xml', language: 'ca', defaultCategory: 'Comarcal' },
-  { name: 'La Directa', url: 'https://directa.cat/feed/', language: 'ca', defaultCategory: 'Societat' },
-  { name: 'La Vanguardia Catalunya', url: 'https://www.lavanguardia.com/rss/local/catalunya.xml', language: 'es', defaultCategory: 'Actualitat' },
-  { name: 'La Vanguardia Girona', url: 'https://www.lavanguardia.com/rss/local/girona.xml', language: 'es', defaultCategory: 'Local' },
-  { name: 'La Vanguardia Tarragona', url: 'https://www.lavanguardia.com/rss/local/tarragona.xml', language: 'es', defaultCategory: 'Local' },
-  { name: 'La Vanguardia Lleida', url: 'https://www.lavanguardia.com/rss/local/lleida.xml', language: 'es', defaultCategory: 'Local' },
-  { name: 'elDiario.es', url: 'https://www.eldiario.es/rss/', language: 'es', defaultCategory: 'Actualitat' },
-  { name: 'La Vanguardia', url: 'https://www.lavanguardia.com/rss/home.xml', language: 'es', defaultCategory: 'Actualitat' },
-  { name: 'El Periodico', url: 'https://www.elperiodico.com/es/rss/sociedad/rss.xml', language: 'es', defaultCategory: 'Actualitat' },
-  { name: 'Newtral', url: 'https://www.newtral.es/feed/', language: 'es', defaultCategory: 'Societat' },
-  { name: 'The Local Spain', url: 'https://feeds.thelocal.com/rss/es', language: 'en', defaultCategory: 'Actualitat' },
-  { name: 'POLITICO Europe', url: 'https://www.politico.eu/feed/', language: 'en', defaultCategory: 'Politica' },
-
-  // NOTA: només fonts GRATUÏTES/obertes. S'han tret els mitjans amb subscripció
-  // o mur de pagament (ARA, El Punt Avui, Diari de Tarragona, El País, La
-  // Vanguardia, ABC, El Mundo, El Español, NYT, WaPo, WSJ, FT, Bloomberg, Le
-  // Monde, la Repubblica, Observador…). Vegeu l'historial de git per la llista
-  // completa del que s'ha retirat.
-  // ===================== CATALÀ =====================
-  { name: 'Vilaweb', url: 'https://www.vilaweb.cat/feed/', language: 'ca', defaultCategory: 'Actualitat', core: true },
-  { name: 'Nació Digital', url: 'https://www.naciodigital.cat/rss/', language: 'ca', defaultCategory: 'Actualitat', core: true },
-  { name: 'El Món', url: 'https://elmon.cat/feed/', language: 'ca', defaultCategory: 'Actualitat' },
-  // Local de Mataró i el Maresme (Capgròs). Categoria forçada a 'Local'.
-  { name: 'Capgròs', url: 'https://capgros.elnacional.cat/uploads/feeds/feed_ca.xml', language: 'ca', defaultCategory: 'Local', forceCategory: true, lenient: true, core: true },
-  { name: 'Betevé', url: 'https://beteve.cat/feed/', language: 'ca', defaultCategory: 'Barcelona' },
-  { name: 'Crític', url: 'https://www.elcritic.cat/feed', language: 'ca', defaultCategory: 'Periodisme' },
-
-  // ===================== CASTELLÀ (només obert/gratuït) =====================
-  { name: 'RTVE', url: 'https://www.rtve.es/rss/temas_noticias.xml', language: 'es', defaultCategory: 'Espanya', core: true },
-  { name: '20minutos', url: 'https://www.20minutos.es/rss/', language: 'es', defaultCategory: 'Espanya' },
-  // Agències / serveis d'informació gratuïts (RSS oficial verificat).
-  { name: 'Europa Press', url: 'https://www.europapress.es/rss/rss.aspx', language: 'es', defaultCategory: 'Espanya' },
-  { name: 'UN News', url: 'https://news.un.org/feed/subscribe/es/news/all/rss.xml', language: 'es', defaultCategory: 'Món' },
-
-  // ===================== ANGLÈS =====================
-  { name: 'BBC', url: 'https://feeds.bbci.co.uk/news/world/rss.xml', language: 'en', defaultCategory: 'Món', core: true },
-  // Diaris de bones notícies (ja curats: passen sense exigir paraula positiva).
-  { name: 'Positive News', url: 'https://www.positive.news/feed/', language: 'en', defaultCategory: 'Món', lenient: true, curated: true, core: true },
-  { name: 'Good News Network', url: 'https://www.goodnewsnetwork.org/feed/', language: 'en', defaultCategory: 'Món', lenient: true, curated: true },
-  { name: 'Reasons to be Cheerful', url: 'https://reasonstobecheerful.world/feed/', language: 'en', defaultCategory: 'Món', lenient: true, curated: true },
-  { name: 'The Guardian', url: 'https://www.theguardian.com/world/rss', language: 'en', defaultCategory: 'Món' },
-  { name: 'CNN', url: 'http://rss.cnn.com/rss/edition.rss', language: 'en', defaultCategory: 'Món' },
-  { name: 'Al Jazeera', url: 'https://www.aljazeera.com/xml/rss/all.xml', language: 'en', defaultCategory: 'Món' },
-  { name: 'NPR', url: 'https://feeds.npr.org/1001/rss.xml', language: 'en', defaultCategory: 'Món' },
-  { name: 'Sky News', url: 'https://feeds.skynews.com/feeds/rss/world.xml', language: 'en', defaultCategory: 'Món' },
-  { name: 'The Independent', url: 'https://www.independent.co.uk/news/world/rss', language: 'en', defaultCategory: 'Món' },
-  { name: 'The Conversation', url: 'https://theconversation.com/articles.atom', language: 'en', defaultCategory: 'Coneixement' },
-  { name: 'Science Daily', url: 'https://www.sciencedaily.com/rss/all.xml', language: 'en', defaultCategory: 'Ciència', forceCategory: true },
-  { name: 'Phys.org', url: 'https://phys.org/rss-feed/', language: 'en', defaultCategory: 'Ciència', forceCategory: true },
-  { name: 'BBC Science', url: 'https://feeds.bbci.co.uk/news/science_and_environment/rss.xml', language: 'en', defaultCategory: 'Ciència', forceCategory: true },
-  { name: 'Guardian Science', url: 'https://www.theguardian.com/science/rss', language: 'en', defaultCategory: 'Ciència', forceCategory: true },
-  { name: 'BBC Technology', url: 'https://feeds.bbci.co.uk/news/technology/rss.xml', language: 'en', defaultCategory: 'Tecnologia', forceCategory: true },
-  { name: 'TechCrunch', url: 'https://techcrunch.com/feed/', language: 'en', defaultCategory: 'Tecnologia', forceCategory: true },
-  { name: 'The Verge', url: 'https://www.theverge.com/rss/index.xml', language: 'en', defaultCategory: 'Tecnologia', forceCategory: true },
-  { name: 'Guardian Culture', url: 'https://www.theguardian.com/culture/rss', language: 'en', defaultCategory: 'Cultura', forceCategory: true },
-  { name: 'Smithsonian', url: 'https://www.smithsonianmag.com/rss/latest_articles/', language: 'en', defaultCategory: 'Cultura', forceCategory: true },
-  { name: 'Euronews', url: 'https://www.euronews.com/rss?level=theme&name=news', language: 'en', defaultCategory: 'Europa' },
-
-  // ===================== PORTUGUÈS (només obert/gratuït) =====================
-  { name: 'RTP Notícias', url: 'https://www.rtp.pt/noticias/rss', language: 'pt', defaultCategory: 'Món', core: true },
-  { name: 'CNN Portugal', url: 'https://cnnportugal.iol.pt/rss', language: 'pt', defaultCategory: 'Món' },
-  { name: 'G1', url: 'https://g1.globo.com/rss/g1/', language: 'pt', defaultCategory: 'Món' },
-  { name: 'Agência Brasil', url: 'https://agenciabrasil.ebc.com.br/rss/ultimasnoticias/feed.xml', language: 'pt', defaultCategory: 'Món' },
-
-  // ===================== FRANCÈS (només obert/gratuït) =====================
-  { name: 'France 24', url: 'https://www.france24.com/fr/rss', language: 'fr', defaultCategory: 'Europa', core: true },
-  { name: 'Positivr', url: 'https://positivr.fr/feed/', language: 'fr', defaultCategory: 'Europa', lenient: true, curated: true },
-  { name: 'RFI', url: 'https://www.rfi.fr/fr/rss', language: 'fr', defaultCategory: 'Europa' },
-  { name: '20 Minutes', url: 'https://www.20minutes.fr/feeds/rss-une.xml', language: 'fr', defaultCategory: 'Europa' },
-  { name: 'Franceinfo', url: 'https://www.francetvinfo.fr/titres.rss', language: 'fr', defaultCategory: 'Europa' },
-
-  // ===================== ITALIÀ (només obert/gratuït) =====================
-  { name: 'ANSA', url: 'https://www.ansa.it/sito/ansait_rss.xml', language: 'it', defaultCategory: 'Europa', core: true },
-  { name: 'Rai News', url: 'https://www.rainews.it/rss/tutti', language: 'it', defaultCategory: 'Europa' },
-  { name: 'Il Fatto Quotidiano', url: 'https://www.ilfattoquotidiano.it/feed/', language: 'it', defaultCategory: 'Europa' },
-  { name: 'Open', url: 'https://www.open.online/feed/', language: 'it', defaultCategory: 'Europa' },
-  { name: 'ANSA Cultura', url: 'https://www.ansa.it/sito/notizie/cultura/cultura_rss.xml', language: 'it', defaultCategory: 'Cultura', forceCategory: true },
-]
-
-// Quantes fonts es baixen com a màxim per refresc (límit de subpeticions del
-// pla gratuït ~50; en deixem ~14 per a la IA). Les `core` sempre; la resta
-// roten en finestres deterministes que avancen cada interval de refresc, de
-// manera que en poques hores es cobreixen totes les fonts del món.
-// Quantes fonts ROTATÒRIES de cada llengua entren a CADA refresc. El català i
-// el castellà (llengües de casa) en porten més; la resta, menys però sempre
-// alguna. Roten dins de cada llengua (avancen amb el temps), de manera que cada
-// refresc duu sempre una barreja de les sis llengües i, en uns quants refrescs,
-// es cobreix tota la llista mestra. core (9) + 13 rotatòries = 22 fonts/refresc,
-// que deixa marge per a les ~6 crides de la IA sota el límit de subpeticions.
-// El català en porta més (és la llengua de casa i ha de dominar la portada) i
-// l'anglès menys (ja té dues fonts core: BBC i Positive News).
-const rotatingPerLanguage = { ca: 5, es: 3, en: 2, fr: 1, it: 1, pt: 1 }
-
-// Noms de les fonts VIGENTS (totes gratuïtes). Serveix per purgar de seguida les
-// peces arrossegades ("carryover") d'una font que s'ha eliminat de la llista
-// (p. ex. en treure els mitjans de pagament), en lloc d'esperar que caduquin.
-const allowedSourceNames = new Set(rssFeeds.map((feed) => feed.name))
-
-function selectFeedsForRun(nowMs) {
-  const core = rssFeeds.filter((feed) => feed.core)
-  const tick = Math.floor(nowMs / refreshIntervalMs)
-  const seen = new Set(core.map((feed) => feed.url))
-  const picked = []
-  for (const [language, count] of Object.entries(rotatingPerLanguage)) {
-    const pool = rssFeeds.filter(
-      (feed) => !feed.core && feed.language === language,
-    )
-    if (!pool.length) continue
-    for (let i = 0; i < count; i += 1) {
-      const feed = pool[(tick * count + i) % pool.length]
-      if (!seen.has(feed.url)) {
-        seen.add(feed.url)
-        picked.push(feed)
-      }
+// dominessin la portada eternament. 5 dies (25-07-2026, abans 4) = prou marge
+// per a seccions lentes (ciència, cultura) sense fossilitzar-se. La portada en
+// mostra fins a 25 peces de < 5 dies (App.jsx); la resta va a l'Hemeroteca.
+const maxLiveStoryAgeMs = 5 * 24 * 60 * 60 * 1000
+export function isStoryWithinLiveWindow(story, now = Date.now()) {
+  if (story?.expiresAt) {
+    const rawExpiry = String(story.expiresAt)
+    const parsedExpiry = new Date(rawExpiry).getTime()
+    if (!Number.isNaN(parsedExpiry)) {
+      // Els datasets oficials solen representar el termini com les 00:00 del
+      // dia indicat. Editorialment és vigent fins al final d'aquell dia.
+      const endOfListedDay = /T00:00:00(?:\.000)?(?:Z)?$/.test(rawExpiry)
+        ? parsedExpiry + 24 * 60 * 60 * 1000 - 1
+        : parsedExpiry
+      return endOfListedDay >= now
     }
   }
-  return [...core, ...picked]
+  const publishedAt = new Date(story?.publishedAt).getTime()
+  const maxAgeByFormat = {
+    verification: 45 * 24 * 60 * 60 * 1000,
+    data: 365 * 24 * 60 * 60 * 1000,
+  }
+  const maxAge = maxAgeByFormat[story?.editorialFormat] || maxLiveStoryAgeMs
+  return (
+    !Number.isNaN(publishedAt) &&
+    now - publishedAt <= maxAge
+  )
+}
+const liveEditorialVersion = LIVE_EDITORIAL_VERSION
+
+// Decideix si una peça que ja és al lot s'hi pot quedar al refresc següent.
+//
+// El porter editorial (passesEditorialFilter) NO es pot tornar a passar aquí:
+// una peça publicada ja no conserva el text amb què es va jutjar. El titular
+// està reescrit i el resum s'esborra a applyOwnContent (summary = '') per no
+// reproduir el text del mitjà. Revalidar el titular reescrit tot sol feia caure
+// gairebé tot —un titular rarament du paraula positiva— i les peces rescatades
+// per la IA no en sobrevivien mai, perquè aquella revisió només mirava paraules
+// clau i no consultava el veredicte. Efecte observat el 27-07-2026: el lot no
+// acumulava i cada refresc tornava a començar de zero (10 peces → 7 en tres
+// minuts).
+//
+// La decisió editorial ja es va prendre quan la peça va entrar, amb el text
+// sencer i amb la IA. Aquí només comprovem que les REGLES no hagin canviat des
+// de llavors, i la marca editorialVersion és exactament aquest senyal: per
+// endurir el filtre cal pujar LIVE_EDITORIAL_VERSION, i llavors el lot sencer
+// es renova sota les regles noves.
+export function keepsEditorialClearance(story, currentVersion) {
+  // Els formats de servei (verificacions, dades, agenda, oportunitats) no
+  // passen pel porter de positivitat: hi confiem per la font.
+  if (story?.editorialFormat && story.editorialFormat !== 'constructive') {
+    return true
+  }
+  return story?.editorialVersion === currentVersion
 }
 
 // --- Diccionaris editorials per idioma -------------------------------------
@@ -675,6 +600,35 @@ const advertorialPhrasePatterns = [
   /\bsu\s+\d{1,3}\s*[ºo°]?\s*(cumpleaños|aniversari|aniversario)\b/i,
   /\b(baile\s+de\s+máscaras|alfombra\s+roja|red\s+carpet|photocall|paparazzi)\b/i,
   /\b\d[\d.,]*\s*(d[óo]lares|euros)\s+gastad[oa]s\b/i,
+  // RESULTATS D'EMPRESA (colat el 27/07: "Mango factura 1.852 milions d'euros
+  // en els primers sis mesos de l'any"). Una empresa que presenta comptes no és
+  // una bona notícia: és informació financera, i sovint arriba com a nota de
+  // premsa corporativa. El porter de positivitat no ho veia (cap paraula
+  // negativa) i el model l'aprovava. Es bloca pel senyal precís —la xifra amb
+  // el verb de facturació o el període comptable—, no per la paraula "empresa",
+  // perquè una cooperativa que crea llocs de treball ha de poder entrar.
+  // ATENCIÓ amb \b darrere una vocal accentuada: en JavaScript, "ó" no és un
+  // caràcter de paraula, així que /facturaci[óo]n?\b/ NO casa amb "facturació"
+  // (sí amb el castellà "facturación"). Per això aquí es tanca amb un
+  // "no vingui cap més lletra" en lloc de \b.
+  /\b(factur(a|à|ó|aron|en)|ingress(a|à|en)|ingres(a|ó|an))(?![a-zà-ÿ])[^.]{0,40}\b\d[\d.,]*\s*(mil|milers|miles|milions|millones|million|bilions)\b/i,
+  /\b(facturaci[óo]n?|xifra\s+de\s+negoci|cifra\s+de\s+negocio|volum\s+de\s+negoci|ebitda)(?![a-zà-ÿ])/i,
+  /\b(benefici|beneficio|guanys|ganancias)\s+(net|neto|nets|netos)\b/i,
+  /\bresultad(os|es)?\s+(del\s+)?(primer|segon|segundo|tercer|cuarto|quart)\s+(trimestre|semestre)\b/i,
+  /\bresultats\s+(semestrals|anuals|del\s+(primer|segon|tercer|quart)\s+(trimestre|semestre))\b/i,
+  // Autopromoció de marca: "a través del seu programa X", "el seu nou servei X".
+  /\ba\s+trav[ée]s\s+(del|de)\s+(el\s+)?(seu|su|seus|sus)\s+(programa|servei|servicio|pla|plan|projecte|proyecto)\b/i,
+  // AUTOBOMBO INSTITUCIONAL (colat el 27/07: "GBSB Global consolida un model
+  // educatiu pioner per formar els professionals que exigeix la nova economia").
+  // És el gènere de la nota de premsa que no anuncia cap fet: una organització
+  // es proclama referent, pionera o líder. Es bloca la COL·LOCACIÓ sencera
+  // —verb de posicionament + superlatiu de màrqueting—, no els verbs sols:
+  // "un institut lidera un projecte europeu" o "el barri consolida la seva
+  // xarxa de suport" són notícies i han de continuar entrant.
+  /\b(?:es|se)?\s*(?:consolida|posiciona|situa|erigeix|reafirma)\s+com[oa]?\s+(?:a\s+)?(?:un[ae]?\s+|el\s+|la\s+)?(?:referent|referente|l[íi]der|leader|pioner|pionero)(?![a-zà-ÿ])/i,
+  /\b(?:consolida|refor[çc]a|refuerza|impulsa|desplega|despliega)\s+(?:un|una|el|la)(?:\s+[\wÀ-ÿ·'’-]+){0,3}\s+(?:pioner|pionera|pioners|pioneres|pionero|innovador|innovadora|capdavanter|capdavantera|de\s+refer[èe]ncia|d[e'’]\s*[èe]xit)(?![a-zà-ÿ])/i,
+  /\blider(?:a|ant|ando)?\s+(?:la\s+)?(?:innovaci[óo]|transformaci[óo]|digitalitzaci[óo]|digitalizaci[óo]|sostenibilitat|sostenibilidad|excel·l[èe]ncia|excelencia)(?![a-zà-ÿ])/i,
+  /\b(?:aposta\s+per|apuesta\s+por)\s+(?:la\s+)?(?:innovaci[óo]|excel·l[èe]ncia|excelencia|transformaci[óo]\s+digital)(?![a-zà-ÿ])/i,
 ]
 
 export function looksLikeAdvertorial({ url, title, summary }) {
@@ -751,6 +705,10 @@ function asArray(value) {
 function stripHtml(value) {
   return String(value || '')
     .replace(/<[^>]*>/g, ' ')
+    // Alguns mitjans deixen al titular el marcador d'objecte incrustat (U+FFFC,
+    // on hi havia una foto o un vídeo) o el símbol de caràcter il·legible
+    // (U+FFFD). Arribaven tal qual a la portada com un requadre buit.
+    .replace(/[\uFFF9-\uFFFD]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
 }
@@ -887,6 +845,7 @@ function normalizeThreeCatStory(item, section) {
     category,
     location: detectLocation(fullText.toLowerCase()),
     summary: summarySnippet,
+    sourceContext: description.slice(0, 1400),
     impact:
       'El radar automàtic l’ha detectada com a notícia constructiva de proximitat.',
     source: '3CatInfo',
@@ -995,6 +954,19 @@ function extractPrimaryCategory(block, fallback) {
     if (value) return normalizeCategory(value, fallback)
   }
   return normalizeCategory(null, fallback)
+}
+
+function buildSourceContext(...values) {
+  const unique = []
+  const seen = new Set()
+  for (const value of values) {
+    const clean = decodeHtmlEntities(stripHtml(value))
+    const key = clean.toLocaleLowerCase()
+    if (!clean || seen.has(key)) continue
+    seen.add(key)
+    unique.push(clean)
+  }
+  return unique.join(' ').replace(/\s+/g, ' ').trim().slice(0, 1400)
 }
 
 // Marcadors de contingut POLÍTIC tens (partits, procés electoral o parlamentari,
@@ -1109,12 +1081,17 @@ export const UNIVERSAL_NEG = new RegExp(
   'i',
 )
 
-function normalizeFeedItem(block, feed) {
+export function normalizeFeedItem(block, feed) {
   const title = decodeHtmlEntities(stripHtml(extractTag(block, 'title')))
   const linkTag = extractTag(block, 'link')
   const link = decodeHtmlEntities(linkTag || extractAtomLink(block))
-  const descriptionHtml = extractTag(block, 'description') || extractTag(block, 'summary') || extractTag(block, 'content')
+  const descriptionHtml =
+    extractTag(block, 'description') ||
+    extractTag(block, 'summary') ||
+    extractTag(block, 'content')
+  const contentEncodedHtml = extractTag(block, 'content:encoded')
   const description = decodeHtmlEntities(stripHtml(descriptionHtml))
+  const contentEncoded = decodeHtmlEntities(stripHtml(contentEncodedHtml))
   const subtitle = decodeHtmlEntities(stripHtml(extractTag(block, 'subtitle')))
   const publishedAt =
     parseRfc822Date(extractTag(block, 'pubDate')) ||
@@ -1135,39 +1112,64 @@ function normalizeFeedItem(block, feed) {
 
   if (!title || !link || !publishedAt || !imageUrl) return null
 
-  const summarySource = subtitle || description || title
+  const summarySource = subtitle || description || contentEncoded || title
+  const sourceContext = buildSourceContext(
+    subtitle,
+    descriptionHtml,
+    contentEncodedHtml,
+  )
   const summarySnippet = `${summarySource.slice(0, 180)}${summarySource.length > 180 ? '...' : ''}`
   // Correcció per contingut: si el títol/resum tenen un senyal temàtic clar,
   // sobreescrivim la categoria heretada del feed (evita, p. ex., que un tema de
   // TV etiquetat com a Esports o una exposició de fotografia surtin mal ubicats).
-  const category = refineCategoryByContent(rawCategory, title, summarySource)
+  const editorialFormat = feed.editorialMode || 'constructive'
+  const isTrustedService = editorialFormat !== 'constructive'
+  const category = isTrustedService
+    ? rawCategory
+    : refineCategoryByContent(rawCategory, title, summarySource)
   if (looksLikeAdvertorial({ url: link, title, summary: summarySnippet })) return null
   const fullText = `${title} ${summarySource}`
   const fullTextLower = fullText.toLowerCase()
-  const { isPositive, isNegative } = passesEditorialFilter(fullText, feed.language)
-  if (isNegative) return null // clarament negativa (guerra, conflicte…): fora directament
-  // Bloc dur universal (multilingüe) per a categories que el model petit deixa
-  // passar: calor extrem/desastre climàtic i addicció a les pantalles.
-  if (UNIVERSAL_NEG.test(fullTextLower)) return null
+  let isPositive = false
+  if (!isTrustedService) {
+    const editorialResult = passesEditorialFilter(fullText, feed.language)
+    isPositive = editorialResult.isPositive
+    if (editorialResult.isNegative) return null
+    // Bloc dur universal (multilingüe) per a categories que el model petit
+    // deixa passar. No s'aplica als formats de verificació: el titular ha de
+    // poder citar precisament el rumor, conflicte o engany que desmenteix.
+    if (UNIVERSAL_NEG.test(fullTextLower)) return null
 
-  // Contingut POLÍTIC (maniobres de partit, eleccions, judicis, ultradreta…):
-  // gairebé mai és bona notícia i el model petit l'aprova per error massa sovint.
-  // El BLOQUEGEM en sec, com les negatives. Els feeds locals queden exempts (el
-  // plenari de Mataró sí que hi té cabuda).
-  const isPolitical =
-    !feed.lenient &&
-    (category === 'Política' || POLITICAL_MARKERS.test(fullTextLower))
-  if (isPolitical) return null
-  const editorialScore = isPositive || feed.lenient ? 1 : 0
+    // Contingut POLÍTIC tens: gairebé mai és una bona notícia. Els formats de
+    // verificació en queden exempts perquè comprovar el discurs polític és la
+    // seva funció editorial.
+    const isPolitical =
+      !feed.lenient &&
+      (category === 'Política' || POLITICAL_MARKERS.test(fullTextLower))
+    if (isPolitical) return null
+  }
+  const editorialScore = isTrustedService || isPositive || feed.lenient ? 1 : 0
+  const impactByFormat = {
+    verification:
+      'Aporta una comprovació documentada per separar els fets del soroll.',
+    agenda:
+      'Ofereix una activitat concreta que el lector pot aprofitar.',
+    opportunity:
+      'Converteix informació pública en una oportunitat accionable.',
+  }
 
   const story = {
     title,
     category,
     location: detectLocation(fullText.toLowerCase()),
     summary: summarySnippet,
+    sourceContext,
     impact:
+      impactByFormat[editorialFormat] ||
       'El radar automàtic l’ha detectada com a notícia constructiva.',
     source: feed.name,
+    sourceTier: feed.sourceTier || 'B',
+    editorialFormat,
     language: feed.language,
     url: link,
     // La foto del mitjà (imageUrl) només s'ha fet servir amunt com a senyal de
@@ -1181,11 +1183,30 @@ function normalizeFeedItem(block, feed) {
     // editorialScore calculat a dalt: 0 = neutre/polític (només surt si la IA
     // l'aprova) · 1 = bo (paraula clau positiva o feed local).
     editorialScore,
-    // Font ja curada de bones notícies (Positive News, Good News Network…): la
-    // IA hi confia i no la veta (com el contingut Local).
-    curated: Boolean(feed.curated),
+    // Una font constructiva curada o un canal de servei de confiança no torna
+    // a passar pel porter de positivitat. Manté, igualment, el crèdit i
+    // l'enllaç a l'original.
+    curated: Boolean(feed.curated || isTrustedService),
     editorialVersion: liveEditorialVersion,
     publishedAt,
+  }
+  // Verificacions i agenda també necessiten una reescriptura específica: la
+  // plantilla genèrica antiga produïa quatre cossos idèntics a portada.
+  if (editorialFormat === 'opportunity' || editorialFormat === 'data') {
+    const ownSummaryByFormat = {
+      opportunity:
+        `${feed.name} recull aquesta convocatòria i n’ofereix la informació oficial.`,
+      data:
+        `${feed.name} ha actualitzat aquest indicador públic.`,
+    }
+    story.summary =
+      ownSummaryByFormat[editorialFormat] ||
+      `${feed.name} ha publicat aquesta informació de servei.`
+    story.body = [
+      story.summary,
+      `${story.impact} Consulta la font original per veure’n totes les dades i el context.`,
+    ]
+    story.ownContent = true
   }
   // No la llencem (les clarament negatives ja han caigut amunt). La IA revisarà
   // totes les candidates: vetarà les dolentes que han colat per paraula clau i
@@ -1194,39 +1215,184 @@ function normalizeFeedItem(block, feed) {
   return story
 }
 
-async function collectFeedStories(feed) {
+export const FEED_HEALTH_KV_KEY = 'feed-health-stats'
+const CIRCUIT_BREAKER_MAX_FAILURES = 5
+const CIRCUIT_BREAKER_PAUSE_MS = 24 * 60 * 60 * 1000 // 24 hores
+
+export async function readFeedHealthStats(kvOrEnv) {
+  const kv = kvOrEnv?.LIVE_NEWS_KV || kvOrEnv
+  if (!kv || typeof kv.get !== 'function') return {}
+  try {
+    const data = await kv.get(FEED_HEALTH_KV_KEY, 'json')
+    return data && typeof data === 'object' ? data : {}
+  } catch (error) {
+    console.warn('[feed-health] no s’ha pogut llegir KV', error?.message)
+    return { _readError: true }
+  }
+}
+
+export async function saveFeedHealthStats(kvOrEnv, stats) {
+  const kv = kvOrEnv?.LIVE_NEWS_KV || kvOrEnv
+  if (!kv || typeof kv.put !== 'function' || !stats) return
+  if (stats._readError) {
+    console.warn('[feed-health] s’evita sobreescriure KV per error de lectura previ')
+    return
+  }
+  const cleanStats = { ...stats }
+  delete cleanStats._readError
+  try {
+    await kv.put(FEED_HEALTH_KV_KEY, JSON.stringify(cleanStats))
+  } catch (error) {
+    console.warn('[feed-health] no s’han pogut desar les mètriques', error?.message)
+  }
+}
+
+export function isFeedPaused(feedHealthRecord, now = Date.now()) {
+  if (!feedHealthRecord || !feedHealthRecord.pausedUntil) return false
+  const pauseEnd = new Date(feedHealthRecord.pausedUntil).getTime()
+  return !isNaN(pauseEnd) && pauseEnd > now
+}
+
+export function isSignificantHealthChange(oldRecord, newRecord) {
+  if (!newRecord) return false
+  if (!oldRecord) {
+    return newRecord.status !== 'ok' || (newRecord.consecutiveFailures || 0) > 0
+  }
+  if (oldRecord.status !== newRecord.status) return true
+  if ((oldRecord.consecutiveFailures || 0) !== (newRecord.consecutiveFailures || 0)) return true
+  if (oldRecord.pausedUntil !== newRecord.pausedUntil) return true
+  return false
+}
+
+export async function fetchFeed(feed, options = {}) {
+  const timeoutMs = options.timeoutMs ?? 6000
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+  const startTime = Date.now()
+
   try {
     const response = await fetch(feed.url, {
       headers: {
         accept: 'application/rss+xml, application/xml, application/atom+xml, text/xml, */*',
         'user-agent': 'El Bon Diari/1.0 (+https://bondiari.com)',
       },
+      signal: controller.signal,
     })
+
     if (!response.ok) {
-      console.warn(`[radar] Feed ${feed.name} ha respost ${response.status}`)
-      return { stories: [], candidates: 0 }
-    }
-    const xml = await response.text()
-    if (!/<rss[\s>]|<feed[\s>]/i.test(xml)) {
-      console.warn(`[radar] Feed ${feed.name} no sembla RSS/Atom (${xml.length} bytes)`)
-      return { stories: [], candidates: 0 }
+      const durationMs = Date.now() - startTime
+      return {
+        ok: false,
+        status: response.status,
+        xml: null,
+        error: `HTTP ${response.status}`,
+        durationMs,
+      }
     }
 
-    const itemRegex = /<(item|entry)\b[^>]*>([\s\S]*?)<\/\1>/gi
-    const stories = []
-    let candidates = 0
-    let match
-    while ((match = itemRegex.exec(xml)) !== null) {
-      candidates += 1
-      const story = normalizeFeedItem(match[2], feed)
-      if (story) stories.push(story)
+    const xml = await response.text()
+    const durationMs = Date.now() - startTime
+    if (!/<rss[\s>]|<feed[\s>]/i.test(xml)) {
+      return {
+        ok: false,
+        status: response.status,
+        xml,
+        error: 'Not valid RSS/Atom XML',
+        durationMs,
+      }
     }
-    return { stories, candidates }
+
+    return {
+      ok: true,
+      status: response.status,
+      xml,
+      error: null,
+      durationMs,
+    }
   } catch (error) {
-    console.warn(`[radar] Ha fallat el feed ${feed.name}`, error)
-    return { stories: [], candidates: 0 }
+    const durationMs = Date.now() - startTime
+    const isAbort = error.name === 'AbortError' || controller.signal?.aborted
+    return {
+      ok: false,
+      status: 0,
+      xml: null,
+      error: isAbort ? `Timeout (${timeoutMs}ms)` : (error?.message || 'Fetch error'),
+      durationMs,
+    }
+  } finally {
+    clearTimeout(timeoutId)
   }
 }
+
+export async function collectFeedStories(feed, options = {}) {
+  const now = options.now ?? Date.now()
+  const healthRecord = options.healthRecord || null
+
+  if (isFeedPaused(healthRecord, now)) {
+    console.warn(`[radar] Feed ${feed.name} pausat per circuit breaker (fins ${healthRecord.pausedUntil})`)
+    return { stories: [], candidates: 0, skipped: true, healthUpdate: healthRecord }
+  }
+
+  const result = await fetchFeed(feed, options)
+  const isoNow = new Date(now).toISOString()
+
+  if (!result.ok) {
+    console.warn(`[radar] Ha fallat el feed ${feed.name}: ${result.error}`)
+    const prevFailures = healthRecord?.consecutiveFailures || 0
+    const newFailures = prevFailures + 1
+    const pausedUntil =
+      newFailures >= CIRCUIT_BREAKER_MAX_FAILURES
+        ? new Date(now + CIRCUIT_BREAKER_PAUSE_MS).toISOString()
+        : null
+
+    const healthUpdate = {
+      name: feed.name,
+      url: feed.url,
+      lastAttemptAt: isoNow,
+      lastSuccessAt: healthRecord?.lastSuccessAt || null,
+      lastHttpStatus: result.status,
+      durationMs: result.durationMs,
+      storiesCount: 0,
+      rawItemCount: 0,
+      consecutiveFailures: newFailures,
+      status: 'error',
+      pausedUntil,
+      lastError: result.error,
+    }
+    return { stories: [], candidates: 0, healthUpdate }
+  }
+
+  const itemRegex = /<(item|entry)\b[^>]*>([\s\S]*?)<\/\1>/gi
+  const stories = []
+  let candidates = 0
+  let match
+  while ((match = itemRegex.exec(result.xml)) !== null) {
+    candidates += 1
+    const story = normalizeFeedItem(match[2], feed)
+    if (story) stories.push(story)
+  }
+
+  const isEmpty = candidates === 0
+  const healthUpdate = {
+    name: feed.name,
+    url: feed.url,
+    lastAttemptAt: isoNow,
+    lastSuccessAt: isoNow,
+    lastHttpStatus: result.status,
+    durationMs: result.durationMs,
+    storiesCount: stories.length,
+    rawItemCount: candidates,
+    consecutiveFailures: 0,
+    status: isEmpty ? 'empty' : 'ok',
+    pausedUntil: null,
+    lastError: isEmpty ? 'RSS sense ítems' : null,
+  }
+
+  return { stories, candidates, healthUpdate }
+}
+
+
+
 
 // --- Segona capa: rescat amb IA (Cloudflare Workers AI) --------------------
 // El filtre de paraules clau és ràpid però cec al sentit: rebutja notícies
@@ -1396,14 +1562,46 @@ async function aiReview(env, candidates, { failOpen = true } = {}) {
 
 // --- Recol·lecció combinada -----------------------------------------------
 
+function sourceMaterialScore(story) {
+  const contextWords = String(story?.sourceContext || '')
+    .trim()
+    .split(/\s+/u)
+    .filter(Boolean).length
+  const tierScore = story?.sourceTier === 'A' ? 3 : story?.sourceTier === 'B' ? 2 : 1
+  const localScore = story?.location && story.location !== 'Món' ? 2 : 0
+  return tierScore + localScore + Math.min(5, Math.floor(contextWords / 40))
+}
+
 export async function collectLivePositiveNews(env) {
+  const now = Date.now()
+  const healthStats = await readFeedHealthStats(env)
   // Només la finestra de fonts d'aquest refresc (core + rotatòries), per no
   // petar el límit de subpeticions. La rotació avança sola amb el temps.
-  const feedsThisRun = selectFeedsForRun(Date.now())
-  const [sectionResults, feedResults] = await Promise.all([
+  const feedsThisRun = selectFeedsForRun(now)
+  const [sectionResults, feedResults, serviceResults] = await Promise.all([
     Promise.all(sections.map(collectSectionStories)),
-    Promise.all(feedsThisRun.map(collectFeedStories)),
+    Promise.all(
+      feedsThisRun.map((feed) =>
+        collectFeedStories(feed, {
+          now,
+          healthRecord: healthStats[feed.name],
+          env,
+        }),
+      ),
+    ),
+    Promise.all([
+      collectAgendaStories(),
+      collectRaiscOpportunities(),
+      collectIdescatUpdates(),
+    ]),
   ])
+
+  for (const result of feedResults) {
+    if (result.healthUpdate) {
+      healthStats[result.healthUpdate.name] = result.healthUpdate
+    }
+  }
+  await saveFeedHealthStats(env, healthStats)
 
   const stories = []
   let reviewedCount = 0
@@ -1412,6 +1610,10 @@ export async function collectLivePositiveNews(env) {
     reviewedCount += result.candidates
   }
   for (const result of feedResults) {
+    stories.push(...result.stories)
+    reviewedCount += result.candidates
+  }
+  for (const result of serviceResults) {
     stories.push(...result.stories)
     reviewedCount += result.candidates
   }
@@ -1427,10 +1629,7 @@ export async function collectLivePositiveNews(env) {
   // paraula clau primer), perquè la IA gasti el pressupost de crides en les més
   // probables de sortir.
   const recents = [...uniqueStories.values()]
-    .filter(
-      (story) =>
-        Date.now() - new Date(story.publishedAt).getTime() <= maxLiveStoryAgeMs,
-    )
+    .filter((story) => isStoryWithinLiveWindow(story))
     .sort((left, right) => {
       // Un DIARI lidera amb el dia d'avui. Ordenem per DIA (el més nou primer)
       // i, dins del mateix dia, per com de prometedora és (paraula clau primer),
@@ -1442,7 +1641,11 @@ export async function collectLivePositiveNews(env) {
       const dayBucket =
         Math.floor(timeRight / 86400000) - Math.floor(timeLeft / 86400000)
       if (dayBucket !== 0) return dayBucket
-      return right.editorialScore - left.editorialScore || timeRight - timeLeft
+      return (
+        sourceMaterialScore(right) - sourceMaterialScore(left) ||
+        right.editorialScore - left.editorialScore ||
+        timeRight - timeLeft
+      )
     })
 
   // La IA revisa les candidates: veta les dolentes que han colat per paraula clau
@@ -1493,7 +1696,9 @@ async function setCachedPayload(kv, stories) {
 
 // --- Memòria d'URLs ja servides (perquè cada dia hi hagi peces noves) -----
 
-const seenUrlsKey = 'seen-urls-v3'
+// v4 permet reavaluar les URL de l'edició antiga amb els nous criteris de
+// qualitat i el context de font ampliat.
+const seenUrlsKey = 'seen-urls-v4'
 const seenUrlsRetentionMs = 14 * 24 * 60 * 60 * 1000
 const minFreshStoriesForFullRefresh = 10
 
@@ -1559,8 +1764,28 @@ export async function readEditorialStats(kv) {
 // Seccions editorials de poc volum que abans es quedaven seques perquè les
 // categories grans (Espanya, Societat…) s'enduien totes les places.
 const guaranteedCategories = [
-  'Local', 'Cultura', 'Tecnologia', 'Ciència', 'Salut', 'Medi ambient', 'Educació',
+  'Local', 'Verificació', 'Dades', 'Oportunitats', 'Agenda', 'Cultura',
+  'Tecnologia', 'Ciència', 'Salut', 'Medi ambient', 'Educació',
 ]
+
+const categoryLimits = {
+  Cultura: 3,
+  Verificació: 2,
+  Agenda: 2,
+  Local: 4,
+}
+
+export function capPerCategory(stories, defaultLimit = 3) {
+  const counts = new Map()
+  return stories.filter((story) => {
+    const category = story?.category || 'Actualitat'
+    const limit = categoryLimits[category] || defaultLimit
+    const count = counts.get(category) || 0
+    if (count >= limit) return false
+    counts.set(category, count + 1)
+    return true
+  })
+}
 
 // Garanteix que cada secció de la llista, si té alguna peça disponible al
 // conjunt, tingui com a mínim una notícia al lot final. Si cal fer lloc, treu
@@ -1590,10 +1815,15 @@ function ensureCategoryCoverage(capped, pool, limit) {
   return result
 }
 
-export async function getLiveNewsPayload(kv, { force = false, env } = {}) {
+export async function getLiveNewsPayload(
+  kv,
+  { force = false, env, allowRefresh = true } = {},
+) {
+  const runStartTime = Date.now()
   let cached = null
   try {
     cached = await getCachedPayload(kv)
+    sanitizeStoryPhotos(cached?.stories)
   } catch (error) {
     console.warn('No s’ha pogut llegir la memòria de notícies', error)
   }
@@ -1601,8 +1831,29 @@ export async function getLiveNewsPayload(kv, { force = false, env } = {}) {
   if (!force) {
     const updatedAt = cached?.updatedAt ? new Date(cached.updatedAt).getTime() : 0
     const isFresh = updatedAt && Date.now() - updatedAt < refreshIntervalMs
-    if (cached?.stories && isFresh) {
+    const usesCurrentEditorialVersion =
+      cached?.stories?.length > 0 &&
+      cached.stories.every(
+        (story) => story.editorialVersion === liveEditorialVersion,
+      )
+    if (cached?.stories && isFresh && usesCurrentEditorialVersion) {
       return { ...cached, cache: 'hit' }
+    }
+
+    // La ruta pública només ha de llegir. Recollir desenes de fonts, passar-les
+    // per IA i escriure KV és feina del cron, la cua o l'endpoint manual. Si la
+    // caché és vella la servim igualment; si encara no n'hi ha, responem buit en
+    // lloc de deixar el visitant esperant una regeneració llarga.
+    if (!allowRefresh) {
+      if (cached?.stories) {
+        return { ...cached, cache: 'stale-readonly' }
+      }
+      return {
+        updatedAt: null,
+        nextRefreshAt: null,
+        stories: [],
+        cache: 'miss-readonly',
+      }
     }
   }
 
@@ -1636,21 +1887,21 @@ export async function getLiveNewsPayload(kv, { force = false, env } = {}) {
     .filter((s) => !freshUrlSet.has(s.url))
     // CADUCITAT: les notícies surten del lot quan passen de la finestra (4 dies),
     // perquè no s'arrosseguin eternament i fossilitzin la portada.
-    .filter(
-      (s) => Date.now() - new Date(s.publishedAt).getTime() <= maxLiveStoryAgeMs,
-    )
-    // Revalidem contra el filtre editorial ACTUAL (si l'hem endurit, les velles
-    // que ara no passen cauen aquí en lloc d'arrossegar-se).
-    .filter((s) => passesEditorialFilter(`${s.title} ${s.summary || ''}`, s.language).passes)
+    .filter((s) => isStoryWithinLiveWindow(s))
+    .filter((s) => keepsEditorialClearance(s, liveEditorialVersion))
     // Descartem l'arrossegament de fonts que ja no són a la llista (p. ex. mitjans
     // de pagament retirats): així desapareixen a la primera, sense esperar 4 dies.
     .filter((s) => allowedSourceNames.has(s.source))
-    .map(({ isFresh: _isFresh, ...rest }) => rest)
+    .map(({ isFresh: _isFresh, ...rest }) => ({
+      ...rest,
+      editorialVersion: liveEditorialVersion,
+    }))
   const preDiversity = [...freshStories, ...carryover]
   // Acotem les llengües foranes ABANS de la diversitat per font, perquè el
   // català i el castellà mai no quedin fora encara que un dia hi hagi allau de
   // notícies europees.
-  const balanced = capPerLanguage(preDiversity, maxStoriesPerLanguage)
+  const languageBalanced = capPerLanguage(preDiversity, maxStoriesPerLanguage)
+  const balanced = capPerCategory(languageBalanced)
   const finalStories = ensureCategoryCoverage(
     applyDiversityCap(balanced, maxStoriesPerSource, targetStoryLimit),
     balanced,
@@ -1667,19 +1918,52 @@ export async function getLiveNewsPayload(kv, { force = false, env } = {}) {
   // peces, així que cap foto de tercers pot colar-se. Vegeu src/server/storyText.js.
   const enrichedStories = await applyOwnContent(finalStories, env)
 
-  // NO publiquem les peces sense contingut propi real (titular + cos generats per
-  // la IA). Abans, quan la IA encara no havia reescrit una peça (o s'exhauria la
-  // quota), sortia a portada amb el titular genèric "Una bona notícia · X" i una
-  // pàgina de detall buida. Ara es retenen fins que tenen contingut: com que
-  // s'arrosseguen entre refrescs i el contingut es cacheja (own:<id>), la portada
-  // s'omple igualment amb peces completes en comptes de mig-fetes.
-  const publishedStories = enrichedStories.filter((story) => story.ownContent)
+  // Una peça generada no és automàticament publicable. La barrera editorial
+  // exigeix profunditat, frases específiques, impacte útil i font identificada.
+  let qualityRejectedCount = 0
+  const qualityRejectedByIssue = {}
+  const publishedStories = selectPublishableStories(enrichedStories, {
+    onReject: (story, result) => {
+      qualityRejectedCount += 1
+      for (const issue of result.issues) {
+        qualityRejectedByIssue[issue] =
+          (qualityRejectedByIssue[issue] || 0) + 1
+      }
+      console.warn(
+        JSON.stringify({
+          event: 'editorial.story.rejected',
+          storyId: feedStoryId(story.url),
+          source: story.source,
+          issues: result.issues,
+          bodyWords: result.metrics.bodyWords,
+        }),
+      )
+    },
+  })
 
   // Xarxa de seguretat: si en aquesta passada cap peça no ha assolit contingut
   // propi (p. ex. la IA no està disponible), mantenim el lot anterior en lloc de
   // buidar la portada.
   if (publishedStories.length === 0 && cached?.stories?.length) {
-    return { ...cached, cache: 'stale-incomplete' }
+    const safeCachedStories = selectPublishableStories(cached.stories)
+    if (safeCachedStories.length > 0) {
+      return {
+        ...cached,
+        stories: safeCachedStories,
+        cache: 'stale-incomplete',
+        qualityRejectedCount,
+        qualityRejectedByIssue,
+      }
+    }
+  }
+
+  // Fase 4: foto real de Wikimedia Commons només per a peces centrades en un
+  // lloc concret. Els actes conserven la il·lustració pròpia; si Commons falla,
+  // el radar no s'atura mai per una foto.
+  try {
+    await attachRealPhotos(publishedStories)
+  } catch (error) {
+    console.warn('[fotos] No s’han pogut cercar fotos reals', error?.message)
   }
 
   // Marquem com a "vistes" NOMÉS les noves que de debò entren al lot. Una
@@ -1712,10 +1996,40 @@ export async function getLiveNewsPayload(kv, { force = false, env } = {}) {
     )
     await updateEditorialStats(kv, {
       reviewed: reviewedThisPass,
-      // "published" compta peces NOVES úniques d'aquesta passada (no el total del
-      // lot a cada refresc), perquè el comptador mensual no s'infli artificialment.
       published: shownFreshUrls.length,
     })
+
+    const cronDurationMs = Date.now() - runStartTime
+    const todayKey = new Date().toISOString().slice(0, 10)
+    const cronTiming = {
+      runStartTime,
+      cronDurationMs,
+      reviewedThisPass,
+      publishedCount: shownFreshUrls.length,
+      totalStories: publishedStories.length,
+      qualityRejectedCount,
+      qualityRejectedByIssue,
+      updatedAt: new Date().toISOString(),
+    }
+
+    try {
+      await kv.put('cron-timing:latest', JSON.stringify(cronTiming))
+      const healthStats = await readFeedHealthStats(env)
+      const dailySnapshot = {
+        date: todayKey,
+        cronTiming,
+        feedHealthStats: healthStats,
+        updatedAt: new Date().toISOString(),
+      }
+      await kv.put(
+        `health-daily:${todayKey}`,
+        JSON.stringify(dailySnapshot),
+        { expirationTtl: 30 * 24 * 60 * 60 },
+      )
+    } catch (kvErr) {
+      console.warn('[telemetria] No s’ha pogut desar el snapshot de salut diari', kvErr)
+    }
+
     const cacheLabel =
       freshStories.length >= minFreshStoriesForFullRefresh
         ? 'refresh-fresh'
@@ -1728,6 +2042,9 @@ export async function getLiveNewsPayload(kv, { force = false, env } = {}) {
       freshCount: freshStories.length,
       totalCandidates: allStories.length,
       reviewedThisPass,
+      cronDurationMs,
+      qualityRejectedCount,
+      qualityRejectedByIssue,
     }
   } catch (error) {
     console.warn('No s’ha pogut escriure la memòria de notícies', error)
@@ -1737,6 +2054,8 @@ export async function getLiveNewsPayload(kv, { force = false, env } = {}) {
       nextRefreshAt: new Date(Date.now() + refreshIntervalMs).toISOString(),
       stories: publishedStories,
       cache: 'transient',
+      qualityRejectedCount,
+      qualityRejectedByIssue,
     }
   }
 }
@@ -1755,8 +2074,7 @@ const tickerCacheKey = 'live-ticker'
 // o IA; la frescor es decideix amb updatedAt.
 const tickerFreshnessMs = 15 * 60 * 1000
 const tickerStorageTtlSeconds = 60 * 60
-// Un grapat de fonts catalanes GRATUÏTES i ràpides (poques subpeticions).
-const tickerFeedNames = ['Vilaweb', 'Nació Digital', 'Betevé', 'Capgròs', 'El Món', 'Crític']
+
 const tickerLimit = 12
 
 export function storiesRequiringDetailPersistence(publishedStories, shownFreshUrls) {
@@ -1784,8 +2102,33 @@ export async function getLiveTicker(env, { force = false } = {}) {
   }
 
   // 2) Scrap ràpid d'un subconjunt de fonts.
+  const now = Date.now()
+  const healthStats = await readFeedHealthStats(env)
   const feeds = rssFeeds.filter((feed) => tickerFeedNames.includes(feed.name))
-  const results = await Promise.all(feeds.map((feed) => collectFeedStories(feed)))
+  const results = await Promise.all(
+    feeds.map((feed) =>
+      collectFeedStories(feed, {
+        now,
+        healthRecord: healthStats[feed.name],
+        env,
+      }),
+    ),
+  )
+
+  let hasSignificantChange = false
+  for (const res of results) {
+    if (res.healthUpdate) {
+      const oldRecord = healthStats[res.healthUpdate.name]
+      if (isSignificantHealthChange(oldRecord, res.healthUpdate)) {
+        hasSignificantChange = true
+      }
+      healthStats[res.healthUpdate.name] = res.healthUpdate
+    }
+  }
+  if (hasSignificantChange) {
+    await saveFeedHealthStats(env, healthStats)
+  }
+
   const seen = new Set()
   const candidates = []
   for (const { stories } of results) {

@@ -86,7 +86,7 @@ async function publishToBluesky(env, story) {
       external: {
         uri: link,
         title: truncate(story.title, 290),
-        description: truncate(story.summary || 'Una bona notícia a El Bon Diari.', 290),
+        description: truncate(story.summary || 'Una peça d’El Bon Diari.', 290),
         ...(thumb ? { thumb } : {}),
       },
     },

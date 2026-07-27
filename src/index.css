@@ -1,4 +1,3 @@
-
 :root {
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   line-height: 1.5;
@@ -11,8 +10,8 @@
   -moz-osx-font-smoothing: grayscale;
   --paper: #FFFFFF;
   --ink: #000000;
-  --muted: #8E8E93;
-  --accent: #34C759;
+  --muted: #56565C;
+  --accent: #1D7A3A;
   --secondary: #000000;
   --line: rgba(0, 0, 0, 0.1);
   --line-strong: rgba(0, 0, 0, 0.15);
@@ -20,6 +19,11 @@
   --hard-shadow: 0 20px 80px rgba(0, 0, 0, 0.12);
   --display-font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   color-scheme: light;
+  /* Colors d'estat amb contrast AA sobre fons clar (text i xips). */
+  --color-success: #1D7A3A;
+  --color-warning: #8A5A00;
+  --color-error: #B02A37;
+  --color-primary: #0B5CAD;
 }
 
 *,
@@ -31,6 +35,33 @@
 html {
   scroll-behavior: smooth;
 }
+
+/* Accessibilitat: Mides de Lletra */
+html.font-size-large {
+  font-size: 118%;
+}
+
+html.font-size-xlarge {
+  font-size: 132%;
+}
+
+/* Accessibilitat: Mode d'Alta Llegibilitat */
+html.high-legibility {
+  line-height: 1.85;
+}
+
+html.high-legibility p,
+html.high-legibility li,
+html.high-legibility article {
+  letter-spacing: 0.015em;
+}
+
+/* NOTA sobre el mode fosc: NO afegir aquí cap bloc
+   @media (prefers-color-scheme: dark) mentre App.css no estigui adaptat.
+   Es va provar (juliol 2026) i el resultat va ser text clar sobre les
+   targetes blanques d'App.css: portada il·legible per a qui navega en
+   fosc. El tema fosc complet és feina d'un bloc propi, no d'un pedaç.
+   La prova accessibilityBlock1.test.js vigila que no es repeteixi. */
 
 @media (prefers-reduced-motion: reduce) {
   html {
@@ -86,4 +117,114 @@ p {
 ::selection {
   background: rgba(52, 199, 89, 0.2);
   color: var(--ink);
+}
+
+.print-only {
+  display: none;
+}
+
+/* Full d'estil d'impressió neta per a aules i tallers educatius */
+@media print {
+  @page {
+    margin: 18mm;
+  }
+
+  html,
+  html.font-size-large,
+  html.font-size-xlarge {
+    font-size: 12pt !important;
+  }
+
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-size: 12pt !important;
+    line-height: 1.5 !important;
+  }
+
+  .skip-link,
+  .site-header,
+  .site-footer,
+  .footer-note,
+  .newsletter-form,
+  .accessibility-controls,
+  .no-print,
+  button,
+  nav,
+  input,
+  .link-button {
+    display: none !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  #root,
+  .app-shell,
+  .page-shell,
+  .site-main {
+    display: block !important;
+    min-height: 0 !important;
+  }
+
+  .page-shell,
+  .section-block,
+  .masthead,
+  article {
+    border: none !important;
+    box-shadow: none !important;
+    background: transparent !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+  }
+
+  .article-page {
+    font-family: Georgia, "Times New Roman", serif !important;
+  }
+
+  .article-print-header {
+    margin-bottom: 18pt;
+    padding-bottom: 12pt;
+    border-bottom: 1.5pt solid #000000;
+  }
+
+  .article-print-header h1 {
+    margin: 5pt 0 9pt !important;
+    font-size: 22pt !important;
+    line-height: 1.12 !important;
+  }
+
+  .article-print-header__kicker,
+  .article-print-header__meta {
+    font-family: Arial, Helvetica, sans-serif !important;
+    font-size: 9.5pt !important;
+    font-weight: 700;
+  }
+
+  .article-print-header__summary {
+    margin: 0 0 9pt !important;
+    font-size: 13pt !important;
+    line-height: 1.45 !important;
+  }
+
+  .article-page__body {
+    display: block !important;
+    margin: 0 !important;
+  }
+
+  a {
+    text-decoration: none !important;
+    color: #000000 !important;
+  }
+
+  .article-page__body p {
+    font-size: 12pt !important;
+    line-height: 1.55 !important;
+    margin: 0 0 10pt !important;
+    color: #000000 !important;
+    orphans: 3;
+    widows: 3;
+  }
 }

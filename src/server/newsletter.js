@@ -8,6 +8,11 @@
 // - Cron diari (configurat a wrangler.jsonc) que llegeix els subscriptors
 //   confirmats, composa el digest HTML i l'envia per Resend.
 
+import {
+  deleteNewsletterSubscriberMirror,
+  mirrorNewsletterSubscriber,
+} from './editorialStore.js'
+
 const subscriberPrefix = 'subscriber:'
 const actionTokenPrefix = 'newsletter-action:'
 const rateLimitIpPrefix = 'rl:subscribe:ip:'
@@ -16,6 +21,7 @@ const RATE_LIMIT_PER_IP = 5
 const RATE_LIMIT_GLOBAL = 50
 const RATE_LIMIT_WINDOW_SECONDS = 3600
 const PENDING_TTL_SECONDS = 7 * 24 * 60 * 60
+const ADMIN_SUBSCRIBER_LIMIT = 250
 
 function jsonResponse(body, init = {}) {
   return new Response(JSON.stringify(body), {
@@ -75,6 +81,24 @@ async function persistSubscriber(kv, key, record, { pending = false } = {}) {
     kv.put(actionTokenPrefix + actionToken, key, options),
   ])
   return next
+}
+
+async function mirrorSubscriberSafely(env, key, record) {
+  try {
+    await mirrorNewsletterSubscriber(
+      env,
+      key.replace(subscriberPrefix, ''),
+      record,
+    )
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        event: 'newsletter.d1-mirror.failed',
+        subscriberId: key.slice(-8),
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    )
+  }
 }
 
 async function resolveSubscriber(kv, token) {
@@ -171,6 +195,7 @@ export async function handleSubscribe(request, env) {
     source: payload?.source || 'web',
     actionToken: existing?.actionToken,
   }, { pending: true })
+  await mirrorSubscriberSafely(env, key, record)
 
   // Enviem el correu de confirmació si la API key està configurada.
   const apiKey = env.RESEND_API_KEY
@@ -245,11 +270,12 @@ export async function handleConfirm(request, env) {
   }
   const { key, record: existing } = resolved
   if (existing.status === 'confirmed') {
-    await persistSubscriber(env.STATS_KV, key, existing)
+    const confirmed = await persistSubscriber(env.STATS_KV, key, existing)
+    await mirrorSubscriberSafely(env, key, confirmed)
     return htmlResponse(
       confirmationPageHtml({
         title: 'Ja estàs confirmat',
-        body: 'La teva adreça ja era a la llista de confirmats. Cada matí a les 7 rebràs les bones notícies del dia.',
+        body: 'La teva adreça ja era a la llista de confirmats. Cada matí a les 7 rebràs la selecció útil del dia.',
       }),
     )
   }
@@ -258,6 +284,7 @@ export async function handleConfirm(request, env) {
     status: 'confirmed',
     confirmedAt: new Date().toISOString(),
   })
+  await mirrorSubscriberSafely(env, key, updated)
 
   // Correu de BENVINGUDA (best-effort): no bloqueja ni trenca la confirmació si
   // Resend falla. Fidelitza el nou subscriptor i el convida a compartir.
@@ -289,7 +316,7 @@ export async function handleConfirm(request, env) {
   return htmlResponse(
     confirmationPageHtml({
       title: 'Confirmat. Benvingut a Bondiari.',
-      body: 'Ja estàs a la llista. Cada matí a les 7 et trobaràs un correu amb les bones notícies del dia. T\'hem enviat també un correu de benvinguda.',
+      body: 'Ja estàs a la llista. Cada matí a les 7 et trobaràs un correu amb la selecció útil del dia. T\'hem enviat també un correu de benvinguda.',
     }),
   )
 }
@@ -297,28 +324,99 @@ export async function handleConfirm(request, env) {
 // --- Stats públiques del butlletí (per al formulari) ---------------------
 
 export async function handleNewsletterStats(request, env) {
+  const audience = await readNewsletterAudience(env)
+  return jsonResponse(
+    {
+      confirmed: audience.confirmed,
+      pending: audience.pending,
+    },
+    { headers: { 'cache-control': 'public, max-age=300, stale-while-revalidate=3600' } },
+  )
+}
+
+function normalizedSubscriberStatus(record) {
+  if (record?.status === 'pending') return 'pending'
+  if (record?.status === 'unsubscribed') return 'unsubscribed'
+  return 'confirmed'
+}
+
+function isExpiredPending(record, now = Date.now()) {
+  if (normalizedSubscriberStatus(record) !== 'pending') return false
+  const reference = Date.parse(record?.lastPendingAt || record?.subscribedAt || '')
+  if (!Number.isFinite(reference)) return false
+  return now - reference > PENDING_TTL_SECONDS * 1000
+}
+
+/**
+ * Retorna una vista administrativa sanejada de la llista canònica del
+ * butlletí. Deliberadament no inclou actionToken ni cap clau interna.
+ */
+export async function readNewsletterAudience(env, { limit = ADMIN_SUBSCRIBER_LIMIT } = {}) {
+  if (!env?.STATS_KV?.list || !env?.STATS_KV?.get) {
+    return {
+      available: false,
+      confirmed: 0,
+      pending: 0,
+      expiredPending: 0,
+      total: 0,
+      truncated: false,
+      subscribers: [],
+    }
+  }
+
+  const safeLimit = Math.max(1, Math.min(ADMIN_SUBSCRIBER_LIMIT, Number(limit) || 1))
   let cursor
-  let confirmed = 0
-  let pending = 0
+  let truncated = false
+  const subscribers = []
+
   do {
     const list = await env.STATS_KV.list({ prefix: subscriberPrefix, cursor })
     for (const key of list.keys) {
-      const data = await env.STATS_KV.get(key.name, 'json')
-      if (!data?.email) continue
-      // Els legacy (sense camp status) compten com a confirmats — vam crear-los
-      // amb el sistema antic sense double opt-in.
-      if (data.status === 'confirmed' || data.status === undefined) {
-        confirmed += 1
-      } else if (data.status === 'pending') {
-        pending += 1
+      if (subscribers.length >= safeLimit) {
+        truncated = true
+        break
       }
+
+      const record = await env.STATS_KV.get(key.name, 'json')
+      if (!record?.email) continue
+      const status = normalizedSubscriberStatus(record)
+      subscribers.push({
+        email: record.email,
+        language: record.language || 'ca',
+        status,
+        source: record.source || 'legacy',
+        subscribedAt: record.subscribedAt || null,
+        confirmedAt: record.confirmedAt || null,
+        lastPendingAt: record.lastPendingAt || null,
+        expired: isExpiredPending(record),
+      })
     }
+
+    if (truncated) break
     cursor = list.list_complete ? null : list.cursor
   } while (cursor)
-  return jsonResponse(
-    { confirmed, pending },
-    { headers: { 'cache-control': 'public, max-age=300, stale-while-revalidate=3600' } },
-  )
+
+  subscribers.sort((left, right) => {
+    const leftDate = Date.parse(left.confirmedAt || left.subscribedAt || '') || 0
+    const rightDate = Date.parse(right.confirmedAt || right.subscribedAt || '') || 0
+    return rightDate - leftDate
+  })
+
+  const confirmed = subscribers.filter((record) => record.status === 'confirmed').length
+  const pending = subscribers.filter((record) => record.status === 'pending').length
+  const expiredPending = subscribers.filter(
+    (record) => record.status === 'pending' && record.expired,
+  ).length
+
+  return {
+    available: true,
+    confirmed,
+    pending,
+    expiredPending,
+    total: subscribers.length,
+    truncated,
+    subscribers,
+  }
 }
 
 // --- Unsubscribe -----------------------------------------------------------
@@ -344,6 +442,20 @@ export async function handleUnsubscribe(request, env) {
         ? env.STATS_KV.delete(actionTokenPrefix + resolved.record.actionToken)
         : Promise.resolve(),
     ])
+    try {
+      await deleteNewsletterSubscriberMirror(
+        env,
+        resolved.key.replace(subscriberPrefix, ''),
+      )
+    } catch (error) {
+      console.error(
+        JSON.stringify({
+          event: 'newsletter.d1-delete.failed',
+          subscriberId: resolved.key.slice(-8),
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      )
+    }
   }
   return htmlResponse(
     confirmationPageHtml({
@@ -358,17 +470,17 @@ export async function handleUnsubscribe(request, env) {
 // --- Plantilles HTML d'email -----------------------------------------------
 
 const greetings = {
-  ca: { hello: 'Bon dia', intro: "Les bones notícies d'avui al diari constructiu, perquè comencis el dia amb llum.", cta: 'Llegir més a bondiari.com', unsub: 'Baixa del butlletí' },
-  es: { hello: 'Buenos días', intro: 'Las buenas noticias de hoy en el diario constructivo, para empezar el día con luz.', cta: 'Leer más en bondiari.com', unsub: 'Baja del boletín' },
-  en: { hello: 'Good morning', intro: "Today's good news from the constructive paper, to start the day with light.", cta: 'Read more at bondiari.com', unsub: 'Unsubscribe' },
-  fr: { hello: 'Bonjour', intro: "Les bonnes nouvelles d'aujourd'hui au journal constructif, pour bien commencer la journée.", cta: 'Lire plus sur bondiari.com', unsub: 'Se désinscrire' },
+  ca: { hello: 'Bon dia', intro: "La selecció constructiva d'avui: solucions, verificacions i informació útil.", cta: 'Llegir més a bondiari.com', unsub: 'Baixa del butlletí' },
+  es: { hello: 'Buenos días', intro: 'La selección constructiva de hoy: soluciones, verificaciones e información útil.', cta: 'Leer más en bondiari.com', unsub: 'Baja del boletín' },
+  en: { hello: 'Good morning', intro: "Today's constructive briefing: solutions, fact-checks and useful information.", cta: 'Read more at bondiari.com', unsub: 'Unsubscribe' },
+  fr: { hello: 'Bonjour', intro: "La sélection constructive du jour : solutions, vérifications et informations utiles.", cta: 'Lire plus sur bondiari.com', unsub: 'Se désinscrire' },
 }
 
 const confirmationCopy = {
   ca: {
     subject: 'Confirma la subscripció · El Bon Diari',
     hello: 'Falta un pas: confirma el teu correu',
-    intro: 'Hem rebut una sol·licitud de subscripció al butlletí de Bondiari amb aquesta adreça. Si ets tu, confirma-la amb el botó de sota i començaràs a rebre les bones notícies cada matí a les 7.',
+    intro: 'Hem rebut una sol·licitud de subscripció al butlletí de Bondiari amb aquesta adreça. Si ets tu, confirma-la amb el botó de sota i començaràs a rebre la selecció constructiva cada matí a les 7.',
     button: 'Confirmar la subscripció',
     note: 'Si no t\'hi has subscrit tu, no facis res — l\'enllaç caduca i mai t\'arribarà cap més correu.',
     unsub: 'Donar-me de baixa',
@@ -376,7 +488,7 @@ const confirmationCopy = {
   es: {
     subject: 'Confirma la suscripción · El Bon Diari',
     hello: 'Falta un paso: confirma tu correo',
-    intro: 'Hemos recibido una solicitud de suscripción al boletín de Bondiari con esta dirección. Si eres tú, confírmala con el botón de abajo y empezarás a recibir las buenas noticias cada mañana a las 7.',
+    intro: 'Hemos recibido una solicitud de suscripción al boletín de Bondiari con esta dirección. Si eres tú, confírmala con el botón de abajo y empezarás a recibir la selección constructiva cada mañana a las 7.',
     button: 'Confirmar la suscripción',
     note: 'Si no te has suscrito tú, no hagas nada — el enlace caduca y no recibirás ningún correo más.',
     unsub: 'Darme de baja',
@@ -384,7 +496,7 @@ const confirmationCopy = {
   en: {
     subject: 'Confirm your subscription · El Bon Diari',
     hello: 'One last step: confirm your email',
-    intro: 'We received a subscription request to the Bondiari newsletter with this address. If it was you, confirm with the button below and you will start getting the good news every morning at 7.',
+    intro: 'We received a subscription request to the Bondiari newsletter with this address. If it was you, confirm below and you will start getting the constructive briefing every morning at 7.',
     button: 'Confirm subscription',
     note: 'If you did not subscribe, just ignore this — the link expires and you will not get any more emails.',
     unsub: 'Unsubscribe',
@@ -392,7 +504,7 @@ const confirmationCopy = {
   fr: {
     subject: 'Confirmez votre abonnement · El Bon Diari',
     hello: 'Une dernière étape : confirmez votre adresse',
-    intro: 'Nous avons reçu une demande d\'abonnement à la newsletter Bondiari avec cette adresse. Si c\'est vous, confirmez avec le bouton ci-dessous et vous recevrez les bonnes nouvelles chaque matin à 7h.',
+    intro: 'Nous avons reçu une demande d\'abonnement à la newsletter Bondiari avec cette adresse. Si c\'est vous, confirmez ci-dessous et vous recevrez la sélection constructive chaque matin à 7h.',
     button: 'Confirmer l\'abonnement',
     note: 'Si ce n\'est pas vous, ignorez ce message — le lien expire et vous ne recevrez plus rien.',
     unsub: 'Se désinscrire',
@@ -406,10 +518,10 @@ function subjectForLanguage(language, kind) {
   if (kind === 'welcome') {
     return (welcomeCopy[language] || welcomeCopy.ca).subject
   }
-  if (language === 'es') return 'Las buenas noticias de hoy · El Bon Diari'
-  if (language === 'en') return "Today's good news · El Bon Diari"
-  if (language === 'fr') return 'Les bonnes nouvelles du jour · El Bon Diari'
-  return "Les bones notícies d'avui · El Bon Diari"
+  if (language === 'es') return 'La selección constructiva de hoy · El Bon Diari'
+  if (language === 'en') return "Today's constructive briefing · El Bon Diari"
+  if (language === 'fr') return 'La sélection constructive du jour · El Bon Diari'
+  return "La selecció constructiva d'avui · El Bon Diari"
 }
 
 export function renderConfirmationEmail({ language = 'ca', confirmUrl, unsubscribeUrl }) {
@@ -470,36 +582,36 @@ const welcomeCopy = {
     subject: 'Ja hi ets. Benvingut/da a El Bon Diari',
     hello: 'Ja hi ets!',
     intro:
-      'Gràcies per sumar-te a El Bon Diari. Cada matí a les 7 rebràs un correu curt amb les bones notícies del dia: reals, verificades i a prop teu.',
+      'Gràcies per sumar-te a El Bon Diari. Cada matí a les 7 rebràs un correu curt amb solucions, verificacions i informació útil.',
     button: 'Comença a llegir',
-    tip: 'Un favor petit: si coneixes algú que necessiti bones notícies, reenvia-li aquest correu o comparteix bondiari.com. Així ens ajudes a créixer.',
+    tip: 'Un favor petit: si coneixes algú a qui li pugui servir, reenvia-li aquest correu o comparteix bondiari.com. Així ens ajudes a créixer.',
     unsub: 'Donar-me de baixa',
   },
   es: {
     subject: 'Ya estás dentro. Bienvenido/a a El Bon Diari',
     hello: '¡Ya estás dentro!',
     intro:
-      'Gracias por sumarte a El Bon Diari. Cada mañana a las 7 recibirás un correo breve con las buenas noticias del día: reales, verificadas y cercanas.',
+      'Gracias por sumarte a El Bon Diari. Cada mañana a las 7 recibirás un correo breve con soluciones, verificaciones e información útil.',
     button: 'Empieza a leer',
-    tip: 'Un favor: si conoces a alguien que necesite buenas noticias, reenvíale este correo o comparte bondiari.com.',
+    tip: 'Un favor: si conoces a alguien a quien pueda servirle, reenvíale este correo o comparte bondiari.com.',
     unsub: 'Darme de baja',
   },
   en: {
     subject: "You're in. Welcome to El Bon Diari",
     hello: "You're in!",
     intro:
-      "Thanks for joining El Bon Diari. Every morning at 7 you'll get a short email with the day's good news: real, verified and close to home.",
+      "Thanks for joining El Bon Diari. Every morning at 7 you'll get a short email with solutions, fact-checks and useful information.",
     button: 'Start reading',
-    tip: 'A small favour: if you know someone who needs good news, forward this email or share bondiari.com.',
+    tip: 'A small favour: if you know someone who may find it useful, forward this email or share bondiari.com.',
     unsub: 'Unsubscribe',
   },
   fr: {
     subject: 'Vous y êtes. Bienvenue à El Bon Diari',
     hello: 'Vous y êtes !',
     intro:
-      'Merci de rejoindre El Bon Diari. Chaque matin à 7h, vous recevrez un court e-mail avec les bonnes nouvelles du jour : réelles, vérifiées et proches.',
+      'Merci de rejoindre El Bon Diari. Chaque matin à 7h, vous recevrez un court e-mail avec des solutions, des vérifications et des informations utiles.',
     button: 'Commencer à lire',
-    tip: "Un petit service : si vous connaissez quelqu'un qui a besoin de bonnes nouvelles, transférez cet e-mail ou partagez bondiari.com.",
+    tip: "Un petit service : si vous connaissez quelqu'un à qui cela pourrait être utile, transférez cet e-mail ou partagez bondiari.com.",
     unsub: 'Se désabonner',
   },
 }
@@ -699,4 +811,34 @@ export async function sendDailyDigest(env) {
 
   console.log(`[newsletter] sent=${sent} failed=${failed} logged-only=${logged} skipped-unconfirmed=${skippedUnconfirmed}`)
   return { sent, failed, logged, skippedUnconfirmed }
+}
+
+export async function backfillNewsletterSubscribers(env) {
+  let cursor
+  let mirrored = 0
+  let skipped = 0
+  do {
+    const list = await env.STATS_KV.list({ prefix: subscriberPrefix, cursor })
+    for (const key of list.keys) {
+      const record = await env.STATS_KV.get(key.name, 'json')
+      if (!record?.email) {
+        skipped += 1
+        continue
+      }
+      const normalized = isSecureActionToken(record.actionToken)
+        ? record
+        : await persistSubscriber(env.STATS_KV, key.name, record)
+      await mirrorNewsletterSubscriber(
+        env,
+        key.name.replace(subscriberPrefix, ''),
+        {
+          ...normalized,
+          status: normalized.status || 'confirmed',
+        },
+      )
+      mirrored += 1
+    }
+    cursor = list.list_complete ? null : list.cursor
+  } while (cursor)
+  return { mirrored, skipped }
 }

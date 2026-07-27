@@ -5,9 +5,10 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  // dist/ i ios/App/App/public/ són artefactes generats. Analitzar-los duplica
-  // el bundle minificat i converteix els errors de tercers en falsos positius.
-  globalIgnores(['dist', 'ios/App/App/public']),
+  // dist/, .wrangler/ i ios/App/App/public/ són artefactes generats.
+  // Analitzar-los duplica el bundle minificat i converteix els errors de
+  // tercers en falsos positius.
+  globalIgnores(['dist', '.wrangler', 'ios/App/App/public']),
   {
     files: ['**/*.{js,jsx}'],
     extends: [

@@ -1,7 +1,7 @@
 {
   "name": "El Bon Diari",
   "short_name": "Bondiari",
-  "description": "Diari constructiu amb bones notícies verificables.",
+  "description": "Periodisme constructiu amb solucions, verificacions i informació útil.",
   "start_url": "/?source=pwa",
   "scope": "/",
   "display": "standalone",

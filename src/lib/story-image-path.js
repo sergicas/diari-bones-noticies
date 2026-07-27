@@ -11,11 +11,18 @@ import { feedStoryId } from './story-id.js'
 // descriu la peça: "a modern tram on a tree-lined avenue"). Si no n'hi ha (peça
 // antiga, IA caiguda, hemeroteca estàtica), caiem al format llegat categoria|títol
 // i la ruta hi aplica el motiu de secció. La ruta distingeix els dos casos pel "|".
+// A més del seed de la IA (`s`), la ruta porta sempre la categoria (`c`) i el
+// titular (`t`). No els fa servir la generació per IA (que mai posa text dins la
+// imatge), sinó la TARGETA DE RESERVA: quan la IA no respon, la portada ha de
+// poder compondre el titular i el color de secció en lloc d'un genèric repetit.
 export function storyImagePath(url, { title, category, brief } = {}) {
   const id = feedStoryId(url)
   const clean = String(brief || '').replace(/\|/g, ' ').trim()
   const seed = clean
     ? clean.slice(0, 200)
     : `${category || ''}|${String(title || '').slice(0, 120)}`
-  return `/api/story-image/${id}?s=${encodeURIComponent(seed)}`
+  const params = [`s=${encodeURIComponent(seed)}`]
+  if (category) params.push(`c=${encodeURIComponent(String(category).slice(0, 40))}`)
+  if (title) params.push(`t=${encodeURIComponent(String(title).slice(0, 140))}`)
+  return `/api/story-image/${id}?${params.join('&')}`
 }

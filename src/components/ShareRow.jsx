@@ -100,10 +100,10 @@ export default function ShareRow({ story }) {
   return (
     <div className="share-block">
       <p className="share-block__cta">
-        Coneixes algú que necessiti una bona notícia? Envia-l'hi.
+        Coneixes algú a qui li pugui servir? Envia-l'hi.
       </p>
       <button type="button" className="share-block__primary" onClick={primaryShare}>
-        Comparteix aquesta bona notícia
+        Comparteix aquesta peça
       </button>
       <div className="share-row" aria-label="Compartir aquesta notícia">
         <span className="share-row__label">Comparteix:</span>

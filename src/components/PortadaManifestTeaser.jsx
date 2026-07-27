@@ -1,4 +1,4 @@
-import { editorialValues } from '../data/articles'
+import { editorialValues } from '../data/editorial.js'
 import { canInterceptNavigation } from '../lib/navigation.js'
 
 export default function PortadaManifestTeaser({ onNavigate }) {
@@ -12,7 +12,7 @@ export default function PortadaManifestTeaser({ onNavigate }) {
         </h2>
         <p className="manifest-teaser__lead">
           El Bon Diari no és un agregador. Cada peça que arriba a portada passa
-          per un criteri editorial humà i un filtre automàtic en quatre llengües.
+          per un criteri editorial humà i un filtre automàtic en sis llengües.
           Aquests són els tres principis que ens guien:
         </p>
       </div>
