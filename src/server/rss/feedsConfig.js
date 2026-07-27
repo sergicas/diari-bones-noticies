@@ -107,7 +107,21 @@ export const rssFeeds = [
   { name: 'ANSA Cultura', url: 'https://www.ansa.it/sito/notizie/cultura/cultura_rss.xml', language: 'it', defaultCategory: 'Cultura', forceCategory: true },
 ]
 
-export const rotatingPerLanguage = { ca: 5, es: 3, en: 2, fr: 1, it: 1, pt: 1 }
+// Quantes fonts NO-core s'afegeixen per llengua a cada passada.
+//
+// La rotació estreta original (ca:5, es:3) existia per no passar de les ~50
+// subpeticions del pla GRATUÏT de Cloudflare. Amb les cues i D1 desplegades el
+// projecte ja és al pla de pagament, on el límit és de 1.000: la restricció que
+// justificava deixar 37 de les 60 fonts sense consultar ja no existeix.
+//
+// Ara es consulten TOTES les fonts en català i en castellà a cada passada, i es
+// manté la rotació a la resta. El motiu és el sostre per llengua de la portada:
+// el català no en té i el castellà arriba a 6, però l'anglès es queda en 3 i el
+// francès, l'italià i el portuguès en 1. Baixar més fonts angleses no ompliria
+// la portada —només faria rotar la mateixa plaça única—, mentre que l'oferta en
+// català sí que hi entra sencera. Mesurat el 27-07-2026: de 121 peces aprovades
+// per passada només 3 eren catalanes, i la portada es quedava encallada en 5.
+export const rotatingPerLanguage = { ca: 12, es: 6, en: 2, fr: 1, it: 1, pt: 1 }
 
 export const serviceSourceNames = [
   'Agenda Cultural',

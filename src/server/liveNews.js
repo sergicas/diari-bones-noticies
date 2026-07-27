@@ -1572,7 +1572,19 @@ function sourceMaterialScore(story) {
   return tierScore + localScore + Math.min(5, Math.floor(contextWords / 40))
 }
 
-export async function collectLivePositiveNews(env) {
+// `seenUrls`: notícies que ja s'han publicat alguna vegada (clau seen-urls, 14
+// dies). S'aparten AQUÍ, abans de jutjar i abans de retallar la reserva.
+//
+// Abans es retallava la reserva a collectionPoolSize i només després, ja fora
+// d'aquesta funció, s'apartaven les ja publicades. Com que el retall es queda
+// les MILLORS i les millors són justament les que ja han sortit altres dies, de
+// les 30 en quedaven tres o quatre d'aprofitables i la resta de candidates
+// aprovades no arribaven a ser considerades mai. Mesurat el 27-07-2026: 225
+// candidates, 121 aprovades pel jutge... i 4 peces a la portada.
+//
+// Apartar-les abans té un segon efecte bo: el pressupost de crides a la IA es
+// gasta només en peces que de debò poden sortir.
+export async function collectLivePositiveNews(env, { seenUrls } = {}) {
   const now = Date.now()
   const healthStats = await readFeedHealthStats(env)
   // Només la finestra de fonts d'aquest refresc (core + rotatòries), per no
@@ -1628,8 +1640,14 @@ export async function collectLivePositiveNews(env) {
   // Candidates dins de termini, ORDENADES per prometedores+fresques (les de
   // paraula clau primer), perquè la IA gasti el pressupost de crides en les més
   // probables de sortir.
+  const alreadyPublished = seenUrls instanceof Set ? seenUrls : new Set()
   const recents = [...uniqueStories.values()]
     .filter((story) => isStoryWithinLiveWindow(story))
+    // Les que ja s'han publicat surten AQUÍ, abans de jutjar i abans de retallar
+    // la reserva. Si es queden, ocupen el tall de les 30 millors i deixen fora
+    // les que sí que podrien sortir. Les que ja són al lot hi continuen per
+    // l'arrossegament, no per aquesta llista.
+    .filter((story) => !alreadyPublished.has(story.url))
     .sort((left, right) => {
       // Un DIARI lidera amb el dia d'avui. Ordenem per DIA (el més nou primer)
       // i, dins del mateix dia, per com de prometedora és (paraula clau primer),
@@ -1857,16 +1875,28 @@ export async function getLiveNewsPayload(
     }
   }
 
-  const { stories: allStories, reviewed: reviewedThisPass } = await collectLivePositiveNews(env)
+  // Les ja publicades es llegeixen ABANS de recollir, perquè la recollida les
+  // pugui apartar abans de retallar la reserva (vegeu collectLivePositiveNews).
   const seenEntries = await loadSeenEntries(kv)
   const seenSet = new Set(seenEntries.map((entry) => entry.url))
+  const { stories: allStories, reviewed: reviewedThisPass } =
+    await collectLivePositiveNews(env, { seenUrls: seenSet })
+  // La recollida ja no en torna cap de publicada; el filtre es manté com a
+  // xarxa de seguretat i per marcar-les com a fresques.
   const freshStories = allStories
     .filter((story) => !seenSet.has(story.url))
     .map((story) => ({ ...story, isFresh: true }))
   const freshUrlSet = new Set(freshStories.map((story) => story.url))
 
-  // Cap font ha respost o cap notícia ha passat els filtres → mantenir cache.
-  if (allStories.length === 0 && cached?.stories?.length) {
+  // CAP FONT NO HA RESPOST (avaria) → mantenir el lot tal com estava.
+  //
+  // La condició mira reviewedThisPass, no allStories. Ara que les ja publicades
+  // s'aparten a la recollida, és normal i sa que una passada no porti res nou:
+  // vol dir que encara no s'ha publicat res que no tinguem. En aquest cas s'ha
+  // de CONTINUAR, perquè l'arrossegament és qui poda les peces que passen dels
+  // cinc dies. Sortint per aquí, el lot es quedaria congelat i les velles no
+  // marxarien mai.
+  if (reviewedThisPass === 0 && cached?.stories?.length) {
     return { ...cached, cache: 'stale' }
   }
 
