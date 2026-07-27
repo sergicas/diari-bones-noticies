@@ -97,6 +97,64 @@ function cleanTitle(raw) {
     .trim()
 }
 
+// Titulars de fins a 20 paraules. Els oficials —convocatòries, estudis— sovint
+// són més llargs, i abans això tombava tota la peça encara que el cos fos bo.
+// Aquí s'escurça pel primer tall NATURAL que hi hagi abans del límit (dos
+// punts, guió llarg, coma o punt i coma); si no n'hi ha cap, es talla per
+// paraules. Mai no es publica un titular tallat a mitja paraula ni acabat en
+// connector.
+export const MAX_TITLE_WORDS = 20
+const MIN_TITLE_WORDS_KEPT = 5
+
+// Paraules que no poden tancar un titular perquè demanen complement. Tallar per
+// nombre de paraules deixava coses com "...del medi rural de Catalunya durant".
+const TRAILING_CONNECTORS = new RegExp(
+  '\\s+(?:' +
+    [
+      // català
+      'i|o|de|del|dels|d|a|al|als|en|amb|per|sense|sobre|sota|entre|fins|des|durant',
+      'contra|cap|segons|malgrat|mitjançant|després|abans|que|qui|com|on',
+      'el|la|els|les|un|una|uns|unes|l',
+      // castellà
+      'y|e|u|con|desde|hasta|para|por|según|sin|tras|del|los|las|unos|unas',
+      // anglès
+      'and|or|of|for|with|from|to|at|by|in|on|the|an|that|which|as',
+      // francès, italià, portuguès
+      'du|des|au|aux|avec|pour|par|sur|sans|dans|di|della|dello|dei|degli|con|su',
+      'tra|fra|da|em|no|na|dos|das|ao|aos|sem|como',
+    ].join('|') +
+    ')$',
+  'i',
+)
+
+export function shortenTitle(raw, max = MAX_TITLE_WORDS) {
+  const title = String(raw || '').trim()
+  if (!title) return ''
+  const words = title.split(/\s+/u)
+  if (words.length <= max) return title
+
+  const limit = words.slice(0, max).join(' ')
+
+  // 1) Tall natural: un separador fort dins del límit, si el que queda al
+  //    davant ja és un titular sencer.
+  const natural = limit.match(/^(.{12,}?)\s*[:—–;]\s*\S/u)
+  if (natural && natural[1].split(/\s+/u).length >= MIN_TITLE_WORDS_KEPT) {
+    return natural[1].replace(/[\s:—–;,]+$/u, '').trim()
+  }
+
+  // 2) Tall per paraules, retirant els connectors que quedin al final.
+  let cut = limit
+  for (let i = 0; i < 4; i += 1) {
+    const trimmed = cut.replace(TRAILING_CONNECTORS, '')
+    if (trimmed === cut) break
+    cut = trimmed
+  }
+  cut = cut.replace(/[\s:—–;,.]+$/u, '').trim()
+  // Si de tant retallar el titular queda massa curt, val més el tall net per
+  // paraules que una frase mutilada.
+  return cut.split(/\s+/u).length >= MIN_TITLE_WORDS_KEPT ? cut : limit
+}
+
 function cleanBrief(raw) {
   return String(raw || '')
     .replace(/[|:"'«»“”]/g, ' ')
@@ -143,19 +201,39 @@ async function aiOwnContentBatch(env, items) {
     })
     .join('\n')
   const out = await env.AI.run(AI_MODEL, {
-    max_tokens: 3600,
+    // Cinc peces amb cossos de fins a 150 paraules en català o castellà van
+    // justes amb 3.600: si la resposta es talla, les ÚLTIMES del lot es queden
+    // sense cos i la peça es perd. Marge ampli, que no costa res si no s'usa.
+    max_tokens: 4800,
     messages: [
       { role: 'system', content: REWRITE_SYSTEM },
       { role: 'user', content: `Notícies:\n${list}` },
     ],
   })
-  return parseOwnContentBatch(String(out?.response || ''), items.length)
+  const text = String(out?.response || '')
+  const parsed = parseOwnContentBatch(text, items.length)
+  // Diagnòstic: quan el model no torna cos per a alguna peça del lot, deixem
+  // constància de quantes en falten i de com de llarga ha estat la resposta.
+  // Sense això, una peça sense text era indistingible d'una peça mal escrita.
+  const senseCos = parsed.filter((p) => !p?.body).length
+  if (senseCos > 0) {
+    console.warn(
+      JSON.stringify({
+        event: 'editorial.rewrite.incomplete',
+        demanades: items.length,
+        senseCos,
+        caracters: text.length,
+        acabament: text.slice(-80),
+      }),
+    )
+  }
+  return parsed
 }
 
 // Una línia de camp: "1 cos: ...", "1. cos: ...", "**cos**: ..." o simplement
 // "cos: ...". El número és OPCIONAL a propòsit.
 const FIELD_LINE =
-  /^[\s*#>–—-]*(?:(\d{1,2})\s*[.)]?\s*)?\**\s*(titular|cos|impacte|imatge)\**\s*[:–-]\s*(.*)$/i
+  /^[\s*#>–—-]*(?:(\d{1,2})\s*[.)]?\s*)?\**\s*(titular|cos|impacte|imatge)\**\s*[:–-]\s*\**\s*(.*?)\**\s*$/i
 
 // Llegeix la resposta del model línia a línia.
 //
@@ -327,7 +405,9 @@ export async function applyOwnContent(stories, env) {
   return entries.map((e) => {
     const own = e.own || {}
     const hasOwnContent = Boolean(own.title && own.body)
-    const title = own.title || genericTitle(e.story)
+    // Escurçat just abans de publicar: la peça no es perd mai per un titular
+    // llarg, i el que arriba a la portada sempre té una llargada de titular.
+    const title = shortenTitle(own.title || genericTitle(e.story))
     const body = own.body ? [own.body] : []
     // Encara que hi hagi brief per a la IA, passem sempre títol i categoria:
     // són el que compon la targeta de reserva si la generació no arriba.

@@ -6,7 +6,11 @@ import {
   isPublishableStory,
   selectPublishableStories,
 } from '../editorialQuality.js'
-import { applyOwnContent, parseOwnContentBatch } from '../storyText.js'
+import {
+  applyOwnContent,
+  parseOwnContentBatch,
+  shortenTitle,
+} from '../storyText.js'
 
 function qualityStory(overrides = {}) {
   return {
@@ -102,6 +106,76 @@ describe('barrera de qualitat editorial', () => {
     ).toEqual([good])
     expect(rejected).toHaveLength(1)
     expect(rejected[0].result.issues).toContain('body-too-short')
+  })
+})
+
+describe('titular llarg — s’escurça, no tomba la peça', () => {
+  // El 27/07/2026, 3 dels 8 rebutjos d'una passada eren peces amb el cos ben
+  // escrit (60 i 53 paraules) tombades NOMÉS perquè el titular passava de 20
+  // paraules. Els titulars oficials de convocatòries i estudis hi passen sovint.
+  it('publica una peça amb el cos bo encara que el titular original sigui llarg', () => {
+    const cos =
+      'La Generalitat obre una línia d’ajuts per a entitats culturals del món rural amb un pressupost de 900.000 euros. Les sol·licituds es poden presentar per via telemàtica fins al 28 de juliol. Poden optar-hi associacions, fundacions i ajuntaments de municipis de menys de cinc mil habitants. La resolució es preveu per a l’octubre.'
+    const titolLlarg =
+      'Convocatòria de subvencions per a projectes i activitats culturals que es desenvolupin en el medi rural de Catalunya durant el 2026'
+    expect(titolLlarg.split(/\s+/).length).toBeGreaterThan(20)
+
+    const escurcat = shortenTitle(titolLlarg)
+    expect(escurcat.split(/\s+/).length).toBeLessThanOrEqual(20)
+    expect(
+      evaluateEditorialQuality({
+        title: escurcat,
+        body: [cos],
+        impact: 'Obre finançament públic a entitats culturals de pobles petits.',
+        source: 'RAISC',
+        url: 'https://exemple.cat/ajuts',
+        editorialFormat: 'opportunity',
+      }).passes,
+    ).toBe(true)
+  })
+
+  it('no deixa el titular penjat en una preposició', () => {
+    for (const titol of [
+      'Convocatòria de subvencions per a projectes i activitats culturals que es desenvolupin en el medi rural de Catalunya durant el 2026',
+      'Resolución por la que se convocan las subvenciones destinadas a entidades sin ánimo de lucro para el fomento de la lectura en',
+    ]) {
+      const escurcat = shortenTitle(titol)
+      expect(escurcat.split(/\s+/).length).toBeLessThanOrEqual(20)
+      expect(escurcat.split(/\s+/).length).toBeGreaterThanOrEqual(5)
+      expect(escurcat, titol).not.toMatch(
+        /\s(?:i|o|de|del|en|amb|per|durant|fins|a|al|the|of|for|y|para|por|sin)$/i,
+      )
+    }
+  })
+
+  it('no toca els titulars que ja caben', () => {
+    const bo = 'Mataró inaugura un carril bici que connecta el centre amb la platja'
+    expect(shortenTitle(bo)).toBe(bo)
+  })
+
+  // Xarxa de seguretat: un "titular" desmesurat no és un titular, és un error
+  // de lectura de la resposta del model (com el que hi va haver fins al 27/07).
+  it('segueix suspenent un titular desmesurat', () => {
+    const trencat = Array.from({ length: 60 }, (_, i) => `paraula${i}`).join(' ')
+    expect(
+      evaluateEditorialQuality(qualityStory({ title: trencat })).issues,
+    ).toContain('title-length')
+  })
+
+  // Un cos de 46 paraules en dues frases superava el mínim de paraules i queia
+  // igualment. La profunditat la mesuren les paraules.
+  it('admet un cos prou llarg escrit en dues frases', () => {
+    const dosFrases =
+      'L’Ajuntament de Lliçà de Vall ha obert el nou centre de reciclatge de residus industrials després de dos anys d’obres i una inversió de sis-cents mil euros. La instal·lació donarà servei a una trentena d’empreses del polígon i podrà tractar fins a quatre mil tones l’any.'
+    const result = evaluateEditorialQuality(
+      qualityStory({
+        title: 'Lliçà de Vall obre un centre de reciclatge industrial',
+        body: [dosFrases],
+        impact: 'Estalvia desplaçaments de residus a una trentena d’empreses.',
+      }),
+    )
+    expect(result.metrics.sentences).toBe(2)
+    expect(result.issues).toEqual([])
   })
 })
 

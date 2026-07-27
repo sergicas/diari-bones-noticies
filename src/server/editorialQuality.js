@@ -13,13 +13,31 @@ export const EDITORIAL_QUALITY_VERSION = 2
 // entrega cossos rigorosos i complets de 50-60 paraules en 3-4 frases, i la
 // portada va caure de 35 peces a 3 en dos dies. 45 paraules i 3 frases
 // segueixen descartant el breu buit sense castigar l'article ben fet.
+// El recompte de FRASES baixa a 2 (1 per a les dades). Mesurava el mateix que
+// el de paraules —si la peça està desenvolupada— però amb pitjor punteria: un
+// cos de 46 paraules escrit en dues frases superava el mínim de paraules i
+// queia igualment (El 9 Nou, 27-07-2026). La profunditat la mesuren les
+// paraules; les frases només han de garantir que el cos no sigui un fragment
+// solt.
 const PROFILES = {
-  constructive: { minBodyWords: 45, minSentences: 3, minImpactWords: 8 },
-  verification: { minBodyWords: 45, minSentences: 3, minImpactWords: 8 },
-  agenda: { minBodyWords: 40, minSentences: 3, minImpactWords: 8 },
+  constructive: { minBodyWords: 45, minSentences: 2, minImpactWords: 8 },
+  verification: { minBodyWords: 45, minSentences: 2, minImpactWords: 8 },
+  agenda: { minBodyWords: 40, minSentences: 2, minImpactWords: 8 },
   opportunity: { minBodyWords: 30, minSentences: 2, minImpactWords: 8 },
   data: { minBodyWords: 25, minSentences: 1, minImpactWords: 8 },
 }
+
+// Titular: mínim 5 paraules (menys és un titular trencat o buit).
+//
+// El MÀXIM ja no tomba la peça. Un titular llarg s'escurça abans de publicar
+// (shortenTitle, a storyText.js): llençar un article de 60 paraules ben escrit
+// perquè el seu titular en té 21 és desproporcionat, i era el que passava amb
+// els títols oficials de convocatòries i estudis (3 de 8 rebutjos del 27-07).
+// Es manté un sostre absolut molt alt com a xarxa de seguretat: un "titular" de
+// més de 40 paraules no és un titular, és un error de lectura de la resposta
+// del model (com el que hi va haver fins avui).
+const MIN_TITLE_WORDS = 5
+const BROKEN_TITLE_WORDS = 40
 
 // Defectes de FONS: el text és de plantilla, buit o no identifica la font. Un
 // text amb qualsevol d'aquests problemes no millora per molt que es reescrigui,
@@ -105,7 +123,10 @@ export function evaluateEditorialQuality(story) {
   }
   const issues = []
 
-  if (metrics.titleWords < 5 || metrics.titleWords > 20) {
+  if (
+    metrics.titleWords < MIN_TITLE_WORDS ||
+    metrics.titleWords > BROKEN_TITLE_WORDS
+  ) {
     issues.push('title-length')
   }
   if (metrics.bodyWords < profile.minBodyWords) issues.push('body-too-short')
