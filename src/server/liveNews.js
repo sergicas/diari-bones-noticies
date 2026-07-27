@@ -358,7 +358,7 @@ const editorialDictionaries = {
       'study', 'discovery', 'documentary', 'biography', 'retrospective',
       'nobel', 'patent', 'invention', 'vaccine', 'renewable', 'prototype',
       // People working for others (see the note in the Catalan dictionary).
-      'rescues', 'rescued', 'humanitarian', 'aid worker', 'aid workers',
+      'rescue', 'humanitarian', 'aid worker', 'aid workers',
       'donors',
     ],
     negative: [
@@ -1087,6 +1087,7 @@ export const UNIVERSAL_NEG = new RegExp(
     // notícia perquè "arriben/arribar" és paraula positiva (colat el 28/06 amb
     // "Arriben dues pasteres a Formentera"). És sempre contingut de crisi.
     'pastera', 'pasteres', 'patera', 'cayuco', 'cayucos', 'naufrag',
+    'n[àáa]ufrag',
     'migrant boat', 'small boat', 'channel crossing',
     'migraci[óo]n irregular', 'immigraci[óo] irregular', 'imigra[çc][ãa]o ilegal',
     'sin papeles', 'sense papers', 'salto a la valla', 'salt a la tanca',
@@ -1099,11 +1100,49 @@ export const UNIVERSAL_NEG = new RegExp(
     // Tertúlia, realities i premsa del cor (safareig, no és notícia
     // constructiva; cas "'El sótano club', de Alba Carrillo").
     'prensa rosa', 'premsa rosa', 'prensa del coraz[óo]n', 'reality show',
-    'gran hermano', 's[áa]lvame', 'tertuli', 'famoseo', 'concursant',
+    'gran hermano', 's[áa]lvame\\b', 'tertuli', 'famoseo', 'concursant',
     's[óo]tano club',
   ].join('|'),
   'i',
 )
+
+// EXCEPCIÓ DE RESCAT (decisió editorial del 27-07-2026).
+//
+// El bloc dur descarta la immigració marítima perquè l'arribada d'una pastera
+// és contingut de crisi, no una bona notícia. Però la feina d'Open Arms, de
+// Salvament Marítim o de la Creu Roja és exactament això, i el diari vol cobrir
+// la gent que treballa pels altres. Sense excepció, el resultat era incoherent:
+// "Open Arms rescata 200 persones al Mediterrani" entrava i "Open Arms rescata
+// un cayuco amb 200 persones" no, segons com ho escrivís el mitjà.
+//
+// L'excepció és ESTRETA a propòsit. Només s'aplica si es compleix tot:
+//   1) el motiu del bloqueig és NOMÉS la part marítima (es comprova emmascarant
+//      aquests termes i tornant a passar el bloc dur sencer: així una peça que
+//      també parli d'onada de calor o de guerra segueix caient);
+//   2) hi ha algú rescatant, no només gent arribant;
+//   3) no hi ha morts. Un rescat amb víctimes no és una bona notícia.
+const MARITIME_TERMS =
+  'pastera|pasteres|patera|pateras|cayuco|cayucos|naufrag|n[àáa]ufrag|migrant boat|small boat|channel crossing'
+const MARITIME_MIGRATION = new RegExp(MARITIME_TERMS, 'i')
+const MARITIME_MIGRATION_GLOBAL = new RegExp(MARITIME_TERMS, 'gi')
+
+const RESCUE_MARKERS =
+  /\b(rescat|rescata|rescaten|rescatad|rescatat|rescatats|rescatades|salvament|salvamento|socorr|auxilia|posa fora de perill|pone a salvo|rescue|rescued|rescuers|coast ?guard|open arms|salvament mar[íi]tim|salvamento mar[íi]timo|creu roja|cruz roja|red cross)/i
+
+const DEATH_MARKERS =
+  /\b(mort|morts|muert|fallecid|difunt|cad[àa]ver|cad[áa]ver|v[íi]ctimes mortals|v[íi]ctimas mortales|ofegat|ofegats|ofegada|ahogad|desapareguts|desaparecidos|dead|bodies|drowned|cossos(?! de seguretat)|cuerpos(?! de seguridad)|sense vida|sin vida)/i
+
+export function isMaritimeRescue(text, language = 'ca') {
+  const t = String(text || '').toLowerCase()
+  if (!MARITIME_MIGRATION.test(t)) return false
+  // Si, tret de la part marítima, encara hi ha un altre motiu de bloqueig, cau.
+  // Es comprova contra les DUES barreres: el bloc dur multilingüe i el
+  // diccionari negatiu de la llengua (que també conté pastera i naufragi).
+  const masked = t.replace(MARITIME_MIGRATION_GLOBAL, ' embarcacio ')
+  if (UNIVERSAL_NEG.test(masked)) return false
+  if (passesEditorialFilter(masked, language).isNegative) return false
+  return RESCUE_MARKERS.test(t) && !DEATH_MARKERS.test(t)
+}
 
 export function normalizeFeedItem(block, feed) {
   const title = decodeHtmlEntities(stripHtml(extractTag(block, 'title')))
@@ -1158,11 +1197,16 @@ export function normalizeFeedItem(block, feed) {
   if (!isTrustedService) {
     const editorialResult = passesEditorialFilter(fullText, feed.language)
     isPositive = editorialResult.isPositive
-    if (editorialResult.isNegative) return null
+    // L'excepció de rescat val per a les DUES barreres: tant el diccionari
+    // negatiu de la llengua com el bloc dur contenen "pastera" i "naufragi".
+    const esRescatMaritim = isMaritimeRescue(fullTextLower, feed.language)
+    if (editorialResult.isNegative && !esRescatMaritim) return null
     // Bloc dur universal (multilingüe) per a categories que el model petit
     // deixa passar. No s'aplica als formats de verificació: el titular ha de
     // poder citar precisament el rumor, conflicte o engany que desmenteix.
-    if (UNIVERSAL_NEG.test(fullTextLower)) return null
+    // L'excepció de rescat deixa passar la feina de qui salva gent al mar; la
+    // simple arribada d'una pastera segueix caient. Vegeu isMaritimeRescue.
+    if (UNIVERSAL_NEG.test(fullTextLower) && !esRescatMaritim) return null
 
     // Contingut POLÍTIC tens: gairebé mai és una bona notícia. Els formats de
     // verificació en queden exempts perquè comprovar el discurs polític és la

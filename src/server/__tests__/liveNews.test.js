@@ -21,6 +21,7 @@ import {
   storiesRequiringDetailPersistence,
   getLiveNewsPayload,
   keepsEditorialClearance,
+  isMaritimeRescue,
 } from '../liveNews.js'
 import {
   normalizeCategory,
@@ -1119,5 +1120,45 @@ describe('gent que treballa pels altres', () => {
     ]) {
       expect(entra(t), t).toBe(false)
     }
+  })
+})
+
+describe('excepció de rescat marítim', () => {
+  // Decisió editorial del 27/07/2026. El bloc dur descarta la immigració
+  // marítima perquè l'arribada d'una pastera és contingut de crisi, però la
+  // feina d'Open Arms o de Salvament Marítim és justament rescatar-hi gent.
+  // Sense excepció el resultat era incoherent: "Open Arms rescata 200 persones"
+  // entrava i "Open Arms rescata un cayuco amb 200 persones" no.
+  const entra = (text, lang = 'ca') => {
+    const t = text.toLowerCase()
+    const filtre = passesEditorialFilter(text, lang)
+    const rescat = isMaritimeRescue(t, lang)
+    if (filtre.isNegative && !rescat) return false
+    if (UNIVERSAL_NEG.test(t) && !rescat) return false
+    return filtre.isPositive && !POLITICAL_MARKERS.test(t)
+  }
+
+  it('deixa entrar el rescat amb rescatador', () => {
+    expect(entra('Open Arms rescata un cayuco amb 200 persones prop de Canàries')).toBe(true)
+    expect(entra("Salvament Marítim rescata 45 persones d'una pastera a Alborán")).toBe(true)
+    expect(entra("La Creu Roja atén els rescatats d'un naufragi a Lampedusa")).toBe(true)
+    expect(entra('Open Arms rescata a 200 personas de una patera', 'es')).toBe(true)
+    expect(entra('Rescuers saved forty people from a small boat in the Channel', 'en')).toBe(true)
+  })
+
+  it('manté fora la simple arribada, els morts i la resta de blocs', () => {
+    expect(entra('Arriben dues pasteres amb 25 persones a Formentera')).toBe(false)
+    expect(entra('Naufraga una pastera i moren dotze persones')).toBe(false)
+    expect(entra('Rescaten els cossos de tres nàufrags a la costa')).toBe(false)
+    expect(entra('Recuperan los cuerpos de dos migrantes de una patera', 'es')).toBe(false)
+    // Si hi ha un ALTRE motiu de bloqueig, l'excepció no s'aplica.
+    expect(entra("Open Arms rescata migrants enmig d'una onada de calor extrema")).toBe(false)
+  })
+
+  // "Salvament" i "Salvamento" queien pel patró del programa "Sálvame".
+  it('no confon Salvament Marítim amb el programa de televisió', () => {
+    expect(UNIVERSAL_NEG.test('salvament marítim rescata una barca')).toBe(false)
+    expect(UNIVERSAL_NEG.test('salvamento marítimo rescata una barca')).toBe(false)
+    expect(UNIVERSAL_NEG.test('la tertúlia de sálvame')).toBe(true)
   })
 })
