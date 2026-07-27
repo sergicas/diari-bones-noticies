@@ -620,10 +620,16 @@ describe('passesEditorialFilter — català', () => {
     expect(passesEditorialFilter("Reconeixen la trajectòria del mestre amb un homenatge", 'ca').passes).toBe(true)
   })
 
+  // Des que el diccionari reconeix "rescaten" (27/07/2026), un titular de
+  // pastera amb la paraula rescat SÍ que té paraula positiva. Segueix quedant
+  // fora, però ara per la via del bloc dur i no per absència de positius. La
+  // prova comprova l'exclusió EFECTIVA, que és el que importa.
   it('descarta immigració marítima/naufragis (regression "Arriben dues pasteres a Formentera")', () => {
-    expect(passesEditorialFilter("Arriben dues pasteres amb 25 persones a Formentera", 'ca').passes).toBe(false)
-    expect(passesEditorialFilter("Rescaten un cayuco amb desenes de persones", 'ca').passes).toBe(false)
-    expect(passesEditorialFilter("Llegan varias pateras a las costas de Almería", 'es').passes).toBe(false)
+    const exclosa = (t, lang = 'ca') =>
+      !passesEditorialFilter(t, lang).passes || UNIVERSAL_NEG.test(t.toLowerCase())
+    expect(exclosa('Arriben dues pasteres amb 25 persones a Formentera')).toBe(true)
+    expect(exclosa('Rescaten un cayuco amb desenes de persones')).toBe(true)
+    expect(exclosa('Llegan varias pateras a las costas de Almería', 'es')).toBe(true)
     // Però una notícia bona amb la mateixa paraula "arriben" segueix passant:
     expect(passesEditorialFilter("Arriben els premis a la millor iniciativa solidària del barri", 'ca').passes).toBe(true)
   })
@@ -1071,5 +1077,47 @@ describe('social — composició del post', () => {
     const text = composePostText(longStory, 240)
     expect(text.length).toBeLessThanOrEqual(240)
     expect(text.endsWith('(via X)')).toBe(true)
+  })
+})
+
+describe('gent que treballa pels altres', () => {
+  const entra = (text, lang = 'ca') => {
+    const baixa =
+      UNIVERSAL_NEG.test(text.toLowerCase()) ||
+      POLITICAL_MARKERS.test(text.toLowerCase())
+    return passesEditorialFilter(text, lang).passes && !baixa
+  }
+
+  // El diccionari sabia dir "premi", "inaugura" o "descobreix" i no tenia CAP
+  // paraula per a rescatar, cooperar o apadrinar: "Open Arms rescata 200
+  // persones" no el bloquejava ningú, però tampoc el reconeixia ningú.
+  it('reconeix el rescat, la cooperació i el voluntariat', () => {
+    for (const t of [
+      'Open Arms rescata 200 persones al Mediterrani central',
+      'Els bombers i voluntaris rescaten sis excursionistes al Montseny',
+      'Un metge cooperant català torna del Txad',
+      'Creix el nombre de donants de sang a Catalunya',
+      'Una família de Vic apadrina un infant saharaui',
+      'Una missió humanitària parteix cap al Sudan',
+    ]) {
+      expect(entra(t), t).toBe(true)
+    }
+    expect(entra('Open Arms rescata a 200 personas en el Mediterráneo', 'es')).toBe(true)
+    expect(entra('Volunteers rescued forty people from the floods', 'en')).toBe(true)
+  })
+
+  // Només ACCIONS, no marcadors de tema. Provat el 27/07/2026: "acull" feia
+  // bona notícia de qualsevol congrés o final esportiva, i el nom d'una ONG
+  // convertia en bona notícia la seva pròpia denúncia. Un nom d'ONG diu de què
+  // va la peça, no si és bona: queda neutra i la valora la IA.
+  it('no confon acollir un congrés ni el nom d’una ONG amb una bona notícia', () => {
+    for (const t of [
+      'Barcelona acull el Congrés Mundial de Mòbils',
+      "L'Estadi Olímpic acull la final de la Champions",
+      "La Creu Roja alerta de l'augment de la pobresa infantil",
+      "Càritas denuncia l'increment de la desigualtat",
+    ]) {
+      expect(entra(t), t).toBe(false)
+    }
   })
 })

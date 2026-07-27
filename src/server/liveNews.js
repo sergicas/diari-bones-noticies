@@ -139,6 +139,23 @@ const editorialDictionaries = {
       'concert', 'estudi', 'troballa', 'documental', 'biografia',
       'poemari', 'disc', 'retrospectiva', 'estrena', 'recital',
       'nobel', 'avenç', 'invent', 'patent', 'vacuna', 'renovable', 'prototip',
+      // GENT QUE TREBALLA PELS ALTRES (27-07-2026). El diccionari sabia dir
+      // "premi", "inaugura" o "descobreix" i no tenia CAP paraula per a rescatar,
+      // acollir o fer voluntariat: "Open Arms rescata 200 persones al Mediterrani"
+      // no el bloquejava ningú, però tampoc no el reconeixia ningú, i només
+      // entrava si la IA el rescatava. Les grans ONG ja no mantenen RSS, així que
+      // aquestes històries s'han de trobar als mitjans que el radar ja llegeix.
+      //
+      // NOMÉS ACCIONS, no marcadors de tema. Provat el 27-07-2026: afegir-hi
+      // "acull" feia bona notícia de "Barcelona acull el Congrés Mundial de
+      // Mòbils" i de qualsevol estadi que aculli una final; i afegir-hi el nom
+      // de les organitzacions convertia en bona notícia "La Creu Roja alerta de
+      // l'augment de la pobresa infantil". Un nom d'ONG diu de què va la peça,
+      // no si és bona: aquestes queden neutres i les valora la IA, que és el
+      // que toca.
+      'rescata', 'rescaten', 'rescatat', 'rescatada', 'rescatats', 'rescatades',
+      'humanitari', 'humanitària', 'cooperant', 'cooperants',
+      'altruis', 'apadrin', 'donants',
     ],
     negative: [
       'abus', 'acusaci', 'assassinat', 'addicci', 'budells', 'càncer',
@@ -241,6 +258,10 @@ const editorialDictionaries = {
       'concierto', 'estudio', 'hallazgo', 'documental', 'biografía',
       'poemario', 'disco', 'retrospectiva', 'resucita', 'recital',
       'nobel', 'avance', 'invento', 'patente', 'vacuna', 'renovable', 'prototipo',
+      // Gente que trabaja por los demás (vegeu la nota al diccionari català).
+      'rescata', 'rescatan', 'rescatado', 'rescatada', 'rescatados',
+      'humanitario', 'humanitaria', 'cooperante', 'cooperantes',
+      'altruis', 'apadrin', 'donantes',
     ],
     negative: [
       'abuso', 'asesinato', 'asesina', 'adicción', 'ataque', 'ataques',
@@ -336,6 +357,9 @@ const editorialDictionaries = {
       'exhibition', 'novel', 'film', 'book', 'museum', 'festival', 'concert',
       'study', 'discovery', 'documentary', 'biography', 'retrospective',
       'nobel', 'patent', 'invention', 'vaccine', 'renewable', 'prototype',
+      // People working for others (see the note in the Catalan dictionary).
+      'rescues', 'rescued', 'humanitarian', 'aid worker', 'aid workers',
+      'donors',
     ],
     negative: [
       'war', 'wars', 'killed', 'kills', 'killing', 'killings', 'death',

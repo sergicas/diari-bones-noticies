@@ -75,6 +75,17 @@ export const rssFeeds = [
     defaultCategory: 'Salut',
     forceCategory: true,
   },
+  // Gent que treballa pels altres. De setze organitzacions provades el
+  // 27-07-2026, l'única catalana amb feed viu i peces que entren (2/10).
+  // Metges Sense Fronteres, Open Arms i Creu Roja ja no mantenen RSS públic;
+  // Amnistia en té, però publica denúncia i cap peça no passa el filtre.
+  {
+    name: 'Casal dels Infants',
+    url: 'https://www.casaldelsinfants.org/feed/',
+    language: 'ca',
+    defaultCategory: 'Solidaritat',
+    forceCategory: true,
+  },
   {
     name: "Diari de l'Educació",
     url: 'https://diarieducacio.cat/feed/',
