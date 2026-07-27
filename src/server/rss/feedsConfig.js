@@ -55,6 +55,34 @@ export const rssFeeds = [
     core: true,
   },
 
+  // ---- Seccions que el català no cobria (afegides el 27-07-2026) ----
+  // El catàleg tenia 16 fonts en català i 8 eren premsa comarcal: no hi havia
+  // NI UNA font catalana de ciència, salut ni educació, que són justament les
+  // seccions que l'informe diari marcava en vermell. Rendiment comprovat amb el
+  // codi real del radar abans d'afegir-les (peces que passen el filtre sobre el
+  // total del feed): Mètode 5/10, Diari de la Sanitat 8/10, Educació 7/10.
+  {
+    name: 'Mètode',
+    url: 'https://metode.cat/feed',
+    language: 'ca',
+    defaultCategory: 'Ciència',
+    forceCategory: true,
+  },
+  {
+    name: 'Diari de la Sanitat',
+    url: 'https://diarisanitat.cat/feed/',
+    language: 'ca',
+    defaultCategory: 'Salut',
+    forceCategory: true,
+  },
+  {
+    name: "Diari de l'Educació",
+    url: 'https://diarieducacio.cat/feed/',
+    language: 'ca',
+    defaultCategory: 'Educació',
+    forceCategory: true,
+  },
+
   // ===================== CASTELLÀ (només obert/gratuït) =====================
   { name: 'RTVE', url: 'https://www.rtve.es/rss/temas_noticias.xml', language: 'es', defaultCategory: 'Espanya', core: true },
   { name: '20minutos', url: 'https://www.20minutos.es/rss/', language: 'es', defaultCategory: 'Espanya' },
@@ -121,7 +149,21 @@ export const rssFeeds = [
 // la portada —només faria rotar la mateixa plaça única—, mentre que l'oferta en
 // català sí que hi entra sencera. Mesurat el 27-07-2026: de 121 peces aprovades
 // per passada només 3 eren catalanes, i la portada es quedava encallada en 5.
-export const rotatingPerLanguage = { ca: 12, es: 6, en: 2, fr: 1, it: 1, pt: 1 }
+const fontsNoCore = (language) =>
+  rssFeeds.filter((feed) => feed.language === language && !feed.core).length
+
+export const rotatingPerLanguage = {
+  // El català i el castellà es calculen del catàleg, no es fixen a mà: així,
+  // afegir una font nova no en deixa cap fora en silenci. (Va passar en afegir
+  // Mètode, Sanitat i Educació amb el número escrit a mà: les tres últimes
+  // catalanes deixaven de consultar-se i només ho va cantar la prova.)
+  ca: fontsNoCore('ca'),
+  es: fontsNoCore('es'),
+  en: 2,
+  fr: 1,
+  it: 1,
+  pt: 1,
+}
 
 export const serviceSourceNames = [
   'Agenda Cultural',
