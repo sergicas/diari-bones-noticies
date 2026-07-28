@@ -16,6 +16,7 @@ import {
 } from './lib/imageRules'
 import {
   distanceFilterOptions,
+  defaultDistanceFilter,
   getDistanceBand,
   sortByDistanceAndDate,
 } from './lib/distance.js'
@@ -173,7 +174,7 @@ function getCategoryFromSlug(slug) {
 function getDistanceFilterFromSlug(slug) {
   return (
     distanceFilterOptions.find((option) => option.id === slug)?.id ??
-    'progressiu'
+    defaultDistanceFilter
   )
 }
 
@@ -188,7 +189,11 @@ function getFilterStateFromPath(path) {
   }
 }
 
-function getFilterPath({ category = 'Totes', distanceFilter = 'progressiu', search = '' }) {
+function getFilterPath({
+  category = 'Totes',
+  distanceFilter = defaultDistanceFilter,
+  search = '',
+}) {
   const params = new URLSearchParams()
   const categorySlug = getCategorySlug(category)
 
@@ -196,7 +201,7 @@ function getFilterPath({ category = 'Totes', distanceFilter = 'progressiu', sear
     params.set('seccio', categorySlug)
   }
 
-  if (distanceFilter !== 'progressiu') {
+  if (distanceFilter !== defaultDistanceFilter) {
     params.set('distancia', distanceFilter)
   }
 
@@ -831,7 +836,7 @@ function waitForSwController() {
   const hasActiveFilters =
     searchTerm.trim() !== '' ||
     activeCategory !== 'Totes' ||
-    activeDistanceFilter !== 'progressiu'
+    activeDistanceFilter !== defaultDistanceFilter
   const headlineCount = filteredStories.length
   const lastRefreshLabel = formatDateTime(lastRefreshAt)
 
@@ -1016,7 +1021,7 @@ function waitForSwController() {
   function resetFilters({ syncUrl = true, scroll = false } = {}) {
     setSearchTerm('')
     setActiveCategory('Totes')
-    setActiveDistanceFilter('progressiu')
+    setActiveDistanceFilter(defaultDistanceFilter)
 
     if (syncUrl && route.page === 'home') {
       navigate('/', { replace: true, scroll })

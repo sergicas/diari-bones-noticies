@@ -11,9 +11,10 @@ import { getStorySection } from '../lib/sections.js'
 import { formatDate, handleImageError } from '../lib/viewHelpers.js'
 
 export function PortadaView({
-  categories,
+  // activeCategory es conserva perquè les adreces del diari continuen portant
+  // la secció (/?seccio=…) i els enllaços de proximitat l'han de mantenir. El
+  // menú de temes, però, ja no es dibuixa: la navegació és geogràfica.
   activeCategory,
-  applyCategoryFilter,
   getFilterPath,
   activeDistanceFilter,
   searchTerm,
@@ -34,67 +35,49 @@ export function PortadaView({
   editionStories,
   portadaStories,
 }) {
-  const primaryCategoryNames = new Set([
-    'Totes',
-    'Local',
-    'Ho comprovem',
-    'Et pot servir',
-    'Cultura',
-    'Ciència',
-  ])
-  const primaryCategories = categories.filter(
-    (category) =>
-      primaryCategoryNames.has(category) || category === activeCategory,
-  )
-  const secondaryCategories = categories.filter(
-    (category) => !primaryCategories.includes(category),
-  )
   const todayStories = portadaStories.slice(0, 3)
   const remainingStories = portadaStories.slice(3)
-
-  const renderCategoryLink = (category, prefix) => (
-    <a
-      key={`${prefix}-${category}`}
-      className={`category-pill ${
-        activeCategory === category ? 'is-active' : ''
-      }`}
-      href={getFilterPath({
-        category,
-        distanceFilter: activeDistanceFilter,
-        search: searchTerm,
-      })}
-      aria-current={activeCategory === category ? 'true' : undefined}
-      onClick={(event) => applyCategoryFilter(category, event)}
-    >
-      {category}
-    </a>
-  )
 
   return (
     <>
       <h1 className="sr-only">
         El Bon Diari: periodisme constructiu, útil i verificable
       </h1>
-      <section className="topics-bar" aria-label="Temes">
+      {/* La navegació del diari és GEOGRÀFICA, no temàtica (28-07-2026). El
+          lector es mou pel mapa, de casa cap enfora, i cada nivell inclou els
+          de dins: "Maresme" porta també Mataró. Abans hi havia un menú de
+          seccions (Cultura, Ciència, Ho comprovem…) que amb una edició curta
+          ensenyava el mateix a totes les pestanyes. */}
+      <section className="topics-bar" aria-label="D’on són les notícies">
         <div className="topics-bar__heading">
-          <p className="section-tag">Explora l’edició</p>
-          <p>Una portada comuna, amb accessos ràpids als formats principals.</p>
+          <p className="section-tag">D’on són</p>
+          <p>De casa cap enfora. Cada pas inclou l’anterior.</p>
         </div>
         <div className="category-row category-row--primary">
-          {primaryCategories.map((category) =>
-            renderCategoryLink(category, 'primary'),
-          )}
+          {distanceFilterOptions.map((option) => (
+            <a
+              key={option.id}
+              className={`category-pill ${
+                activeDistanceFilter === option.id ? 'is-active' : ''
+              }`}
+              href={getFilterPath({
+                category: activeCategory,
+                distanceFilter: option.id,
+                search: searchTerm,
+              })}
+              aria-current={
+                activeDistanceFilter === option.id ? 'true' : undefined
+              }
+              onClick={(event) => applyDistanceFilter(option.id, event)}
+            >
+              {option.label}
+            </a>
+          ))}
         </div>
-        {secondaryCategories.length > 0 ? (
-          <details className="topic-explorer">
-            <summary>Més temes</summary>
-            <div className="category-row category-row--secondary">
-              {secondaryCategories.map((category) =>
-                renderCategoryLink(category, 'secondary'),
-              )}
-            </div>
-          </details>
-        ) : null}
+        <p className="distance-note">
+          <strong>{activeDistanceOption.label}.</strong>{' '}
+          {activeDistanceOption.description}
+        </p>
       </section>
       <section
         id="noticia-destacada"
@@ -210,7 +193,7 @@ export function PortadaView({
             <p className="featured-story__summary">
               {portadaStories.length > 0
                 ? 'La informació de servei vigent continua disponible a sota; el radar publicarà una nova destacada quan superi el control editorial.'
-                : 'Torna al radar progressiu perquè la portada recuperi la selecció editorial completa.'}
+                : 'Torna a Món perquè la portada recuperi la selecció editorial completa.'}
             </p>
             <button
               className="button button--primary"
@@ -324,38 +307,8 @@ export function PortadaView({
           ) : null}
         </div>
 
-        <details className="filter-drawer" open={hasActiveFilters || undefined}>
-          <summary>Filtrar per proximitat</summary>
-          <div
-            className="distance-row"
-            aria-label="Filtres per proximitat respecte de Catalunya"
-          >
-            {distanceFilterOptions.map((option) => (
-              <a
-                key={option.id}
-                className={`distance-pill ${
-                  activeDistanceFilter === option.id ? 'is-active' : ''
-                }`}
-                href={getFilterPath({
-                  category: activeCategory,
-                  distanceFilter: option.id,
-                  search: searchTerm,
-                })}
-                aria-current={
-                  activeDistanceFilter === option.id ? 'true' : undefined
-                }
-                onClick={(event) => applyDistanceFilter(option.id, event)}
-              >
-                {option.label}
-              </a>
-            ))}
-          </div>
-          <p className="distance-note">
-            <strong>{activeDistanceOption.label}.</strong>{' '}
-            {activeDistanceOption.description}
-          </p>
-        </details>
-
+        {/* El calaix "Filtrar per proximitat" ja no cal: la proximitat és ara
+            la navegació principal, a dalt de tot de la portada. */}
         {remainingStories.length > 0 ? (
           <div className="news-grid news-grid--portada">
             {remainingStories.map((story) => (
