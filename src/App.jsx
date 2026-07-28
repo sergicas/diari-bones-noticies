@@ -12,7 +12,7 @@ import { feedStoryId } from './lib/story-id.js'
 import NotFoundPage from './components/NotFoundPage.jsx'
 import PullToRefresh from './components/PullToRefresh.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
-import { canInterceptNavigation, getStoryPath } from './lib/navigation.js'
+import { getStoryPath } from './lib/navigation.js'
 import {
   DEFAULT_STORY_IMAGE,
   classifyImage,
@@ -935,10 +935,6 @@ function waitForSwController() {
         .sort(sortByDistanceAndDate)
         .slice(0, 3)
     : []
-  const categories = [
-    'Totes',
-    ...EDITORIAL_TOPIC_INDEX.map((topic) => topic.label),
-  ]
   const requestedArchiveTopic =
     getEditorialTopicBySlug(getSearchParamsFromPath(currentPath).get('tema'))
       ?.label || 'all'
@@ -1146,50 +1142,6 @@ function waitForSwController() {
     }
   }
 
-  function applyCategoryFilter(category, event) {
-    if (!canInterceptNavigation(event)) {
-      return
-    }
-
-    event.preventDefault()
-    setActiveCategory(category)
-    navigate(
-      getFilterPath({
-        category,
-        distanceFilter: activeDistanceFilter,
-        search: searchTerm,
-      }),
-      { scroll: false },
-    )
-
-    if (typeof window !== 'undefined' && category !== 'Totes') {
-      window.setTimeout(() => {
-        const target = document.getElementById('noticia-destacada')
-        if (target) {
-          target.scrollIntoView({ behavior: 'smooth', block: 'start' })
-          target.focus({ preventScroll: true })
-        }
-      }, 120)
-    }
-  }
-
-  function applyDistanceFilter(distanceFilter, event) {
-    if (!canInterceptNavigation(event)) {
-      return
-    }
-
-    event.preventDefault()
-    setActiveDistanceFilter(distanceFilter)
-    navigate(
-      getFilterPath({
-        category: activeCategory,
-        distanceFilter,
-        search: searchTerm,
-      }),
-      { scroll: false },
-    )
-  }
-
   async function handleRefresh() {
     setIsRefreshing(true)
 
@@ -1293,11 +1245,7 @@ function waitForSwController() {
 
                 {route.page === 'home' ? (
                   <PortadaView
-                    categories={categories}
                     activeCategory={activeCategory}
-                    applyCategoryFilter={applyCategoryFilter}
-                    getFilterPath={getFilterPath}
-                    activeDistanceFilter={activeDistanceFilter}
                     searchTerm={searchTerm}
                     setSearchTerm={setSearchTerm}
                     liveTicker={liveTicker}
@@ -1310,9 +1258,6 @@ function waitForSwController() {
                     isServiceSection={isServiceSection}
                     navigate={navigate}
                     hasActiveFilters={hasActiveFilters}
-                    distanceFilterOptions={distanceFilterOptions}
-                    applyDistanceFilter={applyDistanceFilter}
-                    activeDistanceOption={activeDistanceOption}
                     editionStories={activeStories}
                     portadaStories={portadaStories}
                   />

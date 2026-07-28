@@ -13,11 +13,9 @@ import { formatDate, handleImageError } from '../lib/viewHelpers.js'
 
 export function PortadaView({
   // activeCategory es conserva perquè les adreces del diari continuen portant
-  // la secció (/?seccio=…) i els enllaços de proximitat l'han de mantenir. El
-  // menú de temes, però, ja no es dibuixa: la navegació és geogràfica.
+  // la secció (/?seccio=…). El menú de navegació és el de temes, al capçal; la
+  // portada ja no dibuixa ni el menú de seccions ni la barra geogràfica.
   activeCategory,
-  getFilterPath,
-  activeDistanceFilter,
   searchTerm,
   setSearchTerm,
   liveTicker,
@@ -30,9 +28,6 @@ export function PortadaView({
   isServiceSection,
   navigate,
   hasActiveFilters,
-  distanceFilterOptions,
-  applyDistanceFilter,
-  activeDistanceOption,
   editionStories,
   portadaStories,
 }) {
@@ -44,42 +39,10 @@ export function PortadaView({
       <h1 className="sr-only">
         El Bon Diari: periodisme constructiu, útil i verificable
       </h1>
-      {/* La navegació del diari és GEOGRÀFICA, no temàtica (28-07-2026). El
-          lector es mou pel mapa, de casa cap enfora, i cada nivell inclou els
-          de dins: "Maresme" porta també Mataró. Abans hi havia un menú de
-          seccions (Cultura, Ciència, Ho comprovem…) que amb una edició curta
-          ensenyava el mateix a totes les pestanyes. */}
-      <section className="topics-bar" aria-label="D’on són les notícies">
-        <div className="topics-bar__heading">
-          <p className="section-tag">D’on són</p>
-          <p>De casa cap enfora. Cada pas inclou l’anterior.</p>
-        </div>
-        <div className="category-row category-row--primary">
-          {distanceFilterOptions.map((option) => (
-            <a
-              key={option.id}
-              className={`category-pill ${
-                activeDistanceFilter === option.id ? 'is-active' : ''
-              }`}
-              href={getFilterPath({
-                category: activeCategory,
-                distanceFilter: option.id,
-                search: searchTerm,
-              })}
-              aria-current={
-                activeDistanceFilter === option.id ? 'true' : undefined
-              }
-              onClick={(event) => applyDistanceFilter(option.id, event)}
-            >
-              {option.label}
-            </a>
-          ))}
-        </div>
-        <p className="distance-note">
-          <strong>{activeDistanceOption.label}.</strong>{' '}
-          {activeDistanceOption.description}
-        </p>
-      </section>
+      {/* La navegació del diari és per TEMES, al menú del capçal (28-07-2026).
+          Abans hi havia aquí una barra geogràfica (Mataró → Món); s'ha retirat
+          perquè el diari es navega pels temes i prou. L'ordenació interna encara
+          posa el més proper al davant. */}
       <section
         id="noticia-destacada"
         className="hero-grid"
