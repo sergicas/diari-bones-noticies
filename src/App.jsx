@@ -1231,6 +1231,7 @@ function waitForSwController() {
         <div className="page-shell">
           <SiteHeader
             currentPage={route.page}
+            currentTopicSlug={route.page === 'topic' ? route.topicSlug : null}
             isRefreshing={isRefreshing}
             onNavigate={navigate}
             onRefresh={handleRefresh}

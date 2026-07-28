@@ -8,6 +8,7 @@ import MostReadSection from '../components/MostReadSection.jsx'
 import { canInterceptNavigation, getStoryPath } from '../lib/navigation.js'
 import { getDistanceBand, getOriginLabel } from '../lib/distance.js'
 import { getStorySection } from '../lib/sections.js'
+import { getTopicIcon } from '../lib/category.js'
 import { formatDate, handleImageError } from '../lib/viewHelpers.js'
 
 export function PortadaView({
@@ -110,6 +111,11 @@ export function PortadaView({
             <div className="featured-story__content">
               <div className="featured-story__header">
                 <span className="paper-chip paper-chip--light">
+                  {getTopicIcon(getStorySection(featuredStory).label) ? (
+                    <span className="paper-chip__icon" aria-hidden="true">
+                      {getTopicIcon(getStorySection(featuredStory).label)}{' '}
+                    </span>
+                  ) : null}
                   {getStorySection(featuredStory).label}
                 </span>
                 <span className="paper-chip paper-chip--subtle">

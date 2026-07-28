@@ -3,6 +3,7 @@ import { canInterceptNavigation } from '../lib/navigation.js'
 import {
   EDITORIAL_TOPIC_INDEX,
   classifyAllowedEditorialTopic,
+  getTopicIcon,
 } from '../lib/category.js'
 
 function TopicLink({ href, children, onNavigate, secondary = false }) {
@@ -66,7 +67,12 @@ export function TopicsView({ stories, activeStoryIds, archiveStoryIds, onNavigat
           {topicGroups.map((topic) => (
             <article className="topic-index__card" key={topic.id}>
               <p className="section-tag">{topic.total} {topic.total === 1 ? 'peça' : 'peces'}</p>
-              <h3>{topic.label}</h3>
+              <h3>
+                <span className="topic-icon" aria-hidden="true">
+                  {getTopicIcon(topic.label)}
+                </span>{' '}
+                {topic.label}
+              </h3>
               <p>{topic.description}</p>
               {topic.subtopics.length > 0 ? (
                 <ul className="topic-index__subtopics" aria-label={`Àmbits de ${topic.label}`}>

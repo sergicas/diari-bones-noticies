@@ -6,7 +6,7 @@
     <atom:link href="https://bondiari.com/feed.xml" rel="self" type="application/rss+xml" />
     <description>Periodisme constructiu en català: solucions, verificacions i informació útil amb fonts transparents.</description>
     <language>ca</language>
-    <lastBuildDate>Tue, 28 Jul 2026 11:35:58 GMT</lastBuildDate>
+    <lastBuildDate>Tue, 28 Jul 2026 16:25:30 GMT</lastBuildDate>
     <item>
       <title>Lleó XIV s’adreça als catalans en català abans d’aterrar a Barcelona</title>
       <link>https://bondiari.com/noticia/lleo-xiv-paraules-catala-barcelona</link>
@@ -28,6 +28,28 @@ Impacte: La família Vidal, ajuntaments, consell comarcal i empreses privades ha
 Font: El Punt Avui</description>
       <pubDate>Fri, 05 Jun 2026 06:00:00 GMT</pubDate>
       <category>Educació</category>
+    </item>
+    <item>
+      <title>El Quebec i el Canadà signen 10.000 milions de dòlars en serveis públics per a la pròxima dècada</title>
+      <link>https://bondiari.com/noticia/quebec-ottawa-10000-milions-infraestructures</link>
+      <guid isPermaLink="true">https://bondiari.com/noticia/quebec-ottawa-10000-milions-infraestructures</guid>
+      <description>El primer ministre canadenc, Mark Carney, i la primera ministra del Quebec, Christine Fréchette, han signat el 2 de juny de 2026 cinc acords d’infraestructures per gairebé 10.000 milions de dòlars canadencs. La inversió, repartida en una dècada, cobreix transport públic, sanitat, habitatge i educació superior, i inclou la primera gran injecció federal per electrificar autobusos i renovar instal·lacions hospitalàries.
+
+Impacte: Dels 10.000 milions de dòlars compromesos, gairebé 6.000 es destinen a transport públic, 1.329 a manteniment i actualització de les xarxes existents, 1.000 a renovar 17 instal·lacions sanitàries i 2.700 a habitatge i ensenyament superior, mentre que 459 milions financen 11 projectes d’electrificació de cotxeres i autobusos.
+Font: CBC News</description>
+      <pubDate>Tue, 02 Jun 2026 17:00:00 GMT</pubDate>
+      <category>Política</category>
+    </item>
+    <item>
+      <title>El Govern obre l&apos;Oficina de Protecció dels Drets Lingüístics</title>
+      <link>https://bondiari.com/noticia/oficina-proteccio-drets-linguistics-catalunya</link>
+      <guid isPermaLink="true">https://bondiari.com/noticia/oficina-proteccio-drets-linguistics-catalunya</guid>
+      <description>La Generalitat activa una oficina pública que recull i tramita denúncies per discriminació lingüística, coincidint amb el balanç del primer any del Pacte Nacional per la Llengua, que ha completat el 62% de les iniciatives previstes.
+
+Impacte: Els ciutadans tenen, per primer cop, una finestreta única per fer constar incidents lingüístics i obtenir resposta institucional traçable.
+Font: Diari de la Llengua</description>
+      <pubDate>Wed, 27 May 2026 09:00:00 GMT</pubDate>
+      <category>Política</category>
     </item>
     <item>
       <title>Un supercomputador a Tianjin redueix de mesos a segons el cribratge de fàrmacs</title>
@@ -61,6 +83,17 @@ Impacte: El reforç permet baixar la ràtio en els grups d&apos;infantil i prim�
 Font: Vilaweb</description>
       <pubDate>Mon, 25 May 2026 06:30:00 GMT</pubDate>
       <category>Educació</category>
+    </item>
+    <item>
+      <title>Els pressupostos del 2026 reforcen serveis públics, habitatge i inversió</title>
+      <link>https://bondiari.com/noticia/pressupostos-2026-serveis-publics-catalunya</link>
+      <guid isPermaLink="true">https://bondiari.com/noticia/pressupostos-2026-serveis-publics-catalunya</guid>
+      <description>El projecte de pressupostos de la Generalitat per al 2026 situa Salut, Educació, Drets Socials i habitatge entre les prioritats, amb una despesa rècord de 49.162 milions d&apos;euros.
+
+Impacte: La inversió pública creix fins a 4.146 milions i els comptes incorporen mesures per donar continuïtat als projectes de despesa més enllà del 2026.
+Font: Generalitat de Catalunya</description>
+      <pubDate>Fri, 22 May 2026 10:46:00 GMT</pubDate>
+      <category>Política</category>
     </item>
     <item>
       <title>La Generalitat forma més de 250.000 professionals en ús responsable de la IA</title>
@@ -138,6 +171,17 @@ Impacte: Els centres es modernitzen amb la implicació d’empreses, sindicats, 
 Font: Comissió Europea</description>
       <pubDate>Mon, 04 May 2026 09:00:00 GMT</pubDate>
       <category>Educació</category>
+    </item>
+    <item>
+      <title>El Parlament aprova per unanimitat l&apos;ajut a malalts d&apos;ELA amb dependència extrema</title>
+      <link>https://bondiari.com/noticia/parlament-ela-dependencia-extrema-ajut-mensual</link>
+      <guid isPermaLink="true">https://bondiari.com/noticia/parlament-ela-dependencia-extrema-ajut-mensual</guid>
+      <description>El Parlament de Catalunya convalida per unanimitat el decret que reconeix una prestació mensual de fins a 14.788 euros per a les persones amb ELA i dependència de Grau III+, dotat amb 20 milions per al 2026.
+
+Impacte: Uns 200 pacients i les seves famílies passen a tenir una resposta econòmica estructurada i una compensació per la cura continuada a domicili.
+Font: Vilaweb</description>
+      <pubDate>Wed, 29 Apr 2026 08:00:00 GMT</pubDate>
+      <category>Política</category>
     </item>
     <item>
       <title>L&apos;esport entra a l&apos;atenció primària com a eina terapèutica a 80 municipis</title>
@@ -236,7 +280,7 @@ Font: Eurydice — Xarxa Europea d’Educació</description>
 Impacte: La UE ha consolidat una definició comuna d’economia social i ha incorporat clàusules socials en la contractació pública per impulsar entitats sense ànim de lucre.
 Font: Comissió Europea</description>
       <pubDate>Mon, 30 Mar 2026 08:00:00 GMT</pubDate>
-      <category>Societat</category>
+      <category>Política</category>
     </item>
     <item>
       <title>Alosa, Ginestà i Oques Grasses dominen els Enderrock 2026 i fan de Girona l’epicentre de la música catalana</title>
@@ -248,6 +292,17 @@ Impacte: La novetat ha estat aplegar en dies consecutius els premis de música p
 Font: Nació Digital</description>
       <pubDate>Fri, 27 Mar 2026 10:08:00 GMT</pubDate>
       <category>Cultura</category>
+    </item>
+    <item>
+      <title>La UE i Austràlia tanquen un tractat comercial després de vuit anys de negociació</title>
+      <link>https://bondiari.com/noticia/ue-australia-tractat-comerc-2026</link>
+      <guid isPermaLink="true">https://bondiari.com/noticia/ue-australia-tractat-comerc-2026</guid>
+      <description>La presidenta de la Comissió Europea, Ursula von der Leyen, i el primer ministre australià, Anthony Albanese, han segellat el 24 de març de 2026 un tractat de lliure comerç entre la UE i Austràlia. L’acord elimina aranzels per a la majoria de productes europeus, reforça l’accés a matèries primeres crítiques —liti, alumini i manganès— i s’acompanya d’una nova associació de seguretat i defensa.
+
+Impacte: El tractat preveu un estalvi de 1.000 milions d’euros anuals en drets de duana per a les empreses europees i un creixement projectat del 33% de les exportacions cap a Austràlia en una dècada, amb pujades fins al 48% en làctics i del 52% en vehicles de motor.
+Font: Euronews</description>
+      <pubDate>Tue, 24 Mar 2026 16:00:00 GMT</pubDate>
+      <category>Economia</category>
     </item>
     <item>
       <title>L’IEEE celebra 15 anys d’enginyeria al servei dels barris</title>
@@ -479,6 +534,17 @@ Impacte: 50 dones han rebut formacio digital per vendre millor, cobrar directame
 Font: UNDP</description>
       <pubDate>Thu, 27 Mar 2025 08:00:00 GMT</pubDate>
       <category>Solidaritat</category>
+    </item>
+    <item>
+      <title>Uns aiguamolls de Xile tornen a respirar i reactiven l&apos;economia local</title>
+      <link>https://bondiari.com/noticia/wetlands-chile</link>
+      <guid isPermaLink="true">https://bondiari.com/noticia/wetlands-chile</guid>
+      <description>La recuperacio d&apos;aiguamolls de la costa central xilena esta ajudant a recuperar biodiversitat i tambe feines vinculades al turisme i a la sal artesanal.
+
+Impacte: El projecte impulsa la recuperacio de cinc aiguamolls costaners i reforca ingressos locals vinculats a la natura.
+Font: UNEP</description>
+      <pubDate>Fri, 31 Jan 2025 08:00:00 GMT</pubDate>
+      <category>Economia</category>
     </item>
     <item>
       <title>Un centre de salut reobre a l&apos;India despres de 20 anys i apropa l&apos;atencio medica a tres pobles</title>

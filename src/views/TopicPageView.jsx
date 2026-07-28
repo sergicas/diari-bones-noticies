@@ -7,6 +7,7 @@ import { StoryCard } from '../components/StoryCard.jsx'
 import { canInterceptNavigation, getStoryPath } from '../lib/navigation.js'
 import { getDistanceBand, getOriginLabel } from '../lib/distance.js'
 import { getStorySection } from '../lib/sections.js'
+import { getTopicIcon } from '../lib/category.js'
 import { formatDate, handleImageError } from '../lib/viewHelpers.js'
 
 export function TopicPageView({
@@ -43,7 +44,12 @@ export function TopicPageView({
     <>
       <section className="section-block topic-page__header">
         <p className="section-tag">Tema</p>
-        <h1>{topic.label}</h1>
+        <h1>
+          <span className="topic-icon" aria-hidden="true">
+            {getTopicIcon(topic.label)}
+          </span>{' '}
+          {topic.label}
+        </h1>
         <p className="topic-page__description">{topic.description}</p>
         {topic.subtopics?.length > 0 ? (
           <ul className="topic-index__subtopics" aria-label={`Àmbits de ${topic.label}`}>
@@ -96,6 +102,11 @@ export function TopicPageView({
             <div className="featured-story__content">
               <div className="featured-story__header">
                 <span className="paper-chip paper-chip--light">
+                  {getTopicIcon(getStorySection(featuredStory).label) ? (
+                    <span className="paper-chip__icon" aria-hidden="true">
+                      {getTopicIcon(getStorySection(featuredStory).label)}{' '}
+                    </span>
+                  ) : null}
                   {getStorySection(featuredStory).label}
                 </span>
                 <span className="paper-chip paper-chip--subtle">

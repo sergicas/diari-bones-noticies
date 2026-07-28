@@ -240,6 +240,61 @@
   color: #fffaf1;
 }
 
+/* Fila de temes ben visible al menú, amb icona simpàtica a cada un. */
+.topic-menu {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.topic-menu__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 13px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--ink);
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-decoration: none;
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    background-color 180ms ease,
+    color 180ms ease;
+}
+
+.topic-menu__item:hover {
+  transform: translateY(-1px);
+  border-color: var(--ink);
+}
+
+.topic-menu__item.is-active {
+  border-color: transparent;
+  background: var(--ink);
+  color: #fffaf1;
+}
+
+.topic-menu__icon {
+  font-size: 1.05rem;
+  line-height: 1;
+}
+
+/* Icona del tema als títols (índex i pàgina del tema). */
+.topic-icon {
+  font-style: normal;
+}
+
+/* Icona dins de l'etiqueta de secció de les targetes i destacades. */
+.paper-chip__icon {
+  font-style: normal;
+}
+
 .section-tag {
   margin: 0;
   font-size: 0.82rem;

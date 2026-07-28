@@ -3,6 +3,7 @@
 import { canInterceptNavigation, getStoryPath } from '../lib/navigation.js'
 import { getDistanceBand, getOriginBadge } from '../lib/distance.js'
 import { getStorySection } from '../lib/sections.js'
+import { getTopicIcon } from '../lib/category.js'
 import { formatDate, getLanguageLabel, handleImageError } from '../lib/viewHelpers.js'
 
 export function StoryCard({ story, onNavigate }) {
@@ -10,6 +11,7 @@ export function StoryCard({ story, onNavigate }) {
   const originBadge = getOriginBadge(story.origin, story.editorialFormat)
   const distanceBand = getDistanceBand(story)
   const storySection = getStorySection(story)
+  const sectionIcon = getTopicIcon(storySection.label)
 
   return (
     <a
@@ -39,7 +41,14 @@ export function StoryCard({ story, onNavigate }) {
 
       <div className="story-card__header">
         <div className="story-card__chips">
-          <span className="paper-chip">{storySection.label}</span>
+          <span className="paper-chip">
+            {sectionIcon ? (
+              <span className="paper-chip__icon" aria-hidden="true">
+                {sectionIcon}{' '}
+              </span>
+            ) : null}
+            {storySection.label}
+          </span>
           <span className="paper-chip paper-chip--subtle">
             {distanceBand.label}
           </span>

@@ -272,6 +272,25 @@ export const EDITORIAL_TOPIC_INDEX = [
   },
 ]
 
+// Una icona simpàtica per a cada tema. Es fa servir a TOT ARREU on apareix un
+// tema: el menú, l'índex, la pàgina del tema i l'etiqueta de cada targeta.
+const TOPIC_ICONS = {
+  Cultura: '🎭',
+  Esports: '⚽',
+  Ciència: '🔬',
+  Tecnologia: '💡',
+  Societat: '🤝',
+  Religió: '🕊️',
+  Solidaritat: '❤️',
+  Educació: '📚',
+  Economia: '🌱',
+  Política: '🏛️',
+}
+
+export function getTopicIcon(label) {
+  return TOPIC_ICONS[label] || ''
+}
+
 export function getEditorialTopicBySlug(slug) {
   const normalized = String(slug || '').trim().toLowerCase()
   return EDITORIAL_TOPIC_INDEX.find((topic) => topic.id === normalized) || null

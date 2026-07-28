@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { canInterceptNavigation } from '../lib/navigation.js'
 import { formatDate } from '../lib/viewHelpers.js'
+import { EDITORIAL_TOPIC_INDEX, getTopicIcon } from '../lib/category.js'
 
 function readOwnerFlag() {
   if (typeof window === 'undefined') return false
@@ -13,6 +14,7 @@ function readOwnerFlag() {
 
 export default function SiteHeader({
   currentPage,
+  currentTopicSlug = null,
   isRefreshing,
   onNavigate,
   onRefresh,
@@ -120,6 +122,32 @@ export default function SiteHeader({
           </div>
         ) : null}
       </div>
+
+      <nav className="topic-menu" aria-label="Temes del diari">
+        {EDITORIAL_TOPIC_INDEX.map((topic) => {
+          const href = `/tema/${topic.id}`
+          const isActive =
+            currentPage === 'topic' && currentTopicSlug === topic.id
+          return (
+            <a
+              key={topic.id}
+              className={`topic-menu__item ${isActive ? 'is-active' : ''}`}
+              href={href}
+              aria-current={isActive ? 'page' : undefined}
+              onClick={(event) => {
+                if (!canInterceptNavigation(event)) return
+                event.preventDefault()
+                onNavigate(href)
+              }}
+            >
+              <span className="topic-menu__icon" aria-hidden="true">
+                {getTopicIcon(topic.label)}
+              </span>
+              <span className="topic-menu__label">{topic.label}</span>
+            </a>
+          )
+        })}
+      </nav>
     </header>
   )
 }
