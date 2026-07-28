@@ -2441,6 +2441,26 @@
   font-size: clamp(1.5rem, 3vw, 2rem);
 }
 
+/* Capçalera de la pàgina pròpia d'un tema (/tema/<slug>). */
+.topic-page__header {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.topic-page__header h1 {
+  margin: 0;
+  font-family: var(--display-font, Georgia, serif);
+  font-size: clamp(2rem, 5vw, 3.2rem);
+  line-height: 1.05;
+}
+
+.topic-page__description {
+  margin: 0;
+  max-width: 46ch;
+  font-size: 1.05rem;
+}
+
 .topic-index__subtopics {
   display: flex;
   flex-wrap: wrap;

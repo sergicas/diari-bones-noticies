@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { dirname, resolve } from 'node:path'
 import { seedArticles as rawSeedArticles } from '../src/data/articles.js'
 import { hasOriginalPhoto } from '../src/lib/imageRules.js'
+import { EDITORIAL_TOPIC_INDEX } from '../src/lib/category.js'
 
 // Aplica la regla editorial: només inclou articles amb fotografia original al
 // sitemap i al feed RSS. Els que tenen il·lustració queden ocultats també
@@ -57,6 +58,14 @@ const staticPages = [
     priority: '0.7',
     changefreq: 'daily',
   },
+  // Una pàgina pròpia per a cada tema editorial.
+  ...EDITORIAL_TOPIC_INDEX.map((topic) => ({
+    path: `/tema/${topic.id}`,
+    title: `${topic.label} | ${siteName}`,
+    description: topic.description,
+    priority: '0.6',
+    changefreq: 'daily',
+  })),
   {
     path: '/sobre',
     title: `Sobre · ${siteName}`,

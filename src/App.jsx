@@ -34,6 +34,7 @@ import {
   EDITORIAL_TOPIC_INDEX,
   getEditorialTopicBySlug,
   getEditorialTopicSlug,
+  classifyAllowedEditorialTopic,
 } from './lib/category.js'
 import { formatDateTime } from './lib/viewHelpers.js'
 
@@ -45,6 +46,7 @@ import { AccessibilityControls } from './components/AccessibilityControls.jsx'
 
 const ArchiveView = lazy(() => import('./views/ArchiveView.jsx'))
 const TopicsView = lazy(() => import('./views/TopicsView.jsx'))
+const TopicPageView = lazy(() => import('./views/TopicPageView.jsx'))
 const SavedView = lazy(() => import('./views/SavedView.jsx'))
 const StatsView = lazy(() => import('./views/StatsView.jsx'))
 const PrivacyView = lazy(() => import('./views/PrivacyView.jsx'))
@@ -128,6 +130,13 @@ function getRoute(path) {
 
   if (normalizedPath === '/temes') {
     return { page: 'topics' }
+  }
+
+  if (normalizedPath.startsWith('/tema/')) {
+    return {
+      page: 'topic',
+      topicSlug: decodeURIComponent(normalizedPath.replace('/tema/', '')),
+    }
   }
 
   if (normalizedPath === '/estadistiques') {
@@ -876,6 +885,31 @@ function waitForSwController() {
   const portadaStories = [...remainingStories, ...geographicRescue].sort(
     sortByDistanceAndDate,
   )
+  // Pàgina pròpia d'un tema (/tema/<slug>): una "portada petita" de l'àmbit.
+  // Es nodreix de TOT (recent + hemeroteca) del tema perquè no quedi buida; la
+  // destacada, però, prova de ser recent abans de recórrer a una peça de fons.
+  const topicRoute =
+    route.page === 'topic' ? getEditorialTopicBySlug(route.topicSlug) : null
+  const topicStories = topicRoute
+    ? allStories
+        .filter((story) => classifyAllowedEditorialTopic(story) === topicRoute.label)
+        .sort(sortByPublishedAtDesc)
+    : []
+  const topicFeatured =
+    topicStories.find(
+      (story) =>
+        editionReferenceTime - getStoryTimestamp(story) <= featuredStoryMaxAgeMs,
+    ) ??
+    topicStories[0] ??
+    null
+  const topicGridStories = topicStories
+    .filter((story) => story.id !== topicFeatured?.id)
+    .slice(0, 24)
+  const topicFeaturedSourceLink = topicFeatured ? getSourceLink(topicFeatured) : null
+  const topicFeaturedImageLink = topicFeatured
+    ? getImageLink(topicFeatured, topicFeaturedSourceLink)
+    : ''
+
   const currentStory =
     route.page === 'story'
       ? allStories.find((story) => story.id === route.storyId) ??
@@ -932,7 +966,12 @@ function waitForSwController() {
     } else if (route.page === 'topics') {
       nextTitle = `Índex de temes | ${siteName}`
       nextDescription =
-        "Cultura, Esports, Ciència, Tecnologia, Societat, Religió, Solidaritat i Educació a El Bon Diari."
+        "Cultura, Esports, Ciència, Tecnologia, Societat, Religió, Solidaritat, Educació, Economia i Política a El Bon Diari."
+    } else if (route.page === 'topic') {
+      nextTitle = topicRoute
+        ? `${topicRoute.label} | ${siteName}`
+        : `Tema no trobat | ${siteName}`
+      nextDescription = topicRoute?.description || defaultDescription
     } else if (route.page === 'story' && currentStory) {
       nextTitle = `${currentStory.title} | ${siteName}`
       nextDescription = currentStory.summary || currentStory.impact
@@ -1003,7 +1042,7 @@ function waitForSwController() {
     } else if (robotsTag?.getAttribute('content') === 'noindex, nofollow') {
       robotsTag.remove()
     }
-  }, [activeCategory, currentPath, currentStory, isFetchingStory, route])
+  }, [activeCategory, currentPath, currentStory, isFetchingStory, route, topicRoute])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -1236,6 +1275,18 @@ function waitForSwController() {
                     activeStoryIds={activeStories.map((story) => story.id)}
                     archiveStoryIds={archiveStories.map((story) => story.id)}
                     onNavigate={navigate}
+                  />
+                ) : null}
+
+                {route.page === 'topic' ? (
+                  <TopicPageView
+                    topic={topicRoute}
+                    featuredStory={topicFeatured}
+                    featuredImageLink={topicFeaturedImageLink}
+                    featuredSourceLink={topicFeaturedSourceLink}
+                    gridStories={topicGridStories}
+                    totalCount={topicStories.length}
+                    navigate={navigate}
                   />
                 ) : null}
 

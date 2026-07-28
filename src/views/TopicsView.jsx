@@ -41,8 +41,8 @@ export function TopicsView({ stories, activeStoryIds, archiveStoryIds, onNavigat
     <>
       <PageHero
         tag="Índex de temes"
-        title="Vuit àmbits per trobar allò que fa avançar el món."
-        description="Cada tema reuneix les peces recents de portada i les històries conservades a l’hemeroteca, sense duplicats."
+        title="Deu àmbits per trobar allò que fa avançar el món."
+        description="Cada tema té la seva pàgina, amb les peces recents de portada i les històries conservades a l’hemeroteca, sense duplicats."
         actions={
           <TopicLink href="/" onNavigate={onNavigate}>
             Tornar a la portada
@@ -86,15 +86,15 @@ export function TopicsView({ stories, activeStoryIds, archiveStoryIds, onNavigat
                 </div>
               </dl>
               <div className="topic-index__actions">
-                <TopicLink href={`/?tema=${topic.id}`} onNavigate={onNavigate}>
-                  Veure les noves
+                <TopicLink href={`/tema/${topic.id}`} onNavigate={onNavigate}>
+                  Obrir el tema
                 </TopicLink>
                 <TopicLink
                   href={`/hemeroteca?tema=${topic.id}`}
                   onNavigate={onNavigate}
                   secondary
                 >
-                  Obrir l’hemeroteca
+                  Hemeroteca
                 </TopicLink>
               </div>
             </article>

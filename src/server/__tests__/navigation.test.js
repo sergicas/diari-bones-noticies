@@ -40,7 +40,18 @@ describe('navigation and category helpers', () => {
     expect(normalizeCategory('unknown-tag')).toBe('Actualitat')
   })
 
-  it('exposes the eight public topics with the requested culture index', () => {
+  it('cada tema resol la seva pàgina pròpia (/tema/<slug>) i torna arrere', () => {
+    for (const topic of EDITORIAL_TOPIC_INDEX) {
+      // slug → tema → slug: el que fan servir els enllaços de /temes, el
+      // sitemap i la resolució de /tema/<slug>.
+      expect(getEditorialTopicBySlug(topic.id)?.label, topic.id).toBe(topic.label)
+      expect(getEditorialTopicSlug(topic.label), topic.label).toBe(topic.id)
+    }
+    // Un slug desconegut no resol cap tema (la pàgina mostra "tema no trobat").
+    expect(getEditorialTopicBySlug('inexistent')).toBeNull()
+  })
+
+  it('exposes the ten public topics with the requested culture index', () => {
     expect(EDITORIAL_TOPIC_INDEX.map((topic) => topic.label)).toEqual([
       'Cultura',
       'Esports',
