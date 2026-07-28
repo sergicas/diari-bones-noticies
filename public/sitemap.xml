@@ -37,6 +37,12 @@
     <priority>0.4</priority>
   </url>
   <url>
+    <loc>https://bondiari.com/noticia/pressupostos-2026-serveis-publics-catalunya</loc>
+    <lastmod>2026-05-22</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
     <loc>https://bondiari.com/noticia/prescripcio-esportiva-catalunya</loc>
     <lastmod>2026-04-28</lastmod>
     <changefreq>monthly</changefreq>
@@ -217,6 +223,12 @@
     <priority>0.7</priority>
   </url>
   <url>
+    <loc>https://bondiari.com/noticia/quebec-ottawa-10000-milions-infraestructures</loc>
+    <lastmod>2026-06-02</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
     <loc>https://bondiari.com/noticia/supercomputador-tianjin-farmacs-arn-2026</loc>
     <lastmod>2026-05-27</lastmod>
     <changefreq>monthly</changefreq>
@@ -255,6 +267,18 @@
   <url>
     <loc>https://bondiari.com/noticia/catalunya-1787-places-escoles-publiques-2026-27</loc>
     <lastmod>2026-05-25</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://bondiari.com/noticia/parlament-ela-dependencia-extrema-ajut-mensual</loc>
+    <lastmod>2026-04-29</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://bondiari.com/noticia/oficina-proteccio-drets-linguistics-catalunya</loc>
+    <lastmod>2026-05-27</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>

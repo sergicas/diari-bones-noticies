@@ -202,6 +202,7 @@ export const ALLOWED_EDITORIAL_TOPICS = [
   'Solidaritat',
   'Educació',
   'Economia',
+  'Política',
 ]
 
 // Índex públic de la línia temàtica. És compartit pel menú, la portada i
@@ -262,6 +263,13 @@ export const EDITORIAL_TOPIC_INDEX = [
       'Feina, cooperatives, comerç i indústria quan creen oportunitats o reparteixen millor.',
     subtopics: [],
   },
+  {
+    id: 'politica',
+    label: 'Política',
+    description:
+      'Govern i institucions quan milloren la vida en comú. El soroll de partit i el conflicte en queden fora.',
+    subtopics: [],
+  },
 ]
 
 export function getEditorialTopicBySlug(slug) {
@@ -277,7 +285,6 @@ export function getEditorialTopicSlug(label) {
 
 const ALLOWED_EDITORIAL_TOPIC_SET = new Set(ALLOWED_EDITORIAL_TOPICS)
 const STRICTLY_OUTSIDE_TOPIC_CATEGORIES = new Set([
-  'Política',
   'Internacional',
   'Món',
   'Europa',

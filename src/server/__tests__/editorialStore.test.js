@@ -112,11 +112,17 @@ describe('editorial D1 store', () => {
 
   it('reads only publishable stories from the permanent catalog', async () => {
     const good = publishableStory()
+    // La Política ja és un tema autoritzat; l'exemple de "fora" ha de ser una
+    // peça de servei burocràtic, que és el que de debò queda exclòs.
     const outside = publishableStory({
-      id: 'story-politica',
-      url: 'https://example.com/story-politica',
-      title: 'El parlament aprova els pressupostos generals',
-      category: 'Política',
+      id: 'story-dades',
+      url: 'https://example.com/story-dades',
+      title: "Idescat actualitza les afiliacions d'autònoms per sectors",
+      category: 'Dades',
+      body: [
+        "L'institut d'estadística ha renovat aquesta sèrie amb les xifres oficials per comarques i períodes, disponibles al portal públic per a consulta i baixada.",
+      ],
+      impact: 'La sèrie renovada permet seguir l’evolució amb xifres oficials.',
     })
     const db = {
       prepare() {

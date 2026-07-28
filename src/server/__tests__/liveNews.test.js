@@ -358,6 +358,7 @@ describe('línia temàtica — només els vuit àmbits autoritzats', () => {
       'Solidaritat',
       'Educació',
       'Economia',
+      'Política',
     ])
     for (const category of ALLOWED_EDITORIAL_TOPICS) {
       expect(
@@ -413,10 +414,10 @@ describe('línia temàtica — només els vuit àmbits autoritzats', () => {
     ).toBe('Societat')
   })
 
-  // Economia és un àmbit autoritzat des del 28/07/2026 (decisió del Sergi). El
-  // que ha de seguir FORA és el servei burocràtic (subvencions, dades de
-  // l'Idescat) i la política, que el diari no cobreix.
-  it('manté fora el servei, la burocràcia i la política', () => {
+  // Economia (28/07) i Política (28/07) són àmbits autoritzats. El que ha de
+  // seguir FORA és el servei burocràtic: subvencions i dades de l'Idescat, que
+  // el Sergi va decidir no cobrir.
+  it('manté fora el servei i la burocràcia', () => {
     for (const story of [
       {
         category: 'Dades',
@@ -427,17 +428,28 @@ describe('línia temàtica — només els vuit àmbits autoritzats', () => {
         title: 'Convocatòria de subvencions per a l’ocupació juvenil',
       },
       {
-        category: 'Política',
-        title: 'El Parlament aprova els pressupostos',
-        summary: 'Els comptes també inclouen una partida per a educació.',
-      },
-      {
         category: 'Oportunitats',
         title: 'Bases de la cinquena edició del Mediterranean Sustainability Award',
       },
     ]) {
       expect(classifyAllowedEditorialTopic(story), story.title).toBeNull()
       expect(keepAllowedEditorialTopic(story), story.title).toBeNull()
+    }
+  })
+
+  // La política institucional constructiva ENTRA com a tema. El soroll de
+  // partit i el conflicte ja NO arriben fins aquí: els para abans el bloc dur
+  // POLITICAL_MARKERS (vegeu el seu describe), de manera que a la classificació
+  // només hi arriba la bona política.
+  it('admet la política institucional que ha passat el bloc de conflicte', () => {
+    for (const title of [
+      'El Govern obre una oficina de protecció de drets',
+      'El Parlament aprova per unanimitat la llei de protecció de la infància',
+    ]) {
+      expect(
+        classifyAllowedEditorialTopic({ category: 'Política', title }),
+        title,
+      ).toBe('Política')
     }
   })
 
