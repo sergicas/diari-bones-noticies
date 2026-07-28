@@ -24,6 +24,9 @@ import {
   isMaritimeRescue,
 } from '../liveNews.js'
 import {
+  ALLOWED_EDITORIAL_TOPICS,
+  classifyAllowedEditorialTopic,
+  keepAllowedEditorialTopic,
   normalizeCategory,
   canonicalizeCategory,
   refineCategoryByContent,
@@ -340,6 +343,115 @@ describe('refineCategoryByContent — correcció per contingut', () => {
 
   it('no toca una categoria correcta sense senyals', () => {
     expect(refineCategoryByContent('Ciència', 'Una nova iniciativa veïnal', '')).toBe('Ciència')
+  })
+})
+
+describe('línia temàtica — només els vuit àmbits autoritzats', () => {
+  it('publica directament les categories autoritzades', () => {
+    expect(ALLOWED_EDITORIAL_TOPICS).toEqual([
+      'Cultura',
+      'Esports',
+      'Ciència',
+      'Tecnologia',
+      'Societat',
+      'Religió',
+      'Solidaritat',
+      'Educació',
+    ])
+    for (const category of ALLOWED_EDITORIAL_TOPICS) {
+      expect(
+        classifyAllowedEditorialTopic({ category, title: 'Una bona notícia' }),
+      ).toBe(category)
+    }
+  })
+
+  it('reclassifica una agenda de música, literatura o teatre com a Cultura', () => {
+    for (const title of [
+      'Un concert de música omple la plaça',
+      'La biblioteca presenta una nova novel·la',
+      'El teatre municipal estrena una obra',
+    ]) {
+      expect(
+        classifyAllowedEditorialTopic({ category: 'Agenda', title }),
+        title,
+      ).toBe('Cultura')
+    }
+  })
+
+  it('admet educació, solidaritat, religió i societat pel contingut', () => {
+    expect(
+      classifyAllowedEditorialTopic({
+        category: 'Comarcal',
+        title: 'Escolars ensenyen reanimació a les seves famílies',
+      }),
+    ).toBe('Educació')
+    expect(
+      classifyAllowedEditorialTopic({
+        category: 'Local',
+        title: 'El voluntariat reforça el banc dels aliments',
+      }),
+    ).toBe('Solidaritat')
+    expect(
+      classifyAllowedEditorialTopic({
+        category: 'Actualitat',
+        title: 'Les comunitats cristiana i musulmana obren un espai interreligiós',
+      }),
+    ).toBe('Religió')
+    expect(
+      classifyAllowedEditorialTopic({
+        category: 'Local',
+        title: 'El barri crea una xarxa comunitària per a la gent gran',
+      }),
+    ).toBe('Societat')
+    expect(
+      classifyAllowedEditorialTopic({
+        category: 'Local',
+        title: 'Reflexionem sobre la nostra societat',
+        impact: 'Podem prendre consciència de les nostres opinions.',
+      }),
+    ).toBe('Societat')
+  })
+
+  it('rebutja economia, indicadors laborals, política i premis ambientals', () => {
+    for (const story of [
+      {
+        category: 'Economia',
+        title: "Catalunya redueix la taxa d'atur per sota del vuit per cent",
+      },
+      {
+        category: 'Dades',
+        title: "Idescat actualitza les afiliacions d'autònoms per sectors",
+      },
+      {
+        category: 'Política',
+        title: 'El Parlament aprova els pressupostos',
+        summary: 'Els comptes també inclouen una partida per a educació.',
+      },
+      {
+        category: 'Oportunitats',
+        title: 'Bases de la cinquena edició del Mediterranean Sustainability Award',
+      },
+    ]) {
+      expect(classifyAllowedEditorialTopic(story), story.title).toBeNull()
+      expect(keepAllowedEditorialTopic(story), story.title).toBeNull()
+    }
+  })
+
+  it('no converteix un tema principalment econòmic o internacional per una menció lateral', () => {
+    expect(
+      classifyAllowedEditorialTopic({
+        category: 'Internacional',
+        title: 'Dos governs tanquen un acord d’inversió',
+        summary: 'El paquet també inclou tecnologia i formació.',
+      }),
+    ).toBeNull()
+    expect(
+      classifyAllowedEditorialTopic({
+        category: 'Economia',
+        title: 'Els comptes anuals augmenten un deu per cent',
+        impact: 'Una part del pressupost es destinarà a cultura.',
+      }),
+    ).toBeNull()
   })
 })
 

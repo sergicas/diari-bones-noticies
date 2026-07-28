@@ -19,6 +19,8 @@ export const CANONICAL_CATEGORIES = [
   'Espanya',
   'Catalunya',
   'Educació',
+  'Religió',
+  'Solidaritat',
   'Verificació',
   'Agenda',
   'Oportunitats',
@@ -100,6 +102,16 @@ const CATEGORY_MAP = {
   'éducation': 'Educació', 'universitats': 'Educació', 'universidades': 'Educació',
   'estudiants': 'Educació', 'students': 'Educació', 'selectivitat': 'Educació',
 
+  // Religió
+  'religió': 'Religió', 'religion': 'Religió', 'religión': 'Religió',
+  'religieux': 'Religió', 'religieuse': 'Religió', 'faith': 'Religió',
+
+  // Solidaritat
+  'solidaritat': 'Solidaritat', 'solidaridad': 'Solidaritat',
+  'solidarity': 'Solidaritat', 'solidarité': 'Solidaritat',
+  'voluntariat': 'Solidaritat', 'voluntariado': 'Solidaritat',
+  'volunteering': 'Solidaritat', 'bénévolat': 'Solidaritat',
+
   // Formats de servei editorial
   'verificació': 'Verificació', 'verificacion': 'Verificació',
   'verificación': 'Verificació', 'fact-check': 'Verificació',
@@ -173,4 +185,123 @@ export function refineCategoryByContent(category, title = '', summary = '') {
     return 'Societat'
   }
   return category
+}
+
+// --- Línia temàtica d'El Bon Diari -----------------------------------------
+// El radar només publica peces d'aquests àmbits. La categoria del RSS no és
+// prou fiable: una agenda cultural pot arribar com a "Agenda" i una iniciativa
+// educativa local com a "Comarcal". Per això primer respectem les categories
+// explícites admeses i, per a la resta, classifiquem pel contingut.
+export const ALLOWED_EDITORIAL_TOPICS = [
+  'Cultura',
+  'Esports',
+  'Ciència',
+  'Tecnologia',
+  'Societat',
+  'Religió',
+  'Solidaritat',
+  'Educació',
+]
+
+const ALLOWED_EDITORIAL_TOPIC_SET = new Set(ALLOWED_EDITORIAL_TOPICS)
+const STRICTLY_OUTSIDE_TOPIC_CATEGORIES = new Set([
+  'Política',
+  'Economia',
+  'Internacional',
+  'Món',
+  'Europa',
+  'Espanya',
+  'Catalunya',
+  'Clima',
+  'Medi ambient',
+])
+
+function allowedTopicPattern(source) {
+  // El límit Unicode inicial evita falsos positius dins d'altres paraules:
+  // "consciència" no és "ciència", "transport" no és "sport" i "parts" no
+  // són "arts".
+  return new RegExp(`(?:^|[^\\p{L}])(?:${source})`, 'iu')
+}
+
+const ALLOWED_TOPIC_CONTENT_RULES = [
+  {
+    topic: 'Cultura',
+    rx: allowedTopicPattern(
+      'cultur|m[úu]sic|concert|canç[óo]|cantant|orquestr|coral|literatur|llibr|llibre|libro|book|poes|novel·?la|novela|teatre|teatro|theatre|cinema|cine(?:$|[^\\p{L}])|film|documental|museu|museo|museum|exposici|exhibiti|fotografi|pintur|escultur|arts?(?:$|[^\\p{L}])|art[íi]st|patrimoni|patrimonio|heritage|dansa|danza|dance|[òo]pera|festival cultural|c[òo]mic|comic|biblioteca|biblioth[èe]que',
+    ),
+  },
+  {
+    topic: 'Esports',
+    rx: allowedTopicPattern(
+      'esport|deport|sports?(?:$|[^\\p{L}])|f[úu]tbol|football|b[àa]squet|basket|handbol|waterpolo|tennis|tenis|atlet|ciclisme|ciclismo|nataci|swimming|marat[oó]|ol[íi]mpi|paral[íi]mpi|campionat|campeonato|championship|club esportiu|club deportivo',
+    ),
+  },
+  {
+    topic: 'Ciència',
+    rx: allowedTopicPattern(
+      'ci[èe]nci|ciencia|science|cient[íi]fic|scientist|recerca|investigaci[óo]n|research|descoberta|descubrimiento|discovery|astronom|biolog|gen[èe]tic|genetic|genoma|f[òo]ssil|f[óo]sil|fossil|laboratori|laboratorio|laboratory|assaig cl[íi]nic|ensayo cl[íi]nico|clinical trial|estudi m[èe]dic|estudio m[ée]dico|medical study|vacuna|vaccine|tractament experimental|tratamiento experimental',
+    ),
+  },
+  {
+    topic: 'Tecnologia',
+    rx: allowedTopicPattern(
+      'tecnolog|technology|tech(?:$|[^\\p{L}])|intel·lig[èe]ncia artificial|inteligencia artificial|artificial intelligence|(?:IA|AI)(?:$|[^\\p{L}])|digital|programari|software|codi obert|c[óo]digo abierto|open source|rob[oò]tic|robot|ciberseguretat|ciberseguridad|cybersecurity|algoritm|computaci|semiconductor|videojoc|videojuego|video game|aplicaci[óo] m[òo]bil|aplicaci[óo]n m[óo]vil|mobile app',
+    ),
+  },
+  {
+    topic: 'Religió',
+    rx: allowedTopicPattern(
+      'religi|religion|fe(?:$|[^\\p{L}])|faith|esgl[ée]sia|iglesia|church|parr[oò]quia|parroquia|monestir|monasterio|monastery|convent|temple|sinagoga|synagogue|mesquita|mezquita|mosque|cristi|cristian|christian|islam|musulm|muslim|jueu|jud[íi]o|jewish|budis|buddh|interreligi|interfaith|espiritual|spiritual',
+    ),
+  },
+  {
+    topic: 'Solidaritat',
+    rx: allowedTopicPattern(
+      'solidari|solidaridad|solidarity|solidarit[ée]|voluntari|voluntariado|volunteer|b[ée]n[ée]vol|donaci|donation|recapta|recauda|fundrais|banc dels aliments|banco de alimentos|food bank|suport mutu|apoyo mutuo|mutual aid|acollida|acogida|refugi|inclusi[óo] social|ajuda humanit[àa]ria|ayuda humanitaria|humanitarian aid|sense llar|sin hogar|homeless',
+    ),
+  },
+  {
+    topic: 'Educació',
+    rx: allowedTopicPattern(
+      'educaci|education|educaci[óo]n|escola|escuela|school|instituts?(?:$|[^\\p{L}])|institutos?(?:$|[^\\p{L}])|high school|universitat|universidad|university|alumn|estudiant|student|docent|professor|maestr|teacher|aula|classroom|aprenentatge|aprendizaje|learning|formaci[óo]|training|beca|scholarship|biblioteca escolar|alfabetitz|alfabetiz|literacy',
+    ),
+  },
+  {
+    topic: 'Societat',
+    rx: allowedTopicPattern(
+      'societat|sociedad|society|social|comunitat|comunidad|community|barri|barrio|neighborhood|ve[iï]n|vecin|resident|fam[íi]li|family|infant|niñ|child|jove|joven|youth|gent gran|personas mayores|older people|ciutadania|ciudadan[íi]a|citizens|conviv[èe]ncia|convivencia|coexistence|accessibilitat|accesibilidad|accessibility|discapacitat|discapacidad|disability|drets humans|derechos humanos|human rights|igualtat|igualdad|equality|salut p[úu]blica|salud p[úu]blica|public health|hospital|reanimaci|resuscitation|servei p[úu]blic|servicio p[úu]blico|public service',
+    ),
+  },
+]
+
+export function classifyAllowedEditorialTopic(story) {
+  const category = String(story?.category || '').trim()
+  if (ALLOWED_EDITORIAL_TOPIC_SET.has(category)) return category
+
+  // En una peça etiquetada principalment com a política, economia, clima o
+  // internacional, una menció incidental a "educació" o "cultura" al resum
+  // no la converteix en una notícia d'aquell tema. En aquests casos exigim que
+  // l'àmbit autoritzat sigui visible al mateix titular.
+  const material = STRICTLY_OUTSIDE_TOPIC_CATEGORIES.has(category)
+    ? [story?.title]
+    : [
+        category,
+        story?.title,
+        story?.summary,
+        story?.sourceContext,
+        story?.impact,
+      ]
+  const text = material
+    .filter(Boolean)
+    .join(' ')
+
+  for (const rule of ALLOWED_TOPIC_CONTENT_RULES) {
+    if (rule.rx.test(text)) return rule.topic
+  }
+  return null
+}
+
+export function keepAllowedEditorialTopic(story) {
+  const topic = classifyAllowedEditorialTopic(story)
+  return topic ? { ...story, category: topic } : null
 }
