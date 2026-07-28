@@ -1,4 +1,5 @@
 import { storyImagePath } from '../lib/story-image-path.js'
+import { keepAllowedEditorialTopic } from '../lib/category.js'
 
 const seedArticlesRaw = [
   {
@@ -2137,12 +2138,18 @@ const seedArticlesRaw = [
 // BLINDATGE DE DRETS D'AUTOR (hemeroteca): igual que el radar en viu, els
 // articles d'arxiu NO mostren la foto del mitjà, sinó una il·lustració
 // editorial pròpia generada per IA i cachejada. Vegeu src/server/storyImage.js.
-export const seedArticles = seedArticlesRaw.map((article) => ({
-  ...article,
-  imageUrl: storyImagePath(article.url, {
-    title: article.title,
-    category: article.category,
-  }),
-  imageCredit: 'El Bon Diari (il·lustració IA)',
-  imageAttributionUrl: '',
-}))
+export const seedArticles = seedArticlesRaw
+  .map((article) => ({
+    ...article,
+    imageUrl: storyImagePath(article.url, {
+      title: article.title,
+      category: article.category,
+    }),
+    imageCredit: 'El Bon Diari (il·lustració IA)',
+    imageAttributionUrl: '',
+  }))
+  // L'hemeroteca segueix exactament la mateixa línia temàtica que el radar:
+  // les peces d'altres àmbits es conserven al fitxer font per poder-les
+  // recuperar, però deixen de publicar-se, indexar-se i aparèixer al feed.
+  .map((article) => keepAllowedEditorialTopic(article))
+  .filter(Boolean)

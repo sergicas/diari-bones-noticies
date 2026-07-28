@@ -10,4 +10,4 @@
 // —paraules noves als diccionaris negatius, blocs durs nous, criteris nous—
 // s'ha de PUJAR aquest número: altrament les peces velles que ara ja no
 // passarien es quedarien al lot fins a caducar soles.
-export const LIVE_EDITORIAL_VERSION = 18
+export const LIVE_EDITORIAL_VERSION = 19

@@ -3,7 +3,12 @@
 // editorials per idioma i guarda el resultat a Workers KV (env.LIVE_NEWS_KV).
 
 import { LIVE_EDITORIAL_VERSION } from '../lib/editorial-version.js'
-import { normalizeCategory, refineCategoryByContent } from '../lib/category.js'
+import {
+  ALLOWED_EDITORIAL_TOPICS,
+  keepAllowedEditorialTopic,
+  normalizeCategory,
+  refineCategoryByContent,
+} from '../lib/category.js'
 import { storyImagePath } from '../lib/story-image-path.js'
 import { applyOwnContent } from './storyText.js'
 import { runTextModel, activeTextProvider } from './ai/textModel.js'
@@ -1474,7 +1479,7 @@ export async function collectFeedStories(feed, options = {}) {
 // molt millor i amb els matisos. Gratis dins de la quota diària de Neurons de
 // Cloudflare; el consum és baix perquè només es jutgen les notícies noves.
 // El model de text el tria ara ./ai/textModel.js (Gemini o Cloudflare).
-const aiVerdictsKey = 'ai-verdicts-v2' // un sol registre KV amb TOTS els veredictes
+const aiVerdictsKey = 'ai-verdicts-v3' // un sol registre KV amb TOTS els veredictes
 const aiVerdictTtlMs = 14 * 24 * 60 * 60 * 1000 // 14 dies
 // La IA jutja en LOTS: moltes notícies en una sola crida. Així, amb poques
 // subpeticions (límit del pla gratuït), arriba a revisar-ne ~aiBatchSize ×
@@ -1484,7 +1489,9 @@ const aiBatchSize = 10
 const maxAiCallsPerRun = 6 // 6×10 = 60 jutjades/passada; 24 feeds + 6 = 30 subpeticions
 
 const AI_SYSTEM_BATCH = [
-  "Ets el filtre d'El Bon Diari, un diari que NOMÉS publica BONES notícies.",
+  "Ets el filtre d'El Bon Diari, un diari que NOMÉS publica BONES notícies",
+  'de Cultura (música, literatura, teatre, cinema, arts i patrimoni), Esports,',
+  'Ciència, Tecnologia, Societat, Religió, Solidaritat o Educació.',
   'Et passo una llista numerada de titulars. Per a CADA número respon en una',
   'línia amb el format "N: SI" o "N: NO" (només això, res més).',
   'Respon NO si el titular és dolent, trist o tens: guerra, mort, accident,',
@@ -1498,8 +1505,9 @@ const AI_SYSTEM_BATCH = [
   'cotilleos o vida privada de famosos, luxe i excentricitats de rics,',
   'sortejos o bases legals de concursos, o',
   'resultats i fitxatges de competició esportiva.',
-  'Respon SI NOMÉS si és clarament constructiva, amable, cultural, científica,',
-  'solidària, educativa o un avenç positiu. En cas de DUBTE, respon NO.',
+  'Respon NO si no pertany clarament a un dels vuit àmbits autoritzats.',
+  'Respon SI NOMÉS si és clarament constructiva i d’un d’aquests àmbits.',
+  'En cas de DUBTE, respon NO.',
   'Exemple:\n1: NO\n2: SI\n3: NO',
 ].join(' ')
 
@@ -1507,7 +1515,12 @@ const AI_SYSTEM_BATCH = [
 // null (null = el model no ha donat veredicte clar per a aquell número).
 async function aiJudgeBatch(env, stories) {
   const list = stories
-    .map((s, i) => `${i + 1}. ${(s.title || '').replace(/\s+/g, ' ').slice(0, 150)}`)
+    .map((s, i) => {
+      const context = `${s.category || ''} | ${s.title || ''} | ${s.summary || ''}`
+        .replace(/\s+/g, ' ')
+        .slice(0, 260)
+      return `${i + 1}. ${context}`
+    })
     .join('\n')
   const out = await runTextModel(env, {
     system: AI_SYSTEM_BATCH,
@@ -1709,6 +1722,12 @@ export async function collectLivePositiveNews(env, { seenUrls } = {}) {
   // probables de sortir.
   const alreadyPublished = seenUrls instanceof Set ? seenUrls : new Set()
   const recents = [...uniqueStories.values()]
+    // Barrera temàtica permanent: cap peça no arriba al porter de positivitat
+    // si no és Cultura, Esports, Ciència, Tecnologia, Societat, Religió,
+    // Solidaritat o Educació. També reclassifica etiquetes tècniques com
+    // "Agenda" quan el contingut és, de fet, cultural.
+    .map((story) => keepAllowedEditorialTopic(story))
+    .filter(Boolean)
     .filter((story) => isStoryWithinLiveWindow(story))
     // Les que ja s'han publicat surten AQUÍ, abans de jutjar i abans de retallar
     // la reserva. Si es queden, ocupen el tall de les 30 millors i deixen fora
@@ -1848,10 +1867,7 @@ export async function readEditorialStats(kv) {
 
 // Seccions editorials de poc volum que abans es quedaven seques perquè les
 // categories grans (Espanya, Societat…) s'enduien totes les places.
-const guaranteedCategories = [
-  'Local', 'Verificació', 'Dades', 'Oportunitats', 'Agenda', 'Cultura',
-  'Tecnologia', 'Ciència', 'Salut', 'Medi ambient', 'Educació',
-]
+const guaranteedCategories = ALLOWED_EDITORIAL_TOPICS
 
 const categoryLimits = {
   Cultura: 3,
@@ -1989,6 +2005,10 @@ export async function getLiveNewsPayload(
     // Descartem l'arrossegament de fonts que ja no són a la llista (p. ex. mitjans
     // de pagament retirats): així desapareixen a la primera, sense esperar 4 dies.
     .filter((s) => allowedSourceNames.has(s.source))
+    // El mateix filtre s'aplica a les peces arrossegades d'edicions anteriors:
+    // desplegar una regla nova no les deixa visibles fins que caduquin.
+    .map((story) => keepAllowedEditorialTopic(story))
+    .filter(Boolean)
     .map(({ isFresh: _isFresh, ...rest }) => ({
       ...rest,
       editorialVersion: liveEditorialVersion,
@@ -2167,7 +2187,7 @@ export async function getLiveNewsPayload(
 // propi. Sí que passa pel MATEIX porter d'IA que la portada (aiReview) per triar
 // només els titulars constructius. Es cacheja pocs minuts a KV per no re-scrapejar
 // (ni re-jutjar) a cada visita.
-const tickerCacheKey = 'live-ticker'
+const tickerCacheKey = 'live-ticker-v2'
 // Un ticker constructiu no necessita reescriure KV cada 90 segons. Quinze minuts
 // el manté actual i redueix el sostre teòric de 960 a 96 escriptures/dia. La clau
 // es conserva una hora perquè continuï disponible com a fallback si fallen fonts
@@ -2246,7 +2266,10 @@ export async function getLiveTicker(env, { force = false } = {}) {
   // radar, així que el cost és baix. Aquí fallem de manera tancada: com que el
   // directe és opcional, si la IA no pot jutjar una peça és millor conservar la
   // darrera cache que publicar successos o meteorologia extrema.
-  const approved = await aiReview(env, candidates, { failOpen: false })
+  const topicalCandidates = candidates
+    .map((story) => keepAllowedEditorialTopic(story))
+    .filter(Boolean)
+  const approved = await aiReview(env, topicalCandidates, { failOpen: false })
   approved.sort(
     (a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime(),
   )
