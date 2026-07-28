@@ -272,6 +272,36 @@ export function getDistanceBand(story) {
   return distanceBandConfig[5]
 }
 
+// Rescat geogràfic (28-07-2026). Els nivells de fora —Estat, Europa, Món—
+// sovint no tenen res RECENT, però l'Hemeroteca sí. Perquè navegar cap enfora
+// no doni una pàgina buida, aquesta funció torna les peces de l'ARXIU que
+// omplen els nivells (dins del rang triat) que no tenen cap peça recent. Són
+// una mica més velles, però reals: una bona notícia del món no caduca en cinc
+// dies. Mai no toquen la destacada —això es decideix a part, només amb peces
+// recents—; només omplen la graella dels nivells que quedarien buits.
+export function selectGeographicRescue(
+  recentStories,
+  archiveStories,
+  maxRank,
+  limitPerBand = 6,
+) {
+  const bandsWithRecent = new Set(
+    recentStories.map((story) => getDistanceBand(story).rank),
+  )
+  const countByBand = new Map()
+  const rescue = []
+  for (const story of archiveStories) {
+    const rank = getDistanceBand(story).rank
+    if (rank > maxRank) continue // més lluny del nivell triat
+    if (bandsWithRecent.has(rank)) continue // aquell nivell ja té actualitat
+    const used = countByBand.get(rank) || 0
+    if (used >= limitPerBand) continue
+    countByBand.set(rank, used + 1)
+    rescue.push(story)
+  }
+  return rescue
+}
+
 export function sortByDistanceAndDate(leftStory, rightStory) {
   const leftBand = getDistanceBand(leftStory)
   const rightBand = getDistanceBand(rightStory)

@@ -22,6 +22,7 @@ import {
   distanceFilterOptions,
   defaultDistanceFilter,
   getDistanceBand,
+  selectGeographicRescue,
   sortByDistanceAndDate,
 } from './lib/distance.js'
 import {
@@ -863,7 +864,18 @@ function waitForSwController() {
   const remainingStories = filteredStories.filter(
     (story) => shouldShowFeaturedInResults || story.id !== featuredStory?.id,
   )
-  const portadaStories = [...remainingStories].sort(sortByDistanceAndDate)
+  // Rescat geogràfic: si el nivell triat inclou fora (Estat, Europa, Món) i no
+  // hi ha res recent d'aquells nivells, s'omplen amb el que ja tenim a
+  // l'Hemeroteca perquè no quedin buits. No entren mai a la destacada (es tria
+  // més amunt, només amb peces recents); només s'afegeixen a la graella.
+  const geographicRescue = selectGeographicRescue(
+    distanceFilteredStories,
+    archiveStories,
+    activeDistanceOption.maxRank,
+  ).filter(matchesFilters)
+  const portadaStories = [...remainingStories, ...geographicRescue].sort(
+    sortByDistanceAndDate,
+  )
   const currentStory =
     route.page === 'story'
       ? allStories.find((story) => story.id === route.storyId) ??
