@@ -75,6 +75,28 @@ npm run deploy:staging
 Els secrets (Resend, xarxes socials, VAPID, APNs i refresc manual) no han d’anar
 mai al repositori. Es configuren amb `wrangler secret put`.
 
+## Cervell d’IA de text (jutjar i reescriure)
+
+La IA que jutja les notícies i en reescriu el titular i el cos passa per una
+porta única: [`src/server/ai/textModel.js`](src/server/ai/textModel.js). Tria el
+proveïdor de manera automàtica i segura:
+
+- Si hi ha el secret `GEMINI_API_KEY` configurat al Worker → **Gemini** (Google).
+  El model és `gemini-flash-lite-latest`; es pot canviar amb el secret opcional
+  `GEMINI_MODEL`.
+- Si no → **Cloudflare** (Llama), el d’abans. Mentre no hi hagi clau, res canvia.
+
+Per activar Gemini, dins la carpeta del projecte:
+
+```bash
+npx wrangler secret put GEMINI_API_KEY
+```
+
+L’ordre demana la clau de manera interactiva: s’enganxa allà, no queda mai al
+codi ni al repositori. Les **il·lustracions no** passen per aquí: es generen
+sempre a Cloudflare (FLUX). Quin proveïdor s’ha fet servir a l’última edició es
+veu al camp `textProvider` de `/diagnostic` i del registre `cron-timing:latest`.
+
 L’operativa de D1, cues, migracions, diagnòstic i recuperació és a
 [`docs/PHASE2-OPERATIONS.md`](docs/PHASE2-OPERATIONS.md).
 

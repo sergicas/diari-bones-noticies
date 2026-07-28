@@ -6,6 +6,7 @@ import { LIVE_EDITORIAL_VERSION } from '../lib/editorial-version.js'
 import { normalizeCategory, refineCategoryByContent } from '../lib/category.js'
 import { storyImagePath } from '../lib/story-image-path.js'
 import { applyOwnContent } from './storyText.js'
+import { runTextModel, activeTextProvider } from './ai/textModel.js'
 import { attachRealPhotos, sanitizeStoryPhotos } from './storyPhoto.js'
 import {
   selectPublishableStories,
@@ -1472,7 +1473,7 @@ export async function collectFeedStories(feed, options = {}) {
 // Llama 3.3 70B (≈23× més gran que el 3B anterior): jutja "bona/mala notícia"
 // molt millor i amb els matisos. Gratis dins de la quota diària de Neurons de
 // Cloudflare; el consum és baix perquè només es jutgen les notícies noves.
-const AI_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast'
+// El model de text el tria ara ./ai/textModel.js (Gemini o Cloudflare).
 const aiVerdictsKey = 'ai-verdicts-v2' // un sol registre KV amb TOTS els veredictes
 const aiVerdictTtlMs = 14 * 24 * 60 * 60 * 1000 // 14 dies
 // La IA jutja en LOTS: moltes notícies en una sola crida. Així, amb poques
@@ -1508,12 +1509,10 @@ async function aiJudgeBatch(env, stories) {
   const list = stories
     .map((s, i) => `${i + 1}. ${(s.title || '').replace(/\s+/g, ' ').slice(0, 150)}`)
     .join('\n')
-  const out = await env.AI.run(AI_MODEL, {
-    max_tokens: 256,
-    messages: [
-      { role: 'system', content: AI_SYSTEM_BATCH },
-      { role: 'user', content: `Titulars:\n${list}` },
-    ],
+  const out = await runTextModel(env, {
+    system: AI_SYSTEM_BATCH,
+    user: `Titulars:\n${list}`,
+    maxTokens: 256,
   })
   const text = String(out?.response || '')
   const verdicts = new Array(stories.length).fill(null)
@@ -2107,6 +2106,9 @@ export async function getLiveNewsPayload(
       totalStories: publishedStories.length,
       qualityRejectedCount,
       qualityRejectedByIssue,
+      // Deixa constància de quin cervell d'IA ha escrit aquesta edició, perquè
+      // es pugui comprovar mirant el diagnòstic, sense obrir el codi.
+      textProvider: activeTextProvider(env),
       updatedAt: new Date().toISOString(),
     }
 

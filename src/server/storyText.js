@@ -14,12 +14,14 @@
 
 import { feedStoryId } from '../lib/story-id.js'
 import { storyImagePath } from '../lib/story-image-path.js'
+import { runTextModel } from './ai/textModel.js'
 import {
   evaluateEditorialQuality,
   isUsableRewrite,
 } from './editorialQuality.js'
 
-const AI_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast'
+// El model de text el tria ara ./ai/textModel.js (Gemini o Cloudflare segons hi
+// hagi clau). Aquí ja no s'anomena cap model directament.
 // v2 invalida els textos breus de l'etapa inicial. Les claus v1 caduquen soles.
 const KV_PREFIX = 'own:v2:'
 const CACHE_TTL_SECONDS = 90 * 24 * 3600
@@ -200,15 +202,13 @@ async function aiOwnContentBatch(env, items) {
         : `${i + 1}. [${lang}; ${type}] ${title}`
     })
     .join('\n')
-  const out = await env.AI.run(AI_MODEL, {
+  const out = await runTextModel(env, {
+    system: REWRITE_SYSTEM,
+    user: `Notícies:\n${list}`,
     // Cinc peces amb cossos de fins a 150 paraules en català o castellà van
     // justes amb 3.600: si la resposta es talla, les ÚLTIMES del lot es queden
     // sense cos i la peça es perd. Marge ampli, que no costa res si no s'usa.
-    max_tokens: 4800,
-    messages: [
-      { role: 'system', content: REWRITE_SYSTEM },
-      { role: 'user', content: `Notícies:\n${list}` },
-    ],
+    maxTokens: 4800,
   })
   const text = String(out?.response || '')
   const parsed = parseOwnContentBatch(text, items.length)
