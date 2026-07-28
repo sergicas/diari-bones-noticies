@@ -2401,13 +2401,92 @@
 
 .archive-toolbar {
   display: grid;
-  grid-template-columns: 1.6fr 1fr 1fr auto;
+  grid-template-columns: 1.6fr repeat(3, 1fr) auto;
   gap: 12px;
   align-items: end;
   margin: 0 0 12px;
   padding: 18px;
   border: 2px solid #000;
   background: #FFFFFF;
+}
+
+/* ===========================================================
+   ÍNDEX PÚBLIC DE TEMES
+   =========================================================== */
+
+.topic-index__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 18px;
+}
+
+.topic-index__card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 100%;
+  padding: 22px;
+  border: 2px solid #000;
+  background: #fff;
+  box-shadow: 5px 5px 0 #ffe000;
+}
+
+.topic-index__card h3,
+.topic-index__card p {
+  margin: 0;
+}
+
+.topic-index__card h3 {
+  font-family: var(--display-font, Georgia, serif);
+  font-size: clamp(1.5rem, 3vw, 2rem);
+}
+
+.topic-index__subtopics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.topic-index__subtopics li {
+  padding: 5px 8px;
+  border: 1px solid #000;
+  background: #f4f1ea;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.topic-index__counts {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin: auto 0 0;
+}
+
+.topic-index__counts div {
+  padding: 10px;
+  border-top: 2px solid #000;
+}
+
+.topic-index__counts dt {
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.topic-index__counts dd {
+  margin: 2px 0 0;
+  font-size: 1.5rem;
+  font-weight: 900;
+}
+
+.topic-index__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 .archive-toolbar__field {
   display: flex;

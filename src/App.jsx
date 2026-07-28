@@ -2,7 +2,11 @@ import { useEffect, useState, lazy, Suspense } from 'react'
 import { flushSync } from 'react-dom'
 import './App.css'
 import './styles/professional-shell.css'
-import { fetchLivePositiveNewsPayload, fetchLiveTicker } from './api/rssFeed'
+import {
+  fetchEditorialArchivePayload,
+  fetchLivePositiveNewsPayload,
+  fetchLiveTicker,
+} from './api/rssFeed'
 import { LIVE_EDITORIAL_VERSION } from './lib/editorial-version.js'
 import { feedStoryId } from './lib/story-id.js'
 import NotFoundPage from './components/NotFoundPage.jsx'
@@ -25,6 +29,11 @@ import {
   serviceSectionIds,
   getStorySection,
 } from './lib/sections.js'
+import {
+  EDITORIAL_TOPIC_INDEX,
+  getEditorialTopicBySlug,
+  getEditorialTopicSlug,
+} from './lib/category.js'
 import { formatDateTime } from './lib/viewHelpers.js'
 
 import PortadaView from './views/PortadaView.jsx'
@@ -34,6 +43,7 @@ import SiteFooter from './components/SiteFooter.jsx'
 import { AccessibilityControls } from './components/AccessibilityControls.jsx'
 
 const ArchiveView = lazy(() => import('./views/ArchiveView.jsx'))
+const TopicsView = lazy(() => import('./views/TopicsView.jsx'))
 const SavedView = lazy(() => import('./views/SavedView.jsx'))
 const StatsView = lazy(() => import('./views/StatsView.jsx'))
 const PrivacyView = lazy(() => import('./views/PrivacyView.jsx'))
@@ -115,6 +125,10 @@ function getRoute(path) {
     return { page: 'archive' }
   }
 
+  if (normalizedPath === '/temes') {
+    return { page: 'topics' }
+  }
+
   if (normalizedPath === '/estadistiques') {
     return { page: 'stats' }
   }
@@ -158,7 +172,9 @@ function getCategorySlug(category) {
     return ''
   }
   return (
-    editorialSections.find((section) => section.label === category)?.id ?? ''
+    getEditorialTopicSlug(category) ||
+    editorialSections.find((section) => section.label === category)?.id ||
+    ''
   )
 }
 
@@ -167,7 +183,8 @@ function getCategoryFromSlug(slug) {
     return 'Totes'
   }
   return (
-    editorialSections.find((section) => section.id === slug)?.label ?? 'Totes'
+    getEditorialTopicBySlug(slug)?.label ||
+    (editorialSections.find((section) => section.id === slug)?.label ?? 'Totes')
   )
 }
 
@@ -467,6 +484,20 @@ function mergeLiveStories(currentStories, liveArticles, seedStories = []) {
   }
 }
 
+function mergeStoryCatalogs(...catalogs) {
+  const storiesById = new Map()
+
+  for (const stories of catalogs) {
+    for (const story of stories || []) {
+      if (!story?.id) continue
+      const previous = storiesById.get(story.id)
+      storiesById.set(story.id, previous ? { ...previous, ...story } : story)
+    }
+  }
+
+  return [...storiesById.values()].sort(sortByPublishedAtDesc)
+}
+
 function splitEditionStories(stories) {
   const now = Date.now()
 
@@ -487,10 +518,10 @@ function splitEditionStories(stories) {
     .sort(sortByPublishedAtDesc)
     .slice(0, activeEditionMaxStories)
 
-  const activeIds = new Set(activeStories.map((story) => story.id))
+  const recentIds = new Set(candidates.map((story) => story.id))
 
   const archiveStories = stories
-    .filter((story) => !activeIds.has(story.id))
+    .filter((story) => !recentIds.has(story.id))
     .sort(sortByPublishedAtDesc)
 
   return {
@@ -502,6 +533,7 @@ function splitEditionStories(stories) {
 function App() {
   const initialFilterState = getFilterStateFromPath(getCurrentPath())
   const [liveStories, setLiveStories] = useState([])
+  const [storedStories, setStoredStories] = useState([])
   const [seedStories, setSeedStories] = useState([])
   const [fetchedStory, setFetchedStory] = useState(null)
   const [isFetchingStory, setIsFetchingStory] = useState(
@@ -572,6 +604,7 @@ function waitForSwController() {
         await waitForSwController()
         await Promise.allSettled([
           import('./views/ArchiveView.jsx'),
+          import('./views/TopicsView.jsx'),
           import('./views/SavedView.jsx'),
           import('./views/StatsView.jsx'),
           import('./views/PrivacyView.jsx'),
@@ -587,6 +620,25 @@ function waitForSwController() {
       window.requestIdleCallback(prefetch)
     } else {
       window.setTimeout(prefetch, 2500)
+    }
+  }, [])
+
+  useEffect(() => {
+    let isCancelled = false
+
+    fetchEditorialArchivePayload()
+      .then((payload) => {
+        if (isCancelled) return
+        setStoredStories(
+          payload.stories.map((story) => createFeedStory(story)).filter(Boolean),
+        )
+      })
+      .catch((error) => {
+        console.warn('No s’ha pogut carregar l’hemeroteca permanent.', error)
+      })
+
+    return () => {
+      isCancelled = true
     }
   }, [])
 
@@ -691,6 +743,7 @@ function waitForSwController() {
     }
     const inMemory =
       liveStories.some((story) => story.id === route.storyId) ||
+      storedStories.some((story) => story.id === route.storyId) ||
       seedStories.some((story) => story.id === route.storyId) ||
       fetchedStory?.id === route.storyId
     if (inMemory) {
@@ -726,9 +779,16 @@ function waitForSwController() {
     return () => {
       cancelled = true
     }
-  }, [route.page, route.storyId, liveStories, seedStories, fetchedStory?.id])
+  }, [
+    route.page,
+    route.storyId,
+    liveStories,
+    storedStories,
+    seedStories,
+    fetchedStory?.id,
+  ])
 
-  const allStories = [...liveStories, ...seedStories]
+  const allStories = mergeStoryCatalogs(seedStories, storedStories, liveStories)
   const { activeStories, archiveStories } = splitEditionStories(allStories)
   const normalizedQuery = searchTerm.trim().toLowerCase()
   const activeDistanceOption =
@@ -831,8 +891,11 @@ function waitForSwController() {
     : []
   const categories = [
     'Totes',
-    ...editorialSections.map((section) => section.label),
+    ...EDITORIAL_TOPIC_INDEX.map((topic) => topic.label),
   ]
+  const requestedArchiveTopic =
+    getEditorialTopicBySlug(getSearchParamsFromPath(currentPath).get('tema'))
+      ?.label || 'all'
   const hasActiveFilters =
     searchTerm.trim() !== '' ||
     activeCategory !== 'Totes' ||
@@ -854,6 +917,10 @@ function waitForSwController() {
       nextTitle = `Hemeroteca | ${siteName}`
       nextDescription =
         "La Hemeroteca d'El Bon Diari conserva les peces que ja han passat per portada."
+    } else if (route.page === 'topics') {
+      nextTitle = `Índex de temes | ${siteName}`
+      nextDescription =
+        "Cultura, Esports, Ciència, Tecnologia, Societat, Religió, Solidaritat i Educació a El Bon Diari."
     } else if (route.page === 'story' && currentStory) {
       nextTitle = `${currentStory.title} | ${siteName}`
       nextDescription = currentStory.summary || currentStory.impact
@@ -1143,8 +1210,19 @@ function waitForSwController() {
 
                 {route.page === 'archive' ? (
                   <ArchiveView
+                    key={requestedArchiveTopic}
                     archiveStories={archiveStories}
+                    initialTopic={requestedArchiveTopic}
                     lastRefreshLabel={lastRefreshLabel}
+                    onNavigate={navigate}
+                  />
+                ) : null}
+
+                {route.page === 'topics' ? (
+                  <TopicsView
+                    stories={allStories}
+                    activeStoryIds={activeStories.map((story) => story.id)}
+                    archiveStoryIds={archiveStories.map((story) => story.id)}
                     onNavigate={navigate}
                   />
                 ) : null}

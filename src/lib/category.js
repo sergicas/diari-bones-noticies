@@ -203,6 +203,70 @@ export const ALLOWED_EDITORIAL_TOPICS = [
   'Educació',
 ]
 
+// Índex públic de la línia temàtica. És compartit pel menú, la portada i
+// l'hemeroteca perquè els noms i els enllaços no divergeixin amb el temps.
+export const EDITORIAL_TOPIC_INDEX = [
+  {
+    id: 'cultura',
+    label: 'Cultura',
+    description: 'Creació, llengua i patrimoni que fan més rica la vida compartida.',
+    subtopics: ['Música', 'Literatura', 'Teatre', 'Cinema', 'Arts', 'Patrimoni'],
+  },
+  {
+    id: 'esports',
+    label: 'Esports',
+    description: 'Esport de base, inclusió, salut i fites col·lectives.',
+    subtopics: [],
+  },
+  {
+    id: 'ciencia',
+    label: 'Ciència',
+    description: 'Recerca i descobertes verificables que amplien el coneixement.',
+    subtopics: [],
+  },
+  {
+    id: 'tecnologia',
+    label: 'Tecnologia',
+    description: 'Eines digitals i innovacions amb una utilitat humana concreta.',
+    subtopics: [],
+  },
+  {
+    id: 'societat',
+    label: 'Societat',
+    description: 'Comunitat, drets, cures i millores en la vida quotidiana.',
+    subtopics: [],
+  },
+  {
+    id: 'religio',
+    label: 'Religió',
+    description: 'Fe, diàleg interreligiós i comunitats que treballen pel bé comú.',
+    subtopics: [],
+  },
+  {
+    id: 'solidaritat',
+    label: 'Solidaritat',
+    description: 'Voluntariat, suport mutu i iniciatives que no deixen ningú enrere.',
+    subtopics: [],
+  },
+  {
+    id: 'educacio',
+    label: 'Educació',
+    description: 'Escoles, aprenentatge i oportunitats formatives amb retorn social.',
+    subtopics: [],
+  },
+]
+
+export function getEditorialTopicBySlug(slug) {
+  const normalized = String(slug || '').trim().toLowerCase()
+  return EDITORIAL_TOPIC_INDEX.find((topic) => topic.id === normalized) || null
+}
+
+export function getEditorialTopicSlug(label) {
+  return (
+    EDITORIAL_TOPIC_INDEX.find((topic) => topic.label === label)?.id || ''
+  )
+}
+
 const ALLOWED_EDITORIAL_TOPIC_SET = new Set(ALLOWED_EDITORIAL_TOPICS)
 const STRICTLY_OUTSIDE_TOPIC_CATEGORIES = new Set([
   'Política',

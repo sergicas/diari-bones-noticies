@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { canInterceptNavigation, getStoryPath } from '../../lib/navigation.js'
-import { normalizeCategory } from '../../lib/category.js'
+import {
+  EDITORIAL_TOPIC_INDEX,
+  getEditorialTopicBySlug,
+  getEditorialTopicSlug,
+  normalizeCategory,
+} from '../../lib/category.js'
 
 describe('navigation and category helpers', () => {
   it('getStoryPath encodes story ID correctly', () => {
@@ -33,5 +38,22 @@ describe('navigation and category helpers', () => {
     expect(normalizeCategory('health')).toBe('Salut')
     expect(normalizeCategory('climate')).toBe('Medi ambient')
     expect(normalizeCategory('unknown-tag')).toBe('Actualitat')
+  })
+
+  it('exposes the eight public topics with the requested culture index', () => {
+    expect(EDITORIAL_TOPIC_INDEX.map((topic) => topic.label)).toEqual([
+      'Cultura',
+      'Esports',
+      'Ciència',
+      'Tecnologia',
+      'Societat',
+      'Religió',
+      'Solidaritat',
+      'Educació',
+    ])
+    expect(getEditorialTopicBySlug('cultura')?.subtopics).toEqual(
+      expect.arrayContaining(['Música', 'Literatura', 'Teatre']),
+    )
+    expect(getEditorialTopicSlug('Educació')).toBe('educacio')
   })
 })

@@ -1,5 +1,7 @@
 // Definició de les seccions editorials d'El Bon Diari i classificació temàtica
 
+import { ALLOWED_EDITORIAL_TOPICS } from './category.js'
+
 export const editorialSections = [
   {
     id: 'local',
@@ -75,7 +77,7 @@ export const editorialSections = [
   },
   {
     id: 'mon-digital',
-    label: 'Món digital',
+    label: 'Tecnologia',
     description:
       'Tecnologia i eines digitals que poden fer la vida una mica més fàcil.',
     categories: ['Tecnologia', 'Món digital'],
@@ -132,6 +134,14 @@ export const editorialSections = [
     keywords: ['escola', 'institut', 'universitat', 'alumnes', 'docents'],
   },
   {
+    id: 'religio',
+    label: 'Religió',
+    description:
+      'Fe, diàleg interreligiós i comunitats que treballen pel bé comú.',
+    categories: ['Religió'],
+    keywords: ['religió', 'església', 'parròquia', 'interreligiós', 'fe'],
+  },
+  {
     id: 'solidaritat',
     label: 'Solidaritat',
     description:
@@ -148,6 +158,12 @@ export const editorialSections = [
     keywords: ['onu', 'unió europea', 'internacional'],
   },
 ]
+
+const allowedEditorialTopicSet = new Set(ALLOWED_EDITORIAL_TOPICS)
+
+export const editorialTopicSections = editorialSections.filter((section) =>
+  section.categories.some((category) => allowedEditorialTopicSet.has(category)),
+)
 
 export const serviceSectionIds = new Set([
   'verificacio',

@@ -19,6 +19,7 @@ export default function SiteHeader({
 }) {
   const navItems = [
     { href: '/', label: 'Portada', page: 'home' },
+    { href: '/temes', label: 'Temes', page: 'topics' },
     { href: '/manifest', label: 'Manifest', page: 'manifest' },
     { href: '/hemeroteca', label: 'Hemeroteca', page: 'archive' },
     { href: '/desats', label: 'Desats', page: 'saved' },

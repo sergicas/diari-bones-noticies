@@ -1,6 +1,12 @@
 import { feedStoryId } from '../lib/story-id.js'
+import { keepAllowedEditorialTopic } from '../lib/category.js'
+import { selectPublishableStories } from './editorialQuality.js'
 
 const MAX_STATEMENTS_PER_BATCH = 40
+const MAX_ARCHIVE_STORIES = 2000
+const STORY_KEY_PREFIX = 'story:'
+const STORY_DETAIL_TTL_SECONDS = 30 * 24 * 60 * 60
+const ACTIVE_STORY_AGE_MS = 5 * 24 * 60 * 60 * 1000
 
 function nowIso() {
   return new Date().toISOString()
@@ -24,6 +30,229 @@ function storyId(story) {
 
 function database(env) {
   return env?.EDITORIAL_DB || null
+}
+
+function parseStoredStory(value) {
+  if (!value) return null
+  if (typeof value === 'object') return value
+  try {
+    return JSON.parse(value)
+  } catch {
+    return null
+  }
+}
+
+function selectPublicStories(stories, { onReject } = {}) {
+  const topicSafe = []
+  for (const story of stories || []) {
+    const filtered = keepAllowedEditorialTopic(story)
+    if (filtered) topicSafe.push(filtered)
+    else onReject?.(story, 'outside-topic')
+  }
+
+  const qualitySafe = selectPublishableStories(topicSafe, {
+    onReject: (story, result) => onReject?.(story, 'quality', result),
+  })
+  const byId = new Map()
+  for (const story of qualitySafe) {
+    const id = storyId(story)
+    if (!id) continue
+    byId.set(id, { ...story, id })
+  }
+  return [...byId.values()].sort(
+    (left, right) =>
+      new Date(right.publishedAt || 0).getTime() -
+      new Date(left.publishedAt || 0).getTime(),
+  )
+}
+
+function monthBounds(date = new Date()) {
+  const start = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1))
+  const end = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1))
+  return { start: start.toISOString(), end: end.toISOString() }
+}
+
+export async function readEditorialStoryCatalog(env, { limit = 1000 } = {}) {
+  const db = database(env)
+  if (!db) return { available: false, stories: [], count: 0, updatedAt: null }
+  const safeLimit = Math.max(1, Math.min(MAX_ARCHIVE_STORIES, Number(limit) || 1000))
+  const result = await db
+    .prepare(
+      `SELECT payload_json, updated_at
+      FROM stories
+      WHERE editorial_status IN ('published', 'distributed', 'archived')
+      ORDER BY COALESCE(published_at, first_seen_at) DESC
+      LIMIT ?`,
+    )
+    .bind(safeLimit)
+    .all()
+  const rows = result.results || []
+  const stories = selectPublicStories(
+    rows.map((row) => parseStoredStory(row.payload_json)).filter(Boolean),
+  )
+  const updatedAt = rows.reduce(
+    (latest, row) => (!latest || row.updated_at > latest ? row.updated_at : latest),
+    null,
+  )
+  return { available: true, stories, count: stories.length, updatedAt }
+}
+
+export async function readUniqueEditorialStats(env, date = new Date()) {
+  const db = database(env)
+  if (!db) return { available: false, publishedUnique: 0, trackingSince: null }
+  const { start, end } = monthBounds(date)
+  const result = await db
+    .prepare(
+      `SELECT payload_json, first_seen_at
+      FROM stories
+      WHERE editorial_status IN ('published', 'distributed', 'archived')
+        AND first_seen_at >= ? AND first_seen_at < ?
+      ORDER BY first_seen_at ASC
+      LIMIT ?`,
+    )
+    .bind(start, end, MAX_ARCHIVE_STORIES)
+    .all()
+  const candidates = (result.results || [])
+    .map((row) => {
+      const story = parseStoredStory(row.payload_json)
+      return story ? { ...story, firstSeenAt: row.first_seen_at } : null
+    })
+    .filter(Boolean)
+  const stories = selectPublicStories(candidates)
+  const trackingSince = stories.reduce(
+    (earliest, story) =>
+      !earliest || story.firstSeenAt < earliest ? story.firstSeenAt : earliest,
+    null,
+  )
+  return {
+    available: true,
+    publishedUnique: stories.length,
+    trackingSince,
+  }
+}
+
+async function listStoredStoryKeys(kv) {
+  const keys = []
+  let cursor
+  do {
+    const page = await kv.list({
+      prefix: STORY_KEY_PREFIX,
+      limit: 1000,
+      ...(cursor ? { cursor } : {}),
+    })
+    keys.push(...(page.keys || []))
+    cursor = page.list_complete ? undefined : page.cursor
+  } while (cursor)
+  return keys
+}
+
+function bulkValue(values, key) {
+  if (values instanceof Map) return values.get(key)
+  return values?.[key]
+}
+
+export async function backfillEditorialArchive(env) {
+  const db = database(env)
+  const kv = env?.LIVE_NEWS_KV
+  if (!db || !kv) {
+    return {
+      available: false,
+      skipped: !db ? 'missing-d1-binding' : 'missing-kv-binding',
+    }
+  }
+
+  const keys = await listStoredStoryKeys(kv)
+  const candidates = []
+  let invalid = 0
+  for (const keyBatch of chunks(keys, 100)) {
+    const names = keyBatch.map((key) => key.name)
+    const values = await kv.get(names, 'json')
+    for (const key of keyBatch) {
+      const rawStory = parseStoredStory(bulkValue(values, key.name))
+      if (!rawStory?.title) {
+        invalid += 1
+        continue
+      }
+      const id = rawStory.id || key.name.slice(STORY_KEY_PREFIX.length)
+      const inferredFirstSeenAt = key.expiration
+        ? new Date((key.expiration - STORY_DETAIL_TTL_SECONDS) * 1000).toISOString()
+        : rawStory.publishedAt || nowIso()
+      candidates.push({
+        ...rawStory,
+        id,
+        firstSeenAt: rawStory.firstSeenAt || inferredFirstSeenAt,
+      })
+    }
+  }
+
+  let outsideTopic = 0
+  let qualityRejected = 0
+  const stories = selectPublicStories(candidates, {
+    onReject: (_story, reason) => {
+      if (reason === 'outside-topic') outsideTopic += 1
+      if (reason === 'quality') qualityRejected += 1
+    },
+  })
+  const timestamp = nowIso()
+  const activeCutoff = Date.now() - ACTIVE_STORY_AGE_MS
+  let recent = 0
+  let archived = 0
+  const statements = stories.map((story) => {
+    const publishedTime = new Date(story.publishedAt || 0).getTime()
+    const status = publishedTime >= activeCutoff ? 'published' : 'archived'
+    if (status === 'published') recent += 1
+    else archived += 1
+    return db
+      .prepare(
+        `INSERT INTO stories (
+          id, url, title, source, section, language, editorial_status,
+          published_at, payload_json, first_seen_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          url = excluded.url,
+          title = excluded.title,
+          source = excluded.source,
+          section = excluded.section,
+          language = excluded.language,
+          editorial_status = CASE
+            WHEN stories.editorial_status = 'rejected' THEN 'rejected'
+            ELSE excluded.editorial_status
+          END,
+          published_at = excluded.published_at,
+          payload_json = excluded.payload_json,
+          first_seen_at = MIN(stories.first_seen_at, excluded.first_seen_at),
+          updated_at = excluded.updated_at`,
+      )
+      .bind(
+        story.id,
+        story.url || `https://bondiari.com/noticia/${story.id}`,
+        story.title,
+        story.source || null,
+        story.category || story.section || null,
+        story.language || 'ca',
+        status,
+        story.publishedAt || story.firstSeenAt || timestamp,
+        safeJson(story),
+        story.firstSeenAt || timestamp,
+        timestamp,
+      )
+  })
+
+  for (const batch of chunks(statements)) {
+    await db.batch(batch)
+  }
+
+  return {
+    available: true,
+    scanned: keys.length,
+    accepted: stories.length,
+    imported: statements.length,
+    recent,
+    archived,
+    outsideTopic,
+    qualityRejected,
+    invalid,
+  }
 }
 
 export function editionIdFor(payload, slot = 'manual') {

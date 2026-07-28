@@ -37,6 +37,17 @@ describe('manual refresh protection', () => {
     )
   })
 
+  it('protects the archive recovery with the same bearer secret', async () => {
+    const response = await worker.fetch(
+      new Request('https://bondiari.com/api/archive-backfill', { method: 'POST' }),
+      {},
+      {},
+    )
+
+    expect(response.status).toBe(401)
+    expect(response.headers.get('cache-control')).toBe('no-store')
+  })
+
   it('queues an authenticated ingest without distribution by default', async () => {
     const send = vi.fn().mockResolvedValue(undefined)
     const response = await worker.fetch(

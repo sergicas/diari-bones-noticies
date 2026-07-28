@@ -19,6 +19,7 @@
     "verify": "npm run lint && npm test && npm run check:articles && npm run build && npm run check:worker && npm run check:worker:staging",
     "preview": "vite preview",
     "refresh": "node scripts/refresh-news.mjs",
+    "archive:backfill": "node --env-file-if-exists=.dev.vars scripts/backfill-archive.mjs",
     "seccions": "node scripts/renova-seccions.mjs",
     "backup": "node scripts/backup-kv.mjs",
     "sitemap": "node scripts/generate-sitemap.mjs",

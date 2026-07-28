@@ -2,6 +2,7 @@ import { canInterceptNavigation } from '../lib/navigation.js'
 
 export default function SiteFooter({ children, onNavigate }) {
   const internalLinks = [
+    { href: '/temes', label: 'Índex de temes' },
     { href: '/manifest', label: 'Manifest' },
     { href: '/hemeroteca', label: 'Hemeroteca' },
     { href: '/estadistiques', label: 'Estadístiques' },

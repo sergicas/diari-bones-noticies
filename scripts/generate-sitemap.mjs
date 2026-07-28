@@ -50,6 +50,14 @@ const staticPages = [
     changefreq: 'daily',
   },
   {
+    path: '/temes',
+    title: `Índex de temes | ${siteName}`,
+    description:
+      'Cultura, Esports, Ciència, Tecnologia, Societat, Religió, Solidaritat i Educació a El Bon Diari.',
+    priority: '0.7',
+    changefreq: 'daily',
+  },
+  {
     path: '/sobre',
     title: `Sobre · ${siteName}`,
     description:

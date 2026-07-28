@@ -18,6 +18,17 @@ function formatCount(value) {
   return new Intl.NumberFormat('ca-ES').format(value)
 }
 
+function formatCoverageDate(value) {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  return new Intl.DateTimeFormat('ca-ES', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(date)
+}
+
 export default function EditorialCounter() {
   const [stats, setStats] = useState(null)
   const [hasError, setHasError] = useState(false)
@@ -40,24 +51,28 @@ export default function EditorialCounter() {
     }
   }, [])
 
-  if (hasError || !stats || (stats.reviewed === 0 && stats.published === 0)) {
+  const processedEntries = stats?.processedEntries ?? stats?.reviewed
+  const publishedUnique = stats?.publishedUnique ?? stats?.published
+
+  if (hasError || !stats || (processedEntries === 0 && publishedUnique === 0)) {
     return null
   }
-
-  const ratePercent = stats.reviewed > 0 ? Math.round((stats.published / stats.reviewed) * 100) : 0
 
   return (
     <section className="editorial-counter" aria-label="Comptador editorial">
       <p className="editorial-counter__kicker">El nostre criteri en xifres</p>
       <p className="editorial-counter__line">
-        Aquest <strong>{formatMonth(stats.month)}</strong> hem mirat{' '}
-        <strong>{formatCount(stats.reviewed)}</strong>{' '}
-        notícies de tots els nostres mitjans. N'han passat el criteri editorial{' '}
-        <strong>{formatCount(stats.published)}</strong> ({ratePercent}%).
+        Aquest <strong>{formatMonth(stats.month)}</strong> el radar ha processat{' '}
+        <strong>{formatCount(processedEntries)}</strong> entrades de les fonts.{' '}
+        L’arxiu verificable conserva{' '}
+        <strong>{formatCount(publishedUnique)}</strong> notícies úniques publicades.
       </p>
       <p className="editorial-counter__note">
-        La resta han caigut perquè eren publicitat encoberta, opinió signada, fitxatges esportius,
-        notícies de violència, o simplement no encaixaven amb la línia constructiva del diari.
+        Una mateixa notícia pot aparèixer en més d’una actualització del radar;
+        per això separem les entrades processades de les peces úniques conservades
+        {stats.trackingSince
+          ? ` des del ${formatCoverageDate(stats.trackingSince)}`
+          : ''}.
       </p>
     </section>
   )

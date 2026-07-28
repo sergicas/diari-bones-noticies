@@ -21,8 +21,11 @@ import { handlePushSubscribe, handlePushUnsubscribe } from './server/push.js'
 import { handleApnsRegister } from './server/apns.js'
 import { handleStoryImage } from './server/storyImage.js'
 import {
+  backfillEditorialArchive,
   persistEditorialEdition,
+  readEditorialStoryCatalog,
   readPipelineHealth,
+  readUniqueEditorialStats,
 } from './server/editorialStore.js'
 import {
   buildManualRefreshQueueMessage,
@@ -192,6 +195,83 @@ async function handleRefreshNews(request, env) {
     console.error('No s’ha pogut executar l’actualització programada', error)
     return jsonResponse({ ok: false }, { status: 500 })
   }
+}
+
+async function handleArchive(request, env) {
+  if (request.method !== 'GET' && request.method !== 'HEAD') {
+    return methodNotAllowed('GET, HEAD')
+  }
+  try {
+    const catalog = await readEditorialStoryCatalog(env)
+    return jsonResponse(catalog, {
+      headers: {
+        'cache-control': 'public, max-age=300, stale-while-revalidate=3600',
+      },
+    })
+  } catch (error) {
+    console.error('No s’ha pogut carregar l’hemeroteca permanent', error)
+    return jsonResponse(
+      { available: false, stories: [], count: 0, error: 'archive-unavailable' },
+      { status: 500, headers: { 'cache-control': 'no-store' } },
+    )
+  }
+}
+
+async function handleArchiveBackfill(request, env) {
+  if (request.method !== 'POST') return methodNotAllowed('POST')
+  if (!(await isRefreshAuthorized(request, env))) {
+    return jsonResponse(
+      { ok: false, error: 'unauthorized' },
+      {
+        status: 401,
+        headers: {
+          'cache-control': 'no-store',
+          'www-authenticate': 'Bearer realm="bondiari-archive"',
+        },
+      },
+    )
+  }
+  try {
+    const result = await backfillEditorialArchive(env)
+    return jsonResponse(
+      { ok: result.available, ...result },
+      {
+        status: result.available ? 200 : 503,
+        headers: { 'cache-control': 'no-store' },
+      },
+    )
+  } catch (error) {
+    console.error('No s’ha pogut recuperar l’hemeroteca temporal', error)
+    return jsonResponse(
+      { ok: false, error: 'archive-backfill-failed' },
+      { status: 500, headers: { 'cache-control': 'no-store' } },
+    )
+  }
+}
+
+async function handleEditorialStats(request, env) {
+  if (request.method !== 'GET' && request.method !== 'HEAD') {
+    return methodNotAllowed('GET, HEAD')
+  }
+  const [rawStats, uniqueStats] = await Promise.all([
+    readEditorialStats(env.LIVE_NEWS_KV),
+    readUniqueEditorialStats(env),
+  ])
+  return jsonResponse(
+    {
+      ...rawStats,
+      processedEntries: Number(rawStats?.reviewed || 0),
+      publishedUnique: uniqueStats.available
+        ? uniqueStats.publishedUnique
+        : Number(rawStats?.published || 0),
+      trackingSince: uniqueStats.trackingSince,
+    },
+    {
+      headers: {
+        'cache-control': 'public, max-age=600, stale-while-revalidate=3600',
+      },
+    },
+  )
 }
 
 async function handleFeedHealth(request, env) {
@@ -456,6 +536,10 @@ async function route(request, env, ctx) {
   if (path.startsWith('/api/story-image/')) return handleStoryImage(request, env, ctx)
 
   if (path === '/api/live-news') return handleLiveNews(request, env)
+  if (path === '/api/archive') return handleArchive(request, env)
+  if (path === '/api/archive-backfill') {
+    return handleArchiveBackfill(request, env)
+  }
   // Secció "En directe": titulars lleugers que enllacen a la font, refrescats
   // contínuament (cache curta al servidor, no-store al client).
   if (path === '/api/live-ticker') {
@@ -478,15 +562,7 @@ async function route(request, env, ctx) {
   }
   if (path === '/api/refresh-news') return handleRefreshNews(request, env)
   if (path === '/api/stats') return handleStats(request, env)
-  if (path === '/api/editorial-stats') {
-    const stats = await readEditorialStats(env.LIVE_NEWS_KV)
-    return new Response(JSON.stringify(stats), {
-      headers: {
-        'content-type': 'application/json; charset=utf-8',
-        'cache-control': 'public, max-age=600, stale-while-revalidate=3600',
-      },
-    })
-  }
+  if (path === '/api/editorial-stats') return handleEditorialStats(request, env)
   // Una peça concreta per id. La fa servir el front quan es demana /noticia/:id
   // d'una peça que ja no és a la portada (rotada fora de la finestra), perquè es
   // pugui renderitzar en lloc de mostrar un 404.

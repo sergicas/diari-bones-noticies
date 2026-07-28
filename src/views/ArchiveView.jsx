@@ -5,18 +5,31 @@ import PageHero from '../components/PageHero.jsx'
 import { canInterceptNavigation } from '../lib/navigation.js'
 import { getLanguageLabel } from '../lib/viewHelpers.js'
 import { StoryCard } from '../components/StoryCard.jsx'
-import { editorialSections, getStorySection } from '../lib/sections.js'
+import {
+  EDITORIAL_TOPIC_INDEX,
+  classifyAllowedEditorialTopic,
+} from '../lib/category.js'
 
-export function ArchiveView({ archiveStories, lastRefreshLabel, onNavigate }) {
+export function ArchiveView({
+  archiveStories,
+  initialTopic = 'all',
+  lastRefreshLabel,
+  onNavigate,
+}) {
   const [searchTerm, setSearchTerm] = useState('')
   const [sourceFilter, setSourceFilter] = useState('all')
   const [langFilter, setLangFilter] = useState('all')
+  const [topicFilter, setTopicFilter] = useState(initialTopic)
 
   const availableSources = [...new Set(archiveStories.map((s) => s.source).filter(Boolean))].sort()
   const availableLanguages = [...new Set(archiveStories.map((s) => s.language).filter(Boolean))].sort()
 
   const normalizedQuery = searchTerm.trim().toLowerCase()
   const filtered = archiveStories.filter((story) => {
+    if (
+      topicFilter !== 'all' &&
+      classifyAllowedEditorialTopic(story) !== topicFilter
+    ) return false
     if (sourceFilter !== 'all' && story.source !== sourceFilter) return false
     if (langFilter !== 'all' && story.language !== langFilter) return false
     if (!normalizedQuery) return true
@@ -24,10 +37,15 @@ export function ArchiveView({ archiveStories, lastRefreshLabel, onNavigate }) {
     return haystack.includes(normalizedQuery)
   })
 
-  const hasFilters = normalizedQuery !== '' || sourceFilter !== 'all' || langFilter !== 'all'
+  const hasFilters =
+    normalizedQuery !== '' ||
+    topicFilter !== 'all' ||
+    sourceFilter !== 'all' ||
+    langFilter !== 'all'
 
   const resetFilters = () => {
     setSearchTerm('')
+    setTopicFilter('all')
     setSourceFilter('all')
     setLangFilter('all')
   }
@@ -37,22 +55,32 @@ export function ArchiveView({ archiveStories, lastRefreshLabel, onNavigate }) {
       <PageHero
         tag="Hemeroteca"
         title="Les peces útils no desapareixen: queden guardades per tornar-hi."
-        description={`Les notícies de més de 2 dies surten de la portada i es guarden aquí. Ara mateix hi ha ${archiveStories.length} històries ordenades de més recent a més llunyana.`}
+        description={`Les notícies de més de 5 dies surten de la portada i es guarden aquí. Ara mateix hi ha ${archiveStories.length} històries ordenades de més recent a més llunyana.`}
         actions={
-          <a
-            className="button button--primary"
-            href="/"
-            onClick={(event) => {
-              if (!canInterceptNavigation(event)) {
-                return
-              }
-
-              event.preventDefault()
-              onNavigate('/')
-            }}
-          >
-            Tornar a la portada
-          </a>
+          <>
+            <a
+              className="button button--primary"
+              href="/"
+              onClick={(event) => {
+                if (!canInterceptNavigation(event)) return
+                event.preventDefault()
+                onNavigate('/')
+              }}
+            >
+              Tornar a la portada
+            </a>
+            <a
+              className="button button--ghost"
+              href="/temes"
+              onClick={(event) => {
+                if (!canInterceptNavigation(event)) return
+                event.preventDefault()
+                onNavigate('/temes')
+              }}
+            >
+              Índex de temes
+            </a>
+          </>
         }
       />
 
@@ -82,6 +110,15 @@ export function ArchiveView({ archiveStories, lastRefreshLabel, onNavigate }) {
                 />
               </label>
               <label className="archive-toolbar__field">
+                <span>Tema</span>
+                <select value={topicFilter} onChange={(event) => setTopicFilter(event.target.value)}>
+                  <option value="all">Tots els temes</option>
+                  {EDITORIAL_TOPIC_INDEX.map((topic) => (
+                    <option key={topic.id} value={topic.label}>{topic.label}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="archive-toolbar__field">
                 <span>Font</span>
                 <select value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value)}>
                   <option value="all">Totes les fonts</option>
@@ -109,19 +146,19 @@ export function ArchiveView({ archiveStories, lastRefreshLabel, onNavigate }) {
               {hasFilters ? `${filtered.length} de ${archiveStories.length} peces` : `${archiveStories.length} peces`}
             </p>
             {filtered.length > 0 ? (
-              editorialSections
-                .map((section) => ({
-                  section,
+              EDITORIAL_TOPIC_INDEX
+                .map((topic) => ({
+                  topic,
                   stories: filtered.filter(
-                    (story) => getStorySection(story).id === section.id,
+                    (story) => classifyAllowedEditorialTopic(story) === topic.label,
                   ),
                 }))
                 .filter((group) => group.stories.length > 0)
-                .map(({ section, stories }) => (
-                  <div className="archive-topic" key={section.id}>
+                .map(({ topic, stories }) => (
+                  <div className="archive-topic" key={topic.id}>
                     <div className="section-heading">
                       <div>
-                        <p className="section-tag">{section.label}</p>
+                        <p className="section-tag">{topic.label}</p>
                         <h3>{stories.length} {stories.length === 1 ? 'peça' : 'peces'}</h3>
                       </div>
                     </div>
@@ -147,7 +184,7 @@ export function ArchiveView({ archiveStories, lastRefreshLabel, onNavigate }) {
           <div className="empty-state">
             <h3>La Hemeroteca encara és buida.</h3>
             <p>
-              Quan una notícia passa dels 2 dies, surt de la portada i queda
+              Quan una notícia passa dels 5 dies, surt de la portada i queda
               guardada aquí automàticament.
             </p>
           </div>

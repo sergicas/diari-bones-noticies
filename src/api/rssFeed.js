@@ -39,3 +39,20 @@ export async function fetchLiveTicker() {
     items: Array.isArray(payload.items) ? payload.items : [],
   }
 }
+
+const editorialArchiveEndpoint = '/api/archive'
+
+export async function fetchEditorialArchivePayload() {
+  const response = await fetch(editorialArchiveEndpoint, {
+    headers: { accept: 'application/json' },
+    cache: 'no-store',
+  })
+  if (!response.ok) {
+    throw new Error(`L’hemeroteca ha retornat ${response.status}`)
+  }
+  const payload = await response.json()
+  return {
+    updatedAt: payload.updatedAt || null,
+    stories: Array.isArray(payload.stories) ? payload.stories : [],
+  }
+}
