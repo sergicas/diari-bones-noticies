@@ -201,6 +201,7 @@ export const ALLOWED_EDITORIAL_TOPICS = [
   'Religió',
   'Solidaritat',
   'Educació',
+  'Economia',
 ]
 
 // Índex públic de la línia temàtica. És compartit pel menú, la portada i
@@ -254,6 +255,13 @@ export const EDITORIAL_TOPIC_INDEX = [
     description: 'Escoles, aprenentatge i oportunitats formatives amb retorn social.',
     subtopics: [],
   },
+  {
+    id: 'economia',
+    label: 'Economia',
+    description:
+      'Feina, cooperatives, comerç i indústria quan creen oportunitats o reparteixen millor.',
+    subtopics: [],
+  },
 ]
 
 export function getEditorialTopicBySlug(slug) {
@@ -270,7 +278,6 @@ export function getEditorialTopicSlug(label) {
 const ALLOWED_EDITORIAL_TOPIC_SET = new Set(ALLOWED_EDITORIAL_TOPICS)
 const STRICTLY_OUTSIDE_TOPIC_CATEGORIES = new Set([
   'Política',
-  'Economia',
   'Internacional',
   'Món',
   'Europa',
@@ -328,6 +335,19 @@ const ALLOWED_TOPIC_CONTENT_RULES = [
     topic: 'Educació',
     rx: allowedTopicPattern(
       'educaci|education|educaci[óo]n|escola|escuela|school|instituts?(?:$|[^\\p{L}])|institutos?(?:$|[^\\p{L}])|high school|universitat|universidad|university|alumn|estudiant|student|docent|professor|maestr|teacher|aula|classroom|aprenentatge|aprendizaje|learning|formaci[óo]|training|beca|scholarship|biblioteca escolar|alfabetitz|alfabetiz|literacy',
+    ),
+  },
+  {
+    topic: 'Economia',
+    // Economia CONSTRUCTIVA: activitat econòmica que crea feina o reparteix
+    // millor (cooperatives, comerç, indústria, emprenedoria, fàbriques que
+    // reobren). S'eviten a posta les paraules de la burocràcia de servei
+    // —subvenció, ajut, convocatòria, autònoms, afiliacions, sectors— perquè
+    // el Sergi va decidir el diari sense subvencions ni dades de l'Idescat: si
+    // hi entressin, aquest tema les tornaria a colar. La borsa i els resultats
+    // d'empresa ja els bloqueja abans UNIVERSAL_NEG i el filtre de publireportatge.
+    rx: allowedTopicPattern(
+      'econom|cooperativ|comer[çc]|comercio|commerce|ind[úu]stri|industria|industry|emprenedor|emprendedor|entrepreneur|emprendimiento|pime(?:$|[^\\p{L}])|pyme|empresa social|social enterprise|llocs de treball|puestos de trabajo|artesan|reindustrialitza|mercat laboral|mercado laboral|f[àa]brica|f[áa]brica|factory|autoocupaci',
     ),
   },
   {

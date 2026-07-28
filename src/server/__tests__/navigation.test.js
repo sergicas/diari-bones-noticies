@@ -50,6 +50,7 @@ describe('navigation and category helpers', () => {
       'Religió',
       'Solidaritat',
       'Educació',
+      'Economia',
     ])
     expect(getEditorialTopicBySlug('cultura')?.subtopics).toEqual(
       expect.arrayContaining(['Música', 'Literatura', 'Teatre']),

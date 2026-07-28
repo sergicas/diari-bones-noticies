@@ -357,6 +357,7 @@ describe('línia temàtica — només els vuit àmbits autoritzats', () => {
       'Religió',
       'Solidaritat',
       'Educació',
+      'Economia',
     ])
     for (const category of ALLOWED_EDITORIAL_TOPICS) {
       expect(
@@ -412,15 +413,18 @@ describe('línia temàtica — només els vuit àmbits autoritzats', () => {
     ).toBe('Societat')
   })
 
-  it('rebutja economia, indicadors laborals, política i premis ambientals', () => {
+  // Economia és un àmbit autoritzat des del 28/07/2026 (decisió del Sergi). El
+  // que ha de seguir FORA és el servei burocràtic (subvencions, dades de
+  // l'Idescat) i la política, que el diari no cobreix.
+  it('manté fora el servei, la burocràcia i la política', () => {
     for (const story of [
-      {
-        category: 'Economia',
-        title: "Catalunya redueix la taxa d'atur per sota del vuit per cent",
-      },
       {
         category: 'Dades',
         title: "Idescat actualitza les afiliacions d'autònoms per sectors",
+      },
+      {
+        category: 'Oportunitats',
+        title: 'Convocatòria de subvencions per a l’ocupació juvenil',
       },
       {
         category: 'Política',
@@ -437,7 +441,25 @@ describe('línia temàtica — només els vuit àmbits autoritzats', () => {
     }
   })
 
-  it('no converteix un tema principalment econòmic o internacional per una menció lateral', () => {
+  it('admet l’economia constructiva: feina, cooperatives, comerç i indústria', () => {
+    for (const story of [
+      { category: 'Economia', title: "Catalunya redueix la taxa d'atur" },
+      {
+        category: 'Local',
+        title: 'La fàbrica de Sant Andreu reobre i recontracta cinquanta treballadors',
+      },
+      {
+        category: 'Comarcal',
+        title: 'Una cooperativa crea vint llocs de treball al mercat municipal',
+      },
+    ]) {
+      expect(classifyAllowedEditorialTopic(story), story.title).toBe('Economia')
+    }
+  })
+
+  it('no reclassifica un tema per una menció lateral', () => {
+    // Internacional és estrictament de fora: la menció a tecnologia/formació al
+    // resum no el converteix en un tema autoritzat.
     expect(
       classifyAllowedEditorialTopic({
         category: 'Internacional',
@@ -445,13 +467,15 @@ describe('línia temàtica — només els vuit àmbits autoritzats', () => {
         summary: 'El paquet també inclou tecnologia i formació.',
       }),
     ).toBeNull()
+    // Una peça d'Economia es queda a Economia; la menció a cultura de l'impacte
+    // no la desvia cap a Cultura.
     expect(
       classifyAllowedEditorialTopic({
         category: 'Economia',
-        title: 'Els comptes anuals augmenten un deu per cent',
-        impact: 'Una part del pressupost es destinarà a cultura.',
+        title: 'El comerç de proximitat guanya pes al barri',
+        impact: 'Una part es destinarà a activitats de cultura.',
       }),
-    ).toBeNull()
+    ).toBe('Economia')
   })
 })
 
