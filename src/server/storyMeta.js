@@ -198,8 +198,54 @@ function injectStoryMeta(html, story, requestUrl) {
   return result
 }
 
-// Retorna una Response amb el HTML personalitzat, o null si no s'ha trobat la
-// notícia (llavors el caller fa el fallback SPA normal).
+// Cos "no trobat" pel crawler, idèntic en missatge al NotFoundPage que ja veu
+// qualsevol lector (components/NotFoundPage.jsx) quan React no troba la peça.
+function buildNotFoundBodyHtml() {
+  return [
+    '<section>',
+    '<p>404 editorial</p>',
+    '<h1>Aquesta pàgina no existeix dins del diari.</h1>',
+    '<p>Potser l’enllaç ha caducat, o bé la notícia encara no forma part d’aquesta edició.</p>',
+    '<p><a href="/">Tornar a la portada</a></p>',
+    '</section>',
+  ].join('')
+}
+
+// Un article que ja no existeix (per exemple, un id d'un format d'adreça
+// antic que ja no es fa servir) ha de respondre amb un 404 de veritat.
+// Abans queia al fallback de la SPA, que serveix l'index.html genèric amb
+// estat 200 i el canonical apuntant a la portada: Google ho interpretava com
+// una còpia duplicada de la portada i deixava de banda centenars de pàgines.
+async function renderStoryNotFound(request, url, env) {
+  const assetResponse = await env.ASSETS.fetch(new Request(`${url.origin}/`, request))
+  if (!assetResponse.ok) {
+    return new Response('Not found', { status: 404 })
+  }
+  let html = await assetResponse.text()
+  // Sense canonical (el de la plantilla apunta a la portada i és precisament
+  // el que confonia Google) i amb noindex explícit.
+  html = html.replace(/<link\s+rel="canonical"\s+href="[^"]*"\s*\/?>/i, '')
+  if (html.includes('</head>')) {
+    html = html.replace(
+      '</head>',
+      '    <meta name="robots" content="noindex, follow" />\n  </head>',
+    )
+  }
+  html = html.replace(
+    /<div id="root">\s*<\/div>/i,
+    `<div id="root">${buildNotFoundBodyHtml()}</div>`,
+  )
+  return new Response(html, {
+    status: 404,
+    headers: {
+      'content-type': 'text/html; charset=utf-8',
+      'cache-control': 'public, max-age=300, stale-while-revalidate=3600',
+    },
+  })
+}
+
+// Retorna una Response amb el HTML personalitzat, o null si la ruta no és
+// /noticia/:id (llavors el caller fa el fallback normal).
 export async function renderStoryPage(request, env) {
   const url = new URL(request.url)
   const match = url.pathname.match(/^\/noticia\/([^/]+)\/?$/)
@@ -207,7 +253,7 @@ export async function renderStoryPage(request, env) {
 
   const id = decodeId(match[1])
   const story = await findStory(id, env)
-  if (!story) return null
+  if (!story) return renderStoryNotFound(request, url, env)
 
   const assetResponse = await env.ASSETS.fetch(new Request(`${url.origin}/`, request))
   if (!assetResponse.ok) return null

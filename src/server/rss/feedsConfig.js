@@ -100,6 +100,17 @@ export const rssFeeds = [
   // Agències / serveis d'informació gratuïts (RSS oficial verificat).
   { name: 'Europa Press', url: 'https://www.europapress.es/rss/rss.aspx', language: 'es', defaultCategory: 'Espanya' },
   { name: 'UN News', url: 'https://news.un.org/feed/subscribe/es/news/all/rss.xml', language: 'es', defaultCategory: 'Món' },
+  // Afegides el 10/08/2026 perquè Ciència i Tecnologia depenien només de
+  // fonts en anglès (rotatòries, ~1 cop cada 5 dies) i es quedaven seques; el
+  // castellà, com el català, es consulta SENCER a cada passada. Sense
+  // forceCategory perquè cobreixen molts temes (o, a Xataka, també
+  // curiositats no tecnològiques): la categoria final la decideix el
+  // contingut real del titular (classifyAllowedEditorialTopic), no l'etiqueta
+  // de la font. Provades a mà (10/08/2026): fresques, sense articles morts;
+  // Xataka té alguna oferta comercial ocasional, ja coberta pel filtre
+  // d'advertorial/paraules d'oferta existent.
+  { name: 'The Conversation (ES)', url: 'https://theconversation.com/es/articles.atom', language: 'es', defaultCategory: 'Coneixement' },
+  { name: 'Xataka', url: 'https://www.xataka.com/index.xml', language: 'es', defaultCategory: 'Actualitat' },
 
   // ===================== ANGLÈS =====================
   { name: 'BBC', url: 'https://feeds.bbci.co.uk/news/world/rss.xml', language: 'en', defaultCategory: 'Món', core: true },

@@ -16,7 +16,9 @@ import {
   readNewsletterAudience,
 } from './server/newsletter.js'
 import { renderStoryPage, findStory } from './server/storyMeta.js'
+import { renderContentPage } from './server/pageContent.js'
 import { handleNewsSitemap } from './server/newsSitemap.js'
+import { handleArchiveSitemap } from './server/archiveSitemap.js'
 import { handlePushSubscribe, handlePushUnsubscribe } from './server/push.js'
 import { handleApnsRegister } from './server/apns.js'
 import { handleStoryImage } from './server/storyImage.js'
@@ -600,6 +602,9 @@ async function route(request, env, ctx) {
   // Sitemap de Google News amb les peces vives del radar (últimes 48 h).
   if (path === '/news-sitemap.xml') return handleNewsSitemap(env)
 
+  // Sitemap durador amb TOTES les peces de l'hemeroteca (D1).
+  if (path === '/sitemap-hemeroteca.xml') return handleArchiveSitemap(env)
+
   // Notificacions push (PWA).
   if (path === '/api/push/subscribe') return handlePushSubscribe(request, env)
   if (path === '/api/push/unsubscribe') return handlePushUnsubscribe(request, env)
@@ -611,6 +616,13 @@ async function route(request, env, ctx) {
     const storyPage = await renderStoryPage(request, env)
     if (storyPage) return storyPage
   }
+
+  // Portada, temes, hemeroteca, índex de temes i pàgines fixes: injectem text
+  // real dins del HTML perquè Googlebot i els lectors sense JS hi vegin
+  // contingut (fins ara arribaven amb el <body> buit). Si la ruta no li pertoca
+  // o falla, renderContentPage retorna null i caiem al fallback d'ASSETS.
+  const contentPage = await renderContentPage(request, env)
+  if (contentPage) return contentPage
 
   // Per a qualsevol ruta no-API, delega al sistema d'assets estàtics.
   return env.ASSETS.fetch(request)

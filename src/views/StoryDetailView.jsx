@@ -4,6 +4,7 @@ import PageHero from '../components/PageHero.jsx'
 import { StoryCard } from '../components/StoryCard.jsx'
 import SaveButton from '../components/SaveButton.jsx'
 import ShareRow from '../components/ShareRow.jsx'
+import PushOptIn from '../components/PushOptIn.jsx'
 import { canInterceptNavigation } from '../lib/navigation.js'
 import { getDistanceBand, getOriginLabel } from '../lib/distance.js'
 import { getStorySection } from '../lib/sections.js'
@@ -145,6 +146,15 @@ export function StoryDetailView({ story, sourceLink, imageLink, relatedStories, 
 
         <div className="no-print">
           <ShareRow story={story} />
+        </div>
+
+        {/* Moment de màxima confiança: qui arriba aquí ja ha llegit l'article
+            sencer. Millor lloc per demanar el permís de notificacions que la
+            portada (on encara no s'ha demostrat cap interès): un rebuig aquí
+            és molt menys probable, i el navegador bloqueja el permís per
+            sempre si es rebutja. */}
+        <div className="no-print">
+          <PushOptIn />
         </div>
 
         <div className="article-page__footer no-print">
