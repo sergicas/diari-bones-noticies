@@ -143,6 +143,10 @@ export const rssFeeds = [
     name: 'Literary Hub', url: 'https://lithub.com/feed/', language: 'en', outputLanguage: 'ca', defaultCategory: 'Cultura',
     circuit: 'B', reuseLicense: 'Pista: redacció original obligatòria', activation: { required: true, licenseConfirmed: true },
   },
+  {
+    name: 'Public Domain Review', url: 'https://publicdomainreview.org/feed/', language: 'en', outputLanguage: 'ca', defaultCategory: 'Cultura',
+    circuit: 'B', reuseLicense: 'Pista: redacció original obligatòria', activation: { required: true, licenseConfirmed: true },
+  },
   // ===== FONTS AMPLIADES (jul. 2026): proximitat CAT, estatal i europeu =====
   { name: 'El 9 Nou Osona', url: 'https://el9nou.cat/feed/?post_type=post&edicio=osona-ripolles', language: 'ca', defaultCategory: 'Comarcal' },
   { name: 'El 9 Nou Valles', url: 'https://el9nou.cat/feed/?post_type=post&edicio=valles-oriental', language: 'ca', defaultCategory: 'Comarcal' },

@@ -36,7 +36,7 @@ describe('rssFeeds catalog integrity', () => {
       expect(feed?.licenseProofUrl, name).toMatch(/^https:\/\//)
       expect(feed?.imageRights?.license, name).toBeTruthy()
     }
-    for (const name of ['Phys.org', 'EurekAlert!', 'Quanta Magazine', 'MIT Technology Review', 'Aeon', 'Psyche', 'Literary Hub']) {
+    for (const name of ['Phys.org', 'EurekAlert!', 'Quanta Magazine', 'MIT Technology Review', 'Aeon', 'Psyche', 'Literary Hub', 'Public Domain Review']) {
       expect(byName.get(name)?.circuit, name).toBe('B')
     }
     expect(byName.has('esa.int')).toBe(false)
