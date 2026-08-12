@@ -14,6 +14,7 @@
 
 import { feedStoryId } from '../lib/story-id.js'
 import { storyImagePath } from '../lib/story-image-path.js'
+import { hasVerifiedImageRights } from '../lib/imageRules.js'
 import { runTextModel } from './ai/textModel.js'
 import {
   evaluateEditorialQuality,
@@ -47,7 +48,7 @@ const REWRITE_SYSTEM = [
   'del context. NO inventis xifres, dades, cites, llocs ni noms. Si no hi ha prou',
   'fets per escriure un cos rigorós, escriu exactament INFORMACIO_INSUFICIENT al',
   'cos: és preferible no publicar que omplir amb frases buides.',
-  'Mateixa llengua que el titular. Sense cometes ni opinions.',
+  'Mateixa llengua indicada entre claudàtors. Sense cometes ni opinions.',
   'Si el tipus és VERIFICACIÓ, estructura el cos amb afirmació comprovada,',
   'veredicte i evidència; conserva amb precisió la negació i no presentis el',
   'rumor desmentit com un fet. Si és AGENDA o OPORTUNITAT, prioritza dates,',
@@ -55,7 +56,7 @@ const REWRITE_SYSTEM = [
   'Si és DADES, conserva exactament les xifres, unitats i períodes de referència.',
   'IMPACTE: una frase específica que expliqui per què aquesta peça importa al',
   'lector. No comencis amb "Permet conèixer", "Informa sobre" ni "Aporta una',
-  'comprovació". Mateixa llengua, sense cometes.',
+  'comprovació". Mateixa llengua indicada entre claudàtors, sense cometes.',
   'IMATGE: una escena visual concreta EN ANGLÈS per dibuixar la notícia; descriu',
   'objectes i entorn (exemple: "a modern tram on a tree-lined city avenue at',
   'sunrise"). Sense noms propis, sense marques, sense persones reals identificables',
@@ -189,7 +190,7 @@ async function aiOwnContentBatch(env, items) {
   }
   const list = items
     .map((it, i) => {
-      const lang = LANG_NAMES[it.language] || 'català'
+      const lang = LANG_NAMES[it.outputLanguage || it.language] || 'català'
       const type = typeLabels[it.editorialFormat] || typeLabels.constructive
       const title = String(it.title || '').replace(/\s+/g, ' ').slice(0, 160)
       // El context de la font s'aporta NOMÉS com a material factual intern; el
@@ -424,9 +425,28 @@ export async function applyOwnContent(stories, env) {
       summary: '',
       body,
       impact: own.impact || '',
-      imageUrl,
-      imageCredit: 'El Bon Diari (il·lustració IA)',
-      imageAttributionUrl: '',
+      // Només Circuit A pot conservar la imatge institucional. Sempre passa
+      // imageRules; Circuit B usa inevitablement la il·lustració pròpia.
+      imageUrl:
+        e.story.circuit === 'A' && hasVerifiedImageRights(e.story)
+          ? e.story.imageUrl
+          : imageUrl,
+      imageAlt:
+        e.story.circuit === 'A' && hasVerifiedImageRights(e.story)
+          ? e.story.imageAlt
+          : `Il·lustració editorial de la notícia: ${title}`,
+      imageCredit:
+        e.story.circuit === 'A' && hasVerifiedImageRights(e.story)
+          ? e.story.imageCredit
+          : 'El Bon Diari (il·lustració IA)',
+      imageAttributionUrl:
+        e.story.circuit === 'A' && hasVerifiedImageRights(e.story)
+          ? e.story.imageAttributionUrl
+          : '',
+      ...(e.story.circuit === 'A' && hasVerifiedImageRights(e.story)
+        ? { imageRights: e.story.imageRights }
+        : { imageRights: undefined }),
+      language: e.story.outputLanguage || e.story.language,
       ownContent: hasOwnContent,
     }
   })

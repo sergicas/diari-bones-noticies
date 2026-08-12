@@ -27,6 +27,22 @@ describe('rssFeeds catalog integrity', () => {
     expect(feedNames).toContain('Nació Digital')
   })
 
+  it('declara inequívocament els circuits i drets de les fonts del pivot', () => {
+    const byName = new Map(rssFeeds.map((feed) => [feed.name, feed]))
+    for (const name of ['NASA', 'ESO', 'ESA/Hubble', 'ESA/Webb', 'PLOS Biology', 'PLOS ONE', 'NIH Research Matters']) {
+      const feed = byName.get(name)
+      expect(feed?.circuit, name).toBe('A')
+      expect(feed?.activation?.licenseConfirmed, name).toBe(true)
+      expect(feed?.licenseProofUrl, name).toMatch(/^https:\/\//)
+      expect(feed?.imageRights?.license, name).toBeTruthy()
+    }
+    for (const name of ['Phys.org', 'EurekAlert!', 'Quanta Magazine', 'MIT Technology Review', 'Aeon', 'Psyche', 'Literary Hub']) {
+      expect(byName.get(name)?.circuit, name).toBe('B')
+    }
+    expect(byName.has('esa.int')).toBe(false)
+    expect(byName.has('NOIRLab')).toBe(false)
+  })
+
   // El sostre per llengua de la portada fa que només el català (sense límit) i
   // el castellà (fins a 6) puguin fer créixer l'edició; l'anglès es queda en 3 i
   // el francès, l'italià i el portuguès en 1. Per això aquestes dues llengües es

@@ -13,6 +13,7 @@ import { storyImagePath } from '../lib/story-image-path.js'
 import { applyOwnContent } from './storyText.js'
 import { runTextModel, activeTextProvider } from './ai/textModel.js'
 import { attachRealPhotos, sanitizeStoryPhotos } from './storyPhoto.js'
+import { validateFeedActivation } from './rss/feedActivation.js'
 import {
   selectPublishableStories,
 } from './editorialQuality.js'
@@ -1232,6 +1233,16 @@ export function normalizeFeedItem(block, feed) {
       'Converteix informació pública en una oportunitat accionable.',
   }
 
+  const useLicensedSourceImage =
+    feed.circuit === 'A' && imageUrl && feed.imageRights && feed.licenseProofUrl
+  const imageRights = useLicensedSourceImage
+    ? {
+        verified: true,
+        license: feed.imageRights.license,
+        proofUrl: feed.licenseProofUrl,
+        policy: 'institution-published-whole-image',
+      }
+    : undefined
   const story = {
     title,
     category,
@@ -1242,18 +1253,26 @@ export function normalizeFeedItem(block, feed) {
       impactByFormat[editorialFormat] ||
       'El radar automàtic l’ha detectada com a notícia constructiva.',
     source: feed.name,
+    circuit: feed.circuit || 'B',
+    sourceCircuit: feed.circuit || 'B',
+    sourceTopic: feed.sourceTopic || '',
+    reuseLicense: feed.reuseLicense || '',
+    sourceCredit: feed.sourceCredit || feed.name,
+    originalUrl: link,
     sourceTier: feed.sourceTier || 'B',
     editorialFormat,
     language: feed.language,
+    outputLanguage: feed.outputLanguage || feed.language,
     url: link,
-    // La foto del mitjà (imageUrl) només s'ha fet servir amunt com a senyal de
-    // qualitat (que la peça és un article real amb imatge). NO es publica: en
-    // lloc seu, una il·lustració editorial pròpia generada per IA (cap risc de
-    // drets d'autor). Vegeu src/server/storyImage.js.
-    imageUrl: storyImagePath(link, { title, category }),
-    imageAlt: `Il·lustració editorial per a ${title}.`,
-    imageCredit: 'El Bon Diari (il·lustració IA)',
-    imageAttributionUrl: '',
+    imageUrl: useLicensedSourceImage ? imageUrl : storyImagePath(link, { title, category }),
+    imageAlt: useLicensedSourceImage
+      ? `Imatge publicada per ${feed.sourceCredit || feed.name}: ${title}`
+      : `Il·lustració editorial per a ${title}.`,
+    imageCredit: useLicensedSourceImage
+      ? `${feed.imageRights.credit || feed.name} · ${feed.imageRights.license}`
+      : 'El Bon Diari (il·lustració IA)',
+    imageAttributionUrl: useLicensedSourceImage ? link : '',
+    ...(imageRights ? { imageRights } : {}),
     // editorialScore calculat a dalt: 0 = neutre/polític (només surt si la IA
     // l'aprova) · 1 = bo (paraula clau positiva o feed local).
     editorialScore,
@@ -1434,6 +1453,26 @@ export async function collectFeedStories(feed, options = {}) {
       lastError: result.error,
     }
     return { stories: [], candidates: 0, healthUpdate }
+  }
+
+  const activation = validateFeedActivation(feed, result.xml, now)
+  if (!activation.active) {
+    const healthUpdate = {
+      name: feed.name,
+      url: feed.url,
+      lastAttemptAt: isoNow,
+      lastSuccessAt: healthRecord?.lastSuccessAt || null,
+      lastHttpStatus: result.status,
+      durationMs: result.durationMs,
+      storiesCount: 0,
+      rawItemCount: activation.entries.length,
+      consecutiveFailures: 0,
+      status: 'disabled',
+      pausedUntil: null,
+      lastError: `activació desactivada: ${activation.reason}`,
+    }
+    console.warn(`[radar] Feed ${feed.name} desactivat: ${activation.reason}`)
+    return { stories: [], candidates: 0, disabled: true, healthUpdate }
   }
 
   const itemRegex = /<(item|entry)\b[^>]*>([\s\S]*?)<\/\1>/gi
