@@ -98,10 +98,10 @@ describe('renderContentPage', () => {
   })
 
   it('serveix una pàgina de tema vàlida', async () => {
-    const res = await renderContentPage(req('/tema/cultura'), makeEnv())
+    const res = await renderContentPage(req('/tema/filosofia'), makeEnv())
     expect(res).not.toBeNull()
     const html = await res.text()
-    expect(html).toContain('Cultura')
+    expect(html).toContain('Filosofia')
     expect(html).toContain('<main class="ssr-content">')
   })
 

@@ -66,14 +66,22 @@ const CATEGORY_MAP = {
   // Ciència
   'ciència': 'Ciència', 'ciencia': 'Ciència', 'science': 'Ciència',
   'recerca': 'Ciència', 'research': 'Ciència', 'investigación': 'Ciència',
-  'astronomy': 'Ciència', 'biology': 'Ciència',
+  'astronomy': 'Ciència', 'astronomia': 'Ciència', 'biology': 'Ciència',
+  'biotecnologia': 'Ciència', 'biotechnology': 'Ciència',
 
   // Tecnologia
   'tecnologia': 'Tecnologia', 'tecnología': 'Tecnologia',
   'technology': 'Tecnologia', 'tech': 'Tecnologia',
   'món digital': 'Tecnologia', 'mon digital': 'Tecnologia',
   'digital': 'Tecnologia', 'ia': 'Tecnologia', 'ai': 'Tecnologia',
-  'intel·ligència artificial': 'Tecnologia',
+  'intel·ligència artificial': 'Tecnologia', 'artificial intelligence': 'Tecnologia',
+
+  // Salut (categoria canònica; Longevitat és un tema editorial específic)
+  'longevitat': 'Salut', 'longevity': 'Salut', 'healthy aging': 'Salut',
+  'envelliment': 'Salut', 'aging': 'Salut', 'ageing': 'Salut',
+
+  // Cultura (categoria canònica; Filosofia i Literatura són temes específics)
+  'filosofia': 'Cultura', 'philosophy': 'Cultura',
 
   // Economia
   'economia': 'Economia', 'economía': 'Economia', 'economy': 'Economia',
@@ -193,98 +201,80 @@ export function refineCategoryByContent(category, title = '', summary = '') {
 // educativa local com a "Comarcal". Per això primer respectem les categories
 // explícites admeses i, per a la resta, classifiquem pel contingut.
 export const ALLOWED_EDITORIAL_TOPICS = [
-  'Cultura',
-  'Esports',
   'Ciència',
   'Tecnologia',
-  'Societat',
-  'Religió',
-  'Solidaritat',
-  'Educació',
-  'Economia',
-  'Política',
+  'IA',
+  'Biotecnologia',
+  'Astronomia',
+  'Longevitat',
+  'Filosofia',
+  'Literatura',
 ]
 
 // Índex públic de la línia temàtica. És compartit pel menú, la portada i
 // l'hemeroteca perquè els noms i els enllaços no divergeixin amb el temps.
 export const EDITORIAL_TOPIC_INDEX = [
   {
-    id: 'cultura',
-    label: 'Cultura',
-    description: 'Creació, llengua i patrimoni que fan més rica la vida compartida.',
-    subtopics: ['Música', 'Literatura', 'Teatre', 'Cinema', 'Arts', 'Patrimoni'],
-  },
-  {
-    id: 'esports',
-    label: 'Esports',
-    description: 'Esport de base, inclusió, salut i fites col·lectives.',
-    subtopics: [],
-  },
-  {
     id: 'ciencia',
     label: 'Ciència',
     description: 'Recerca i descobertes verificables que amplien el coneixement.',
-    subtopics: [],
+    canonicalCategories: ['Ciència'],
   },
   {
     id: 'tecnologia',
     label: 'Tecnologia',
     description: 'Eines digitals i innovacions amb una utilitat humana concreta.',
-    subtopics: [],
+    canonicalCategories: ['Tecnologia'],
   },
   {
-    id: 'societat',
-    label: 'Societat',
-    description: 'Comunitat, drets, cures i millores en la vida quotidiana.',
-    subtopics: [],
+    id: 'ia',
+    label: 'IA',
+    description: 'Intel·ligència artificial aplicada amb evidència, transparència i utilitat humana.',
+    canonicalCategories: ['Tecnologia'],
   },
   {
-    id: 'religio',
-    label: 'Religió',
-    description: 'Fe, diàleg interreligiós i comunitats que treballen pel bé comú.',
-    subtopics: [],
+    id: 'biotecnologia',
+    label: 'Biotecnologia',
+    description: 'Eines i recerca biològica que obren opcions de coneixement, no promeses clíniques.',
+    canonicalCategories: ['Ciència', 'Salut'],
   },
   {
-    id: 'solidaritat',
-    label: 'Solidaritat',
-    description: 'Voluntariat, suport mutu i iniciatives que no deixen ningú enrere.',
-    subtopics: [],
+    id: 'astronomia',
+    label: 'Astronomia',
+    description: 'Observacions i descobertes que ajuden a entendre millor l’univers.',
+    canonicalCategories: ['Ciència'],
   },
   {
-    id: 'educacio',
-    label: 'Educació',
-    description: 'Escoles, aprenentatge i oportunitats formatives amb retorn social.',
-    subtopics: [],
+    id: 'longevitat',
+    label: 'Longevitat',
+    description: 'Recerca revisada sobre envelliment saludable, sense productes ni promeses terapèutiques.',
+    canonicalCategories: ['Salut', 'Ciència'],
   },
   {
-    id: 'economia',
-    label: 'Economia',
-    description:
-      'Feina, cooperatives, comerç i indústria quan creen oportunitats o reparteixen millor.',
-    subtopics: [],
+    id: 'filosofia',
+    label: 'Filosofia',
+    description: 'Idees que ajuden a pensar millor la vida, la societat i el coneixement.',
+    canonicalCategories: ['Cultura'],
   },
   {
-    id: 'politica',
-    label: 'Política',
-    description:
-      'Govern i institucions quan milloren la vida en comú. El soroll de partit i el conflicte en queden fora.',
-    subtopics: [],
+    id: 'literatura',
+    label: 'Literatura',
+    description: 'Llibres, escriptura i memòria literària que amplien la conversa cultural.',
+    canonicalCategories: ['Cultura'],
   },
 ]
 
 // Una icona simpàtica per a cada tema. Es fa servir a TOT ARREU on apareix un
 // tema: el menú, l'índex, la pàgina del tema i l'etiqueta de cada targeta.
 const TOPIC_ICONS = {
-  Cultura: '🎭',
-  Esports: '⚽',
   Ciència: '🔬',
   Tecnologia: '💡',
-  Societat: '🤝',
-  Religió: '🕊️',
-  Solidaritat: '❤️',
-  Educació: '📚',
-  Economia: '🌱',
-  Política: '🏛️',
+  IA: '✦',
+  Biotecnologia: '🧬',
+  Astronomia: '✺',
+  Longevitat: '◌',
+  Filosofia: '⌁',
+  Literatura: '📖',
 }
 
 export function getTopicIcon(label) {
@@ -303,6 +293,12 @@ export function getEditorialTopicSlug(label) {
 }
 
 const ALLOWED_EDITORIAL_TOPIC_SET = new Set(ALLOWED_EDITORIAL_TOPICS)
+const ASTRONOMY_CIRCUIT_A_SOURCES = [
+  /\bnasa\b/i,
+  /\beso\b/i,
+  /esa\/?hubble/i,
+  /esa\/?webb/i,
+]
 const STRICTLY_OUTSIDE_TOPIC_CATEGORIES = new Set([
   'Internacional',
   'Món',
@@ -322,76 +318,100 @@ function allowedTopicPattern(source) {
 
 const ALLOWED_TOPIC_CONTENT_RULES = [
   {
-    topic: 'Cultura',
+    topic: 'Astronomia',
     rx: allowedTopicPattern(
-      'cultur|m[úu]sic|concert|canç[óo]|cantant|orquestr|coral|literatur|llibr|llibre|libro|book|poes|novel·?la|novela|teatre|teatro|theatre|cinema|cine(?:$|[^\\p{L}])|film|documental|museu|museo|museum|exposici|exhibiti|fotografi|pintur|escultur|arts?(?:$|[^\\p{L}])|art[íi]st|patrimoni|patrimonio|heritage|dansa|danza|dance|[òo]pera|festival cultural|c[òo]mic|comic|biblioteca|biblioth[èe]que',
+      'astronom|telescopi|telescope|gal[àa]xia|galaxy|exoplanet|forat negre|black hole|estrell[ae]|star(?:$|[^\\p{L}])|cosmol|webb|hubble|observatori espacial',
     ),
   },
   {
-    topic: 'Esports',
+    topic: 'Biotecnologia',
     rx: allowedTopicPattern(
-      'esport|deport|sports?(?:$|[^\\p{L}])|f[úu]tbol|football|b[àa]squet|basket|handbol|waterpolo|tennis|tenis|atlet|ciclisme|ciclismo|nataci|swimming|marat[oó]|ol[íi]mpi|paral[íi]mpi|campionat|campeonato|championship|club esportiu|club deportivo',
+      'biotecnolog|biotechnology|prote[ïi]n|protein|genoma|genome|adn|dna|arn|rna|c[èe]l·lul|cell(?:$|[^\\p{L}])|biologia sint[èe]tica|synthetic biology|molecular|enzim|enzyme|drosophila',
+    ),
+  },
+  {
+    topic: 'IA',
+    rx: allowedTopicPattern(
+      'intel·lig[èe]ncia artificial|inteligencia artificial|artificial intelligence|(?:IA|AI)(?:$|[^\\p{L}])|aprenentatge autom[àa]tic|machine learning|model generatiu|generative model|algoritm',
+    ),
+  },
+  {
+    topic: 'Longevitat',
+    rx: allowedTopicPattern(
+      'longevitat|longevity|envelliment|aging|ageing|c[èe]l·lul[ae] senescent|senescent cell|senesc[èe]ncia|senescence|healthy aging',
+    ),
+  },
+  {
+    topic: 'Filosofia',
+    rx: allowedTopicPattern(
+      'filosof|philosoph|[èe]tica|ethics|metaf[íi]sica|metaphysics|epistemolog|existencial|existential|pensament|thought(?:$|[^\\p{L}])',
+    ),
+  },
+  {
+    topic: 'Literatura',
+    rx: allowedTopicPattern(
+      'literatur|llibr|llibre|libro|book|poes|poetry|novel·?la|novela|novel(?:$|[^\\p{L}])|escriptor|writer|author|autora|autoria|mecan[òo]graf|typewriter|biblioteca',
     ),
   },
   {
     topic: 'Ciència',
     rx: allowedTopicPattern(
-      'ci[èe]nci|ciencia|science|cient[íi]fic|scientist|recerca|investigaci[óo]n|research|descoberta|descubrimiento|discovery|astronom|biolog|gen[èe]tic|genetic|genoma|f[òo]ssil|f[óo]sil|fossil|laboratori|laboratorio|laboratory|assaig cl[íi]nic|ensayo cl[íi]nico|clinical trial|estudi m[èe]dic|estudio m[ée]dico|medical study|vacuna|vaccine|tractament experimental|tratamiento experimental',
+      'ci[èe]nci|ciencia|science|cient[íi]fic|scientist|recerca|investigaci[óo]n|research|descoberta|descubrimiento|discovery|biolog|gen[èe]tic|genetic|f[òo]ssil|f[óo]sil|fossil|laboratori|laboratorio|laboratory|assaig cl[íi]nic|ensayo cl[íi]nico|clinical trial|estudi m[èe]dic|estudio m[ée]dico|medical study',
     ),
   },
   {
     topic: 'Tecnologia',
     rx: allowedTopicPattern(
-      'tecnolog|technology|tech(?:$|[^\\p{L}])|intel·lig[èe]ncia artificial|inteligencia artificial|artificial intelligence|(?:IA|AI)(?:$|[^\\p{L}])|digital|programari|software|codi obert|c[óo]digo abierto|open source|rob[oò]tic|robot|ciberseguretat|ciberseguridad|cybersecurity|algoritm|computaci|semiconductor|videojoc|videojuego|video game|aplicaci[óo] m[òo]bil|aplicaci[óo]n m[óo]vil|mobile app',
-    ),
-  },
-  {
-    topic: 'Religió',
-    rx: allowedTopicPattern(
-      'religi|religion|fe(?:$|[^\\p{L}])|faith|esgl[ée]sia|iglesia|church|parr[oò]quia|parroquia|monestir|monasterio|monastery|convent|temple|sinagoga|synagogue|mesquita|mezquita|mosque|cristi|cristian|christian|islam|musulm|muslim|jueu|jud[íi]o|jewish|budis|buddh|interreligi|interfaith|espiritual|spiritual',
-    ),
-  },
-  {
-    topic: 'Solidaritat',
-    rx: allowedTopicPattern(
-      'solidari|solidaridad|solidarity|solidarit[ée]|voluntari|voluntariado|volunteer|b[ée]n[ée]vol|donaci|donation|recapta|recauda|fundrais|banc dels aliments|banco de alimentos|food bank|suport mutu|apoyo mutuo|mutual aid|acollida|acogida|refugi|inclusi[óo] social|ajuda humanit[àa]ria|ayuda humanitaria|humanitarian aid|sense llar|sin hogar|homeless',
-    ),
-  },
-  {
-    topic: 'Educació',
-    rx: allowedTopicPattern(
-      'educaci|education|educaci[óo]n|escola|escuela|school|instituts?(?:$|[^\\p{L}])|institutos?(?:$|[^\\p{L}])|high school|universitat|universidad|university|alumn|estudiant|student|docent|professor|maestr|teacher|aula|classroom|aprenentatge|aprendizaje|learning|formaci[óo]|training|beca|scholarship|biblioteca escolar|alfabetitz|alfabetiz|literacy',
-    ),
-  },
-  {
-    topic: 'Economia',
-    // Economia CONSTRUCTIVA: activitat econòmica que crea feina o reparteix
-    // millor (cooperatives, comerç, indústria, emprenedoria, fàbriques que
-    // reobren). S'eviten a posta les paraules de la burocràcia de servei
-    // —subvenció, ajut, convocatòria, autònoms, afiliacions, sectors— perquè
-    // el Sergi va decidir el diari sense subvencions ni dades de l'Idescat: si
-    // hi entressin, aquest tema les tornaria a colar. La borsa i els resultats
-    // d'empresa ja els bloqueja abans UNIVERSAL_NEG i el filtre de publireportatge.
-    rx: allowedTopicPattern(
-      'econom|cooperativ|comer[çc]|comercio|commerce|ind[úu]stri|industria|industry|emprenedor|emprendedor|entrepreneur|emprendimiento|pime(?:$|[^\\p{L}])|pyme|empresa social|social enterprise|llocs de treball|puestos de trabajo|artesan|reindustrialitza|mercat laboral|mercado laboral|f[àa]brica|f[áa]brica|factory|autoocupaci',
-    ),
-  },
-  {
-    topic: 'Societat',
-    rx: allowedTopicPattern(
-      'societat|sociedad|society|social|comunitat|comunidad|community|barri|barrio|neighborhood|ve[iï]n|vecin|resident|fam[íi]li|family|infant|niñ|child|jove|joven|youth|gent gran|personas mayores|older people|ciutadania|ciudadan[íi]a|citizens|conviv[èe]ncia|convivencia|coexistence|accessibilitat|accesibilidad|accessibility|discapacitat|discapacidad|disability|drets humans|derechos humanos|human rights|igualtat|igualdad|equality|salut p[úu]blica|salud p[úu]blica|public health|hospital|reanimaci|resuscitation|servei p[úu]blic|servicio p[úu]blico|public service',
+      'tecnolog|technology|tech(?:$|[^\\p{L}])|digital|programari|software|codi obert|c[óo]digo abierto|open source|rob[oò]tic|robot|ciberseguretat|ciberseguridad|cybersecurity|computaci|semiconductor|videojoc|videojuego|video game|aplicaci[óo] m[òo]bil|aplicaci[óo]n m[óo]vil|mobile app|pantalla|display|quantum dot',
     ),
   },
 ]
 
-export function classifyAllowedEditorialTopic(story) {
-  const category = String(story?.category || '').trim()
-  if (ALLOWED_EDITORIAL_TOPIC_SET.has(category)) return category
+// Ordre de desempat per a una peça entrant. El primer senyal aplicable guanya:
+// 1) decisió editorial manual; 2) font de Circuit A amb àmbit inequívoc;
+// 3) temes més específics; 4) temes base. En especial, Longevitat va abans de
+// Biotecnologia perquè la senescència pot contenir vocabulari cel·lular.
+export const EDITORIAL_TOPIC_TIEBREAK_ORDER = [
+  'Longevitat',
+  'Astronomia',
+  'Biotecnologia',
+  'IA',
+  'Literatura',
+  'Filosofia',
+  'Ciència',
+  'Tecnologia',
+]
 
-  // En una peça etiquetada principalment com a política, economia, clima o
-  // internacional, una menció incidental a "educació" o "cultura" al resum
-  // no la converteix en una notícia d'aquell tema. En aquests casos exigim que
-  // l'àmbit autoritzat sigui visible al mateix titular.
+function isCircuitA(story) {
+  return story?.circuit === 'A' || story?.sourceCircuit === 'A'
+}
+
+function sourceText(story) {
+  return [story?.source, story?.sourceId, story?.sourceName]
+    .filter(Boolean)
+    .join(' ')
+}
+
+function sourceAssignedTopic(story) {
+  // La configuració de la font pot declarar un hint inequívoc. És el mecanisme
+  // que farà servir feedsConfig per a NASA, ESO i les missions ESA.
+  const configuredTopic = String(story?.sourceTopic || '').trim()
+  if (ALLOWED_EDITORIAL_TOPIC_SET.has(configuredTopic)) return configuredTopic
+
+  // Sense un hint, les fonts astronòmiques de Circuit A tenen una assignació
+  // segura. PLOS i NIH no es forcen: es resolen pel contingut, perquè cobreixen
+  // tant biotecnologia/ciència com, en el cas del NIH, longevitat.
+  if (
+    isCircuitA(story) &&
+    ASTRONOMY_CIRCUIT_A_SOURCES.some((pattern) => pattern.test(sourceText(story)))
+  ) {
+    return 'Astronomia'
+  }
+  return null
+}
+
+function textForTopicAssignment(story) {
+  const category = String(story?.category || '').trim()
   const material = STRICTLY_OUTSIDE_TOPIC_CATEGORIES.has(category)
     ? [story?.title]
     : [
@@ -401,17 +421,42 @@ export function classifyAllowedEditorialTopic(story) {
         story?.sourceContext,
         story?.impact,
       ]
-  const text = material
-    .filter(Boolean)
-    .join(' ')
+  return material.filter(Boolean).join(' ')
+}
 
-  for (const rule of ALLOWED_TOPIC_CONTENT_RULES) {
-    if (rule.rx.test(text)) return rule.topic
+// Assignació NOMÉS per a peces entrants (radar, feeds configurats o redacció).
+// No s'utilitza per reclassificar llegats ja desats: aquests només entren a un
+// tema si una editora els afegeix `topic` explícitament.
+export function assignEditorialTopic(story) {
+  const explicitTopic = String(story?.topic || '').trim()
+  if (ALLOWED_EDITORIAL_TOPIC_SET.has(explicitTopic)) return explicitTopic
+
+  const sourceTopic = sourceAssignedTopic(story)
+  if (sourceTopic) return sourceTopic
+
+  const text = textForTopicAssignment(story)
+  for (const topic of EDITORIAL_TOPIC_TIEBREAK_ORDER) {
+    const rule = ALLOWED_TOPIC_CONTENT_RULES.find((item) => item.topic === topic)
+    if (rule?.rx.test(text)) return topic
   }
   return null
 }
 
+// Consulta de la taxonomia pública: només llegeix el topic que una peça ja
+// porta desat. Això impedeix reclassificar retrospectivament l'hemeroteca.
+export function classifyAllowedEditorialTopic(story) {
+  const topic = String(story?.topic || '').trim()
+  return ALLOWED_EDITORIAL_TOPIC_SET.has(topic) ? topic : null
+}
+
 export function keepAllowedEditorialTopic(story) {
+  const topic = assignEditorialTopic(story)
+  // La categoria canònica continua descrivint la família d'ingesta (p. ex.
+  // Salut o Cultura); `topic` és la classificació pública, més específica.
+  return topic ? { ...story, topic } : null
+}
+
+export function keepArchiveStory(story) {
   const topic = classifyAllowedEditorialTopic(story)
-  return topic ? { ...story, category: topic } : null
+  return topic ? { ...story, topic } : { ...story }
 }

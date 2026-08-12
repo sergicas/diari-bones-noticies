@@ -1,5 +1,5 @@
 import { feedStoryId } from '../lib/story-id.js'
-import { keepAllowedEditorialTopic } from '../lib/category.js'
+import { keepArchiveStory } from '../lib/category.js'
 import { selectPublishableStories } from './editorialQuality.js'
 
 const MAX_STATEMENTS_PER_BATCH = 40
@@ -43,12 +43,9 @@ function parseStoredStory(value) {
 }
 
 function selectPublicStories(stories, { onReject } = {}) {
-  const topicSafe = []
-  for (const story of stories || []) {
-    const filtered = keepAllowedEditorialTopic(story)
-    if (filtered) topicSafe.push(filtered)
-    else onReject?.(story, 'outside-topic')
-  }
+  // El catàleg durable no descarta FITS-NONE: no entren a la línia temàtica
+  // nova, però es mantenen a l'hemeroteca i continuen resolent la seva URL.
+  const topicSafe = (stories || []).map(keepArchiveStory)
 
   const qualitySafe = selectPublishableStories(topicSafe, {
     onReject: (story, result) => onReject?.(story, 'quality', result),
@@ -189,7 +186,6 @@ export async function backfillEditorialArchive(env) {
   let qualityRejected = 0
   const stories = selectPublicStories(candidates, {
     onReject: (_story, reason) => {
-      if (reason === 'outside-topic') outsideTopic += 1
       if (reason === 'quality') qualityRejected += 1
     },
   })

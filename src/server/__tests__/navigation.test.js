@@ -51,22 +51,20 @@ describe('navigation and category helpers', () => {
     expect(getEditorialTopicBySlug('inexistent')).toBeNull()
   })
 
-  it('exposes the ten public topics with the requested culture index', () => {
+  it('exposa els vuit temes del pivot editorial i el seu origen canònic', () => {
     expect(EDITORIAL_TOPIC_INDEX.map((topic) => topic.label)).toEqual([
-      'Cultura',
-      'Esports',
       'Ciència',
       'Tecnologia',
-      'Societat',
-      'Religió',
-      'Solidaritat',
-      'Educació',
-      'Economia',
-      'Política',
+      'IA',
+      'Biotecnologia',
+      'Astronomia',
+      'Longevitat',
+      'Filosofia',
+      'Literatura',
     ])
-    expect(getEditorialTopicBySlug('cultura')?.subtopics).toEqual(
-      expect.arrayContaining(['Música', 'Literatura', 'Teatre']),
+    expect(getEditorialTopicBySlug('longevitat')?.canonicalCategories).toEqual(
+      expect.arrayContaining(['Salut']),
     )
-    expect(getEditorialTopicSlug('Educació')).toBe('educacio')
+    expect(getEditorialTopicSlug('Literatura')).toBe('literatura')
   })
 })

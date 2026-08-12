@@ -9,6 +9,7 @@
 // notícia ha de ser honesta per ella mateixa.
 
 import { storyImagePath } from '../lib/story-image-path.js'
+import { canPublishStoryImage, hasPermissiveImageLicense } from '../lib/imageRules.js'
 
 // Llocs massa genèrics per cercar-hi una foto: no identifiquen cap indret.
 const GENERIC_PLACES = new Set([
@@ -179,12 +180,14 @@ export function pickBestCommonsPhoto(apiResponse, place) {
     const meta = info?.extmetadata || {}
     const author = stripHtml(meta.Artist?.value) || 'Wikimedia Commons'
     const license = stripHtml(meta.LicenseShortName?.value) || 'llicència lliure'
+    const sourceUrl = info?.descriptionurl || `https://commons.wikimedia.org/wiki/${encodeURIComponent(title)}`
+    if (!hasPermissiveImageLicense(license)) continue
 
     return {
       url,
       author,
       license,
-      sourceUrl: info?.descriptionurl || `https://commons.wikimedia.org/wiki/${encodeURIComponent(title)}`,
+      sourceUrl,
       place,
       source: 'wikimedia-commons',
     }
@@ -228,16 +231,26 @@ function applyPhotoFields(story, photo) {
   story.imageUrl = photo.url
   story.imageAlt = `Fotografia de ${photo.place}`
   story.imageCredit = `Foto: ${photo.author} · ${photo.license} · Wikimedia Commons (imatge del lloc, no de l’acte)`
+  story.imageAttributionUrl = photo.sourceUrl
+  story.imageRights = {
+    verified: true,
+    license: photo.license,
+    proofUrl: photo.sourceUrl,
+  }
 }
 
 // Retira una foto de lloc que una versió anterior ja havia guardat per a un
 // acte i restaura la ruta de la il·lustració pròpia. Això saneja tant la portada
 // en memòria com el detall persistent sense haver d'esperar un nou refresc.
 export function sanitizeStoryPhoto(story) {
-  if (!story || isPlacePhotoEligible(story)) return story
-  if (story.photo?.source !== 'wikimedia-commons') return story
+  if (!story) return story
+  const hasAllowedPhoto = canPublishStoryImage(story)
+  const hasAmbiguousPlacePhoto =
+    story.photo?.source === 'wikimedia-commons' && !isPlacePhotoEligible(story)
+  if (hasAllowedPhoto && !hasAmbiguousPlacePhoto) return story
 
   delete story.photo
+  delete story.imageRights
   story.photoChecked = true
   story.imageUrl = storyImagePath(story.url, {
     title: story.title,

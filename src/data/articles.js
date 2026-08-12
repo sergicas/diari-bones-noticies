@@ -1,5 +1,4 @@
 import { storyImagePath } from '../lib/story-image-path.js'
-import { keepAllowedEditorialTopic } from '../lib/category.js'
 
 const seedArticlesRaw = [
   {
@@ -2147,9 +2146,7 @@ export const seedArticles = seedArticlesRaw
     }),
     imageCredit: 'El Bon Diari (il·lustració IA)',
     imageAttributionUrl: '',
+    legacyArchive: true,
   }))
-  // L'hemeroteca segueix exactament la mateixa línia temàtica que el radar:
-  // les peces d'altres àmbits es conserven al fitxer font per poder-les
-  // recuperar, però deixen de publicar-se, indexar-se i aparèixer al feed.
-  .map((article) => keepAllowedEditorialTopic(article))
-  .filter(Boolean)
+  // Peces anteriors al pivot: es conserven a l'hemeroteca i a les URL de
+  // detall, però no se'ls infereix cap tema nou de manera retroactiva.
