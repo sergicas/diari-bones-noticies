@@ -77,16 +77,64 @@ async function runCloudflare(env, { system, user, maxTokens }) {
   })
 }
 
+// RECANVI QUAN GEMINI DIU PROU (14-08-2026).
+//
+// La nit del gir editorial el diari va deixar d'escriure sense que res ho
+// digués: la quota gratuïta de Gemini es va esgotar, cada crida tornava un
+// 429, les peces sortien amb ZERO paraules i la barrera de qualitat les
+// rebutjava per buides. Semblava un problema de model o de barrera i no ho
+// era. El diari es va quedar mut una nit sencera.
+//
+// El model de Cloudflare ja hi era, però només s'hi anava si NO hi havia clau
+// de Gemini. Ara s'hi va també quan Gemini falla, sigui pel motiu que sigui:
+// per a un diari, escriure amb el segon model sempre és millor que no
+// escriure.
+//
+// La pausa evita trucar a Google set vegades per refresc sabent que dirà que
+// no: quan una crida topa amb la quota, les següents van directes al recanvi
+// durant un quart d'hora.
+const FALLBACK_COOLDOWN_MS = 15 * 60 * 1000
+let geminiPausatFinsA = 0
+
+export function resetTextModelFallback() {
+  geminiPausatFinsA = 0
+}
+
 // Punt d'entrada únic. Rep sistema + usuari + sostre de tokens i torna
 // { response: '<text>' } passi el que passi amb el proveïdor triat.
 export async function runTextModel(env, { system, user, maxTokens }) {
-  if (env?.GEMINI_API_KEY) {
-    return runGemini(env, { system, user, maxTokens })
+  const araMs = Date.now()
+  if (!env?.GEMINI_API_KEY || araMs < geminiPausatFinsA) {
+    return runCloudflare(env, { system, user, maxTokens })
   }
-  return runCloudflare(env, { system, user, maxTokens })
+  try {
+    return await runGemini(env, { system, user, maxTokens })
+  } catch (error) {
+    const motiu = error instanceof Error ? error.message : String(error)
+    // Si no hi ha recanvi a mà, val més l'error de Gemini tal com és que un
+    // "Cannot read properties of undefined" que no diu res a qui el llegeixi.
+    if (typeof env?.AI?.run !== 'function') throw error
+    // La quota esgotada i el límit de peticions per minut són els dos casos
+    // en què insistir no serveix de res durant una bona estona.
+    if (/\b429\b/.test(motiu)) {
+      geminiPausatFinsA = araMs + FALLBACK_COOLDOWN_MS
+    }
+    console.warn(
+      JSON.stringify({
+        event: 'ai.text.fallback',
+        motiu: motiu.slice(0, 160),
+        pausatFinsA: geminiPausatFinsA
+          ? new Date(geminiPausatFinsA).toISOString()
+          : null,
+      }),
+    )
+    return runCloudflare(env, { system, user, maxTokens })
+  }
 }
 
 // Quin proveïdor s'està fent servir de debò (per als registres i el diagnòstic).
 export function activeTextProvider(env) {
-  return env?.GEMINI_API_KEY ? `gemini:${geminiModel(env)}` : 'cloudflare'
+  if (!env?.GEMINI_API_KEY) return 'cloudflare'
+  if (Date.now() < geminiPausatFinsA) return 'cloudflare (recanvi: Gemini sense quota)'
+  return `gemini:${geminiModel(env)}`
 }
