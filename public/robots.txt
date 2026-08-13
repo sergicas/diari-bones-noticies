@@ -1,6 +1,7 @@
 User-agent: *
 Allow: /
 Disallow: /estadistiques
+Disallow: /revisio
 
 Sitemap: https://bondiari.com/sitemap.xml
 Sitemap: https://bondiari.com/news-sitemap.xml

@@ -38,6 +38,12 @@ import {
   normalizeIdescatUpdate,
   collectIdescatUpdates,
 } from './rss/serviceFeeds.js'
+import {
+  candidateId,
+  readDecisions,
+  recordPendingCandidates,
+  splitByReviewDecision,
+} from './reviewGate.js'
 
 export {
   refreshIntervalMs,
@@ -2251,7 +2257,45 @@ export async function getLiveNewsPayload(
   // notícia acceptada que avui queda fora (pel sostre d'una altra llengua o per
   // diversitat de font) segueix sent elegible al pròxim refresc en lloc de
   // cremar-se. Així el català i el castellà no els devora l'allau anglesa.
-  const shownFreshUrls = publishedStories
+  // PORTA D'APROVACIÓ HUMANA (13-08-2026). Fins aquí el radar ha fet la seva
+  // feina: recollir, filtrar, redactar i il·lustrar. Ara decideix una persona.
+  //
+  // Les peces que JA són al lot públic no es tornen a jutjar: van passar la
+  // porta en el seu dia, i tancar-les ara les faria desaparèixer del web i
+  // trencaria enllaços que Google ja té indexats. Només es jutgen les noves.
+  // Conseqüència volguda: si la base de dades no respon, les novetats s'aturen
+  // però el diari d'ahir segueix dret.
+  const publicUrls = new Set((cached?.stories || []).map((story) => story.url))
+  const newcomers = publishedStories.filter((story) => !publicUrls.has(story.url))
+  const decisions = await readDecisions(env, newcomers.map(candidateId))
+  const {
+    approved: approvedStories,
+    pending: pendingStories,
+    rejected: rejectedStories,
+  } = splitByReviewDecision(publishedStories, { decisions, publicUrls })
+  if (pendingStories.length > 0) {
+    await recordPendingCandidates(env, pendingStories)
+  }
+  if (pendingStories.length > 0 || rejectedStories.length > 0) {
+    console.log(
+      JSON.stringify({
+        event: 'review.gate.applied',
+        approved: approvedStories.length,
+        pending: pendingStories.length,
+        rejected: rejectedStories.length,
+      }),
+    )
+  }
+
+  // Marquem com a "vistes" NOMÉS les noves que de debò entren al lot. Una
+  // notícia acceptada que avui queda fora (pel sostre d'una altra llengua o per
+  // diversitat de font) segueix sent elegible al pròxim refresc en lloc de
+  // cremar-se. Així el català i el castellà no els devora l'allau anglesa.
+  //
+  // Les que esperen revisió també compten com a vistes: ja són a la sala
+  // d'espera amb el text sencer desat, i tornar-les a recollir a cada passada
+  // només gastaria feina per proposar el mateix.
+  const shownFreshUrls = [...approvedStories, ...pendingStories]
     .filter((story) => freshUrlSet.has(story.url))
     .map((story) => story.url)
   if (shownFreshUrls.length > 0) {
@@ -2264,12 +2308,26 @@ export async function getLiveNewsPayload(
   }
 
   try {
-    const payload = await setCachedPayload(kv, publishedStories)
+    // MAI un diari en blanc. Si un dia no hi ha res aprovat —perquè ningú no ha
+    // revisat i l'arrossegament ja ha caducat— val més deixar el lot d'ahir
+    // dret que buidar la portada. El correu del matí ja avisa que hi ha peces
+    // esperant; una pàgina en blanc no ho arreglaria i sí que espantaria Google.
+    if (approvedStories.length === 0 && cached?.stories?.length) {
+      console.warn(
+        JSON.stringify({
+          event: 'review.gate.nothing-approved',
+          pending: pendingStories.length,
+          keptFromPreviousEdition: cached.stories.length,
+        }),
+      )
+      return { ...cached, cache: 'stale-awaiting-review' }
+    }
+    const payload = await setCachedPayload(kv, approvedStories)
     // Persistim sota story:<id> només les peces que entren per primer cop.
     // Les peces arrossegades ja tenen aquesta còpia i reescriure fins a 50 claus
     // a cada refresc consumia quota de KV sense canviar-ne el contingut.
     await Promise.all(
-      storiesRequiringDetailPersistence(publishedStories, shownFreshUrls).map((story) =>
+      storiesRequiringDetailPersistence(approvedStories, shownFreshUrls).map((story) =>
         kv.put(`story:${feedStoryId(story.url)}`, JSON.stringify(story), {
           expirationTtl: storyDetailTtlSeconds,
         }),
@@ -2287,7 +2345,8 @@ export async function getLiveNewsPayload(
       cronDurationMs,
       reviewedThisPass,
       publishedCount: shownFreshUrls.length,
-      totalStories: publishedStories.length,
+      totalStories: approvedStories.length,
+      pendingReviewCount: pendingStories.length,
       qualityRejectedCount,
       qualityRejectedByIssue,
       // Deixa constància de quin cervell d'IA ha escrit aquesta edició, perquè
@@ -2336,7 +2395,10 @@ export async function getLiveNewsPayload(
     return {
       updatedAt,
       nextRefreshAt: new Date(Date.now() + refreshIntervalMs).toISOString(),
-      stories: publishedStories,
+      // També aquí el lot ha de ser el JA APROVAT: si l'escriptura a KV falla,
+      // el que retornem alimenta la base de dades editorial, i deixar-hi passar
+      // peces sense revisar les publicaria per la porta del darrere.
+      stories: approvedStories,
       cache: 'transient',
       qualityRejectedCount,
       qualityRejectedByIssue,

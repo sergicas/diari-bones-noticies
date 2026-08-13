@@ -17,6 +17,7 @@ import {
 } from './server/newsletter.js'
 import { renderStoryPage, findStory } from './server/storyMeta.js'
 import { renderContentPage } from './server/pageContent.js'
+import { handleReviewRoutes } from './server/reviewPage.js'
 import { handleNewsSitemap } from './server/newsSitemap.js'
 import { handleArchiveSitemap } from './server/archiveSitemap.js'
 import { handlePushSubscribe, handlePushUnsubscribe } from './server/push.js'
@@ -609,6 +610,12 @@ async function route(request, env, ctx) {
   if (path === '/api/push/subscribe') return handlePushSubscribe(request, env)
   if (path === '/api/push/unsubscribe') return handlePushUnsubscribe(request, env)
   if (path === '/api/push/register-apns') return handleApnsRegister(request, env)
+
+  // Sala de revisió privada: cap peça nova no es publica fins que una persona
+  // l'ha llegida aquí. Va abans que qualsevol altra pàgina perquè /revisio no
+  // caigui mai al fallback de la SPA.
+  const reviewPage = await handleReviewRoutes(request, env)
+  if (reviewPage) return reviewPage
 
   // Pàgina de notícia: servim l'HTML amb meta socials propis (títol, imatge)
   // perquè quan algú la comparteix surti la targeta de la peça, no la genèrica.

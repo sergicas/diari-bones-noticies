@@ -12,6 +12,7 @@ import {
   deleteNewsletterSubscriberMirror,
   mirrorNewsletterSubscriber,
 } from './editorialStore.js'
+import { countPendingCandidates } from './reviewGate.js'
 
 const subscriberPrefix = 'subscriber:'
 const actionTokenPrefix = 'newsletter-action:'
@@ -740,6 +741,48 @@ async function sendWithResend({ apiKey, fromEmail, fromName, to, subject, html, 
     body: JSON.stringify(payload),
   })
   return { ok: response.ok, status: response.status }
+}
+
+/**
+ * AVÍS DE REVISIÓ (només per a qui dirigeix el diari, no per als subscriptors).
+ *
+ * Correu curt cada matí dient quantes peces esperen. A propòsit NO porta cap
+ * botó d'aprovar: alguns programes de correu obren els enllaços sols per
+ * previsualitzar-los i aprovarien peces que ningú no ha llegit. Les decisions
+ * es prenen només a /revisio.
+ */
+export async function sendReviewReminder(env) {
+  const to = env.BONDIARI_EDITOR_EMAIL
+  const apiKey = env.RESEND_API_KEY
+  if (!to || !apiKey) return { sent: 0, skipped: 'not-configured' }
+
+  const pending = await countPendingCandidates(env)
+  if (pending === 0) return { sent: 0, skipped: 'nothing-pending' }
+
+  const url = 'https://bondiari.com/revisio'
+  const quantes =
+    pending === 1 ? '1 peça espera' : `${pending} peces esperen`
+  const subject =
+    pending === 1
+      ? 'Tens 1 peça per revisar'
+      : `Tens ${pending} peces per revisar`
+  const text = `${quantes} que les llegeixis abans de sortir al diari.\n\nSala de revisió: ${url}\n\nRes es publica fins que hi entres i ho decideixes. El que no llegeixis en set dies caduca sol.`
+  const html = `<!doctype html><html lang="ca"><body style="font-family:Georgia,serif;line-height:1.55;color:#1c1c1c;">
+<p>${quantes} que les llegeixis abans de sortir al diari.</p>
+<p><a href="${url}" style="background:#146356;color:#fff;padding:.7rem 1.2rem;border-radius:8px;text-decoration:none;display:inline-block;">Obre la sala de revisió</a></p>
+<p style="color:#5a5a5a;font-size:.9rem;">Res es publica fins que hi entres i ho decideixes. El que no llegeixis en set dies caduca sol.</p>
+</body></html>`
+
+  const result = await sendWithResend({
+    apiKey,
+    fromEmail: env.NEWSLETTER_FROM_EMAIL || 'butlleti@bondiari.com',
+    fromName: env.NEWSLETTER_FROM_NAME || 'El Bon Diari',
+    to,
+    subject,
+    html,
+    text,
+  })
+  return { sent: result.ok ? 1 : 0, failed: result.ok ? 0 : 1, pending }
 }
 
 export async function sendDailyDigest(env) {

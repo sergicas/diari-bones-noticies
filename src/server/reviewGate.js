@@ -1,0 +1,349 @@
+// PORTA D'APROVACIÓ HUMANA
+//
+// El radar recull, filtra i redacta, però NO publica. Cap peça nova arriba al
+// web, a l'RSS, al sitemap de notícies ni a les notificacions fins que una
+// persona l'ha llegida i ha dit que sí. Aquesta és la regla prudent decidida el
+// 13-08-2026, abans de desplegar el gir editorial a vuit àmbits: amb dos
+// circuits de continguts (A tradueix amb llicència, B mai no republica) i una
+// regla estricta d'imatges, el criteri no es pot delegar del tot al codi.
+//
+// No calen taules noves: `migrations/0001_editorial_core.sql` ja preveia els
+// estats. Aquí els fem servir de debò.
+//
+//   captured  → esperant que una persona la llegeixi
+//   published → aprovada a mà
+//   rejected  → descartada a mà, o caducada sense que ningú la llegís
+//
+// Cap dels dos estats d'espera (captured, rejected) no entra a les consultes
+// públiques de `editorialStore.js`, que només llegeixen published/distributed/
+// archived. Per tant una peça pendent no és visible enlloc.
+
+import { feedStoryId } from '../lib/story-id.js'
+
+export const PENDING_STATUS = 'captured'
+export const APPROVED_STATUS = 'published'
+export const REJECTED_STATUS = 'rejected'
+
+// Estats que ja són públics: si una peça hi és, va passar la porta en el seu dia.
+const PUBLIC_STATUSES = new Set([APPROVED_STATUS, 'distributed', 'archived'])
+
+// Una peça que ningú no ha llegit en set dies deixa de ser notícia. Caduca sola
+// perquè la llista d'espera no es converteixi en un pantà de centenars de peces
+// velles que fa mandra obrir.
+export const PENDING_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
+
+const MAX_STATEMENTS_PER_BATCH = 40
+const STORY_DETAIL_TTL_SECONDS = 30 * 24 * 60 * 60
+
+function database(env) {
+  return env?.EDITORIAL_DB || null
+}
+
+function nowIso() {
+  return new Date().toISOString()
+}
+
+function chunks(items, size = MAX_STATEMENTS_PER_BATCH) {
+  const result = []
+  for (let index = 0; index < items.length; index += size) {
+    result.push(items.slice(index, index + size))
+  }
+  return result
+}
+
+export function candidateId(story) {
+  return story?.id || feedStoryId(story?.url || story?.title || '')
+}
+
+function parsePayload(value) {
+  if (!value) return null
+  if (typeof value === 'object') return value
+  try {
+    return JSON.parse(value)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Llegeix de la base de dades quina decisió té presa cada peça.
+ * Si la base de dades no respon, torna un mapa buit: el repartidor de sota
+ * entén "sense decisió" com a "no publicar", que és el costat segur.
+ */
+export async function readDecisions(env, ids) {
+  const db = database(env)
+  const unique = [...new Set((ids || []).filter(Boolean))]
+  const decisions = new Map()
+  if (!db || unique.length === 0) return decisions
+  try {
+    for (const group of chunks(unique)) {
+      const placeholders = group.map(() => '?').join(', ')
+      const { results } = await db
+        .prepare(
+          `SELECT id, editorial_status FROM stories WHERE id IN (${placeholders})`,
+        )
+        .bind(...group)
+        .all()
+      for (const row of results || []) {
+        decisions.set(row.id, row.editorial_status)
+      }
+    }
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        event: 'review.decisions.read-failed',
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    )
+  }
+  return decisions
+}
+
+/**
+ * Reparteix el lot en tres: el que pot sortir, el que espera i el que s'ha
+ * descartat.
+ *
+ * `publicUrls` són les peces que JA són al lot públic. Aquestes no es tornen a
+ * jutjar: van passar la porta en el seu dia i tancar-les ara les faria
+ * desaparèixer del web, trencant enllaços que Google ja té indexats. Així una
+ * caiguda de la base de dades atura les novetats sense desmuntar el diari.
+ */
+export function splitByReviewDecision(
+  stories,
+  { decisions = new Map(), publicUrls = new Set() } = {},
+) {
+  const approved = []
+  const pending = []
+  const rejected = []
+  for (const story of stories || []) {
+    if (publicUrls.has(story?.url)) {
+      approved.push(story)
+      continue
+    }
+    const status = decisions.get(candidateId(story))
+    if (PUBLIC_STATUSES.has(status)) {
+      approved.push(story)
+    } else if (status === REJECTED_STATUS) {
+      rejected.push(story)
+    } else {
+      pending.push(story)
+    }
+  }
+  return { approved, pending, rejected }
+}
+
+/**
+ * Desa les peces noves a la sala d'espera. `INSERT OR IGNORE` fa que mai no
+ * trepitgi una decisió ja presa: si la peça ja hi és (aprovada o descartada),
+ * es queda com estava.
+ */
+export async function recordPendingCandidates(env, stories) {
+  const db = database(env)
+  const list = (stories || []).filter((story) => story?.url && story?.title)
+  if (!db || list.length === 0) return { recorded: 0 }
+  const timestamp = nowIso()
+  let recorded = 0
+  try {
+    for (const group of chunks(list)) {
+      const statements = group.map((story) =>
+        db
+          .prepare(
+            `INSERT OR IGNORE INTO stories (
+              id, url, title, source, section, language, editorial_status,
+              published_at, payload_json, first_seen_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, '${PENDING_STATUS}', NULL, ?, ?, ?)`,
+          )
+          .bind(
+            candidateId(story),
+            story.url,
+            story.title,
+            story.source || null,
+            story.category || null,
+            story.language || 'ca',
+            JSON.stringify(story),
+            story.firstSeenAt || timestamp,
+            timestamp,
+          ),
+      )
+      const outcome = await db.batch(statements)
+      for (const item of outcome || []) {
+        recorded += Number(item?.meta?.changes || 0)
+      }
+    }
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        event: 'review.pending.write-failed',
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    )
+  }
+  return { recorded }
+}
+
+/** Les peces que esperen ser llegides, de la més nova a la més vella. */
+export async function listPendingCandidates(env, { limit = 200 } = {}) {
+  const db = database(env)
+  if (!db) return []
+  try {
+    const { results } = await db
+      .prepare(
+        `SELECT id, payload_json, first_seen_at
+           FROM stories
+          WHERE editorial_status = '${PENDING_STATUS}'
+          ORDER BY first_seen_at DESC
+          LIMIT ?`,
+      )
+      .bind(Math.max(1, Math.min(500, Number(limit) || 200)))
+      .all()
+    return (results || [])
+      .map((row) => {
+        const story = parsePayload(row.payload_json)
+        if (!story) return null
+        return { ...story, id: row.id, pendingSince: row.first_seen_at }
+      })
+      .filter(Boolean)
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        event: 'review.pending.read-failed',
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    )
+    return []
+  }
+}
+
+/** Quantes n'hi ha esperant (per a l'avís del matí). */
+export async function countPendingCandidates(env) {
+  const db = database(env)
+  if (!db) return 0
+  try {
+    const row = await db
+      .prepare(
+        `SELECT COUNT(*) AS total FROM stories WHERE editorial_status = '${PENDING_STATUS}'`,
+      )
+      .first()
+    return Number(row?.total || 0)
+  } catch {
+    return 0
+  }
+}
+
+/**
+ * Afegeix una peça acabada d'aprovar al lot públic i li desa la pàgina de
+ * detall. Sense això, aprovar-la no es notaria fins al pròxim refresc (fins a
+ * dotze hores després) i la revisió semblaria que no fa res.
+ */
+async function pushApprovedStoryLive(env, story) {
+  const kv = env?.LIVE_NEWS_KV
+  if (!kv || !story?.url) return { live: false }
+  try {
+    const cached = await kv.get('latest', 'json')
+    const stories = Array.isArray(cached?.stories) ? cached.stories : []
+    if (!stories.some((item) => item.url === story.url)) {
+      const next = {
+        ...(cached || {}),
+        updatedAt: cached?.updatedAt || nowIso(),
+        stories: [story, ...stories],
+      }
+      await kv.put('latest', JSON.stringify(next))
+    }
+    await kv.put(
+      `story:${candidateId(story)}`,
+      JSON.stringify(story),
+      { expirationTtl: STORY_DETAIL_TTL_SECONDS },
+    )
+    return { live: true }
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        event: 'review.publish.kv-failed',
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    )
+    return { live: false }
+  }
+}
+
+/**
+ * La decisió d'una persona sobre una peça concreta.
+ * Només actua sobre peces que encara esperen: no es pot despublicar per aquí.
+ */
+export async function decideCandidate(env, id, decision) {
+  const db = database(env)
+  if (!db) return { ok: false, error: 'no-database' }
+  if (decision !== 'approve' && decision !== 'reject') {
+    return { ok: false, error: 'unknown-decision' }
+  }
+  const timestamp = nowIso()
+  const status = decision === 'approve' ? APPROVED_STATUS : REJECTED_STATUS
+  try {
+    const row = await db
+      .prepare(
+        `SELECT payload_json FROM stories WHERE id = ? AND editorial_status = '${PENDING_STATUS}'`,
+      )
+      .bind(id)
+      .first()
+    if (!row) return { ok: false, error: 'not-pending' }
+    await db
+      .prepare(
+        `UPDATE stories
+            SET editorial_status = ?, published_at = ?, updated_at = ?
+          WHERE id = ? AND editorial_status = '${PENDING_STATUS}'`,
+      )
+      .bind(status, decision === 'approve' ? timestamp : null, timestamp, id)
+      .run()
+    const story = parsePayload(row.payload_json)
+    let live = { live: false }
+    if (decision === 'approve' && story) {
+      live = await pushApprovedStoryLive(env, {
+        ...story,
+        id,
+        publishedAt: story.publishedAt || timestamp,
+      })
+    }
+    return { ok: true, id, decision, ...live }
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        event: 'review.decide.failed',
+        id,
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    )
+    return { ok: false, error: 'database-error' }
+  }
+}
+
+/**
+ * Les que ningú no ha llegit en set dies marxen soles. Es marquen com a
+ * descartades (no esborrades) perquè quedi rastre i no tornin a proposar-se.
+ */
+export async function expireStaleCandidates(
+  env,
+  { maxAgeMs = PENDING_MAX_AGE_MS, now = Date.now() } = {},
+) {
+  const db = database(env)
+  if (!db) return { expired: 0 }
+  const cutoff = new Date(now - maxAgeMs).toISOString()
+  try {
+    const outcome = await db
+      .prepare(
+        `UPDATE stories
+            SET editorial_status = '${REJECTED_STATUS}', updated_at = ?
+          WHERE editorial_status = '${PENDING_STATUS}' AND first_seen_at < ?`,
+      )
+      .bind(nowIso(), cutoff)
+      .run()
+    return { expired: Number(outcome?.meta?.changes || 0) }
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        event: 'review.expire.failed',
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    )
+    return { expired: 0 }
+  }
+}

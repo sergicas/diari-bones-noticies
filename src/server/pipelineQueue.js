@@ -3,7 +3,9 @@ import { getLiveNewsPayload } from './liveNews.js'
 import {
   backfillNewsletterSubscribers,
   sendDailyDigest,
+  sendReviewReminder,
 } from './newsletter.js'
+import { expireStaleCandidates } from './reviewGate.js'
 import { sendPushToAll } from './push.js'
 import { sendApnsToAll } from './apns.js'
 import { announceFreshStories } from './social.js'
@@ -157,7 +159,22 @@ async function processDailyDistribution(env, message) {
       push = await sendPushToAll(env, notification)
       apns = await sendApnsToAll(env, notification)
     }
-    const result = { digest, push, apns }
+    // Les peces que ningú no ha llegit en set dies marxen soles, i després
+    // s'avisa de les que queden. Aquest ordre importa: així el correu no compta
+    // peces que ja han caducat. Cap dels dos passos no ha de tombar el
+    // repartiment del matí si falla.
+    let review = { skipped: 'not-run' }
+    try {
+      await expireStaleCandidates(env)
+      review = await sendReviewReminder(env)
+    } catch (error) {
+      log('warn', 'review.reminder.failed', {
+        error: error instanceof Error ? error.message : String(error),
+      })
+      review = { skipped: 'failed' }
+    }
+
+    const result = { digest, push, apns, review }
     const sent =
       Number(digest.sent || 0) + Number(push.sent || 0) + Number(apns.sent || 0)
     const failed =
