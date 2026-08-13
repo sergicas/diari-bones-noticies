@@ -26,7 +26,13 @@
     }
   },
   "vars": {
-    "ENVIRONMENT": "production"
+    "ENVIRONMENT": "production",
+    // Model que reescriu les peces en català. Fins al 13-08-2026 feia servir
+    // el més petit de Google (flash-lite) i no arribava: se li demanaven de 80
+    // a 150 paraules i entregava menys de 45, així que TOTES les peces queien
+    // a la barrera de qualitat i no arribava res a la sala de revisió.
+    // Es pot tornar enrere canviant només aquesta línia.
+    "GEMINI_MODEL": "gemini-flash-latest"
   },
   "kv_namespaces": [
     { "binding": "LIVE_NEWS_KV", "id": "8dccac0ffa434f75b13ba6a7890646af" },
