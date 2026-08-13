@@ -64,6 +64,39 @@ const cacheKey = 'latest'
 // per a seccions lentes (ciència, cultura) sense fossilitzar-se. La portada en
 // mostra fins a 25 peces de < 5 dies (App.jsx); la resta va a l'Hemeroteca.
 const maxLiveStoryAgeMs = 5 * 24 * 60 * 60 * 1000
+
+// CADA ÀMBIT TÉ EL SEU RELLOTGE (13-08-2026).
+//
+// Els cinc dies de dalt es van posar quan això era un radar de bones notícies
+// generals: allà, una notícia de fa una setmana ja no serveix. Un diari
+// especialitzat no funciona així. Un estudi de longevitat amb revisió
+// d'experts no caduca en cinc dies, i un assaig de filosofia encara menys.
+//
+// Sense això, Longevitat es quedava buit per sempre i en silenci: la font
+// d'Europe PMC passa totes les comprovacions, però serveix estudis de sis
+// setmanes enrere i el radar els llençava tots abans d'ensenyar-los.
+//
+// El risc conegut d'allargar finestres és fossilitzar la portada (ja va passar
+// el 2026-06 amb una finestra de 60 dies). Ara hi ha dos frens que aleshores no
+// existien: les peces d'aquests àmbits no es publiquen soles —passen per la
+// sala de revisió— i el lot lidera sempre les d'avui.
+//
+// Són vuit números i es poden canviar sense tocar res més.
+const maxLiveStoryAgeDaysByTopic = {
+  Longevitat: 60,
+  Astronomia: 30,
+  Biotecnologia: 30,
+  Filosofia: 30,
+  Literatura: 30,
+  Ciència: 14,
+  IA: 10,
+  Tecnologia: 10,
+}
+function maxLiveStoryAgeMsByTopic(topic) {
+  const days = maxLiveStoryAgeDaysByTopic[topic]
+  return days ? days * 24 * 60 * 60 * 1000 : 0
+}
+
 export function isStoryWithinLiveWindow(story, now = Date.now()) {
   if (story?.expiresAt) {
     const rawExpiry = String(story.expiresAt)
@@ -82,7 +115,10 @@ export function isStoryWithinLiveWindow(story, now = Date.now()) {
     verification: 45 * 24 * 60 * 60 * 1000,
     data: 365 * 24 * 60 * 60 * 1000,
   }
-  const maxAge = maxAgeByFormat[story?.editorialFormat] || maxLiveStoryAgeMs
+  const maxAge =
+    maxAgeByFormat[story?.editorialFormat] ||
+    maxLiveStoryAgeMsByTopic(story?.topic) ||
+    maxLiveStoryAgeMs
   return (
     !Number.isNaN(publishedAt) &&
     now - publishedAt <= maxAge
