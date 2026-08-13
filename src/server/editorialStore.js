@@ -1,5 +1,6 @@
 import { feedStoryId } from '../lib/story-id.js'
 import { keepArchiveStory } from '../lib/category.js'
+import { editorialSeedStories } from '../data/articles.js'
 import { selectPublishableStories } from './editorialQuality.js'
 
 const MAX_STATEMENTS_PER_BATCH = 40
@@ -63,6 +64,10 @@ function selectPublicStories(stories, { onReject } = {}) {
   )
 }
 
+function editorialSeeds() {
+  return selectPublicStories(editorialSeedStories)
+}
+
 function monthBounds(date = new Date()) {
   const start = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1))
   const end = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1))
@@ -71,8 +76,14 @@ function monthBounds(date = new Date()) {
 
 export async function readEditorialStoryCatalog(env, { limit = 1000 } = {}) {
   const db = database(env)
-  if (!db) return { available: false, stories: [], count: 0, updatedAt: null }
   const safeLimit = Math.max(1, Math.min(MAX_ARCHIVE_STORIES, Number(limit) || 1000))
+  // Les peces llavor aprovades formen part del catàleg encara que el binding
+  // D1 no estigui disponible en una previsualització. No les escrivim a D1
+  // aquí: la lectura és determinista i no té efectes laterals.
+  if (!db) {
+    const stories = editorialSeeds().slice(0, safeLimit)
+    return { available: false, stories, count: stories.length, updatedAt: null }
+  }
   const result = await db
     .prepare(
       `SELECT payload_json, updated_at
@@ -85,8 +96,11 @@ export async function readEditorialStoryCatalog(env, { limit = 1000 } = {}) {
     .all()
   const rows = result.results || []
   const stories = selectPublicStories(
-    rows.map((row) => parseStoredStory(row.payload_json)).filter(Boolean),
-  )
+    [
+      ...rows.map((row) => parseStoredStory(row.payload_json)).filter(Boolean),
+      ...editorialSeedStories,
+    ],
+  ).slice(0, safeLimit)
   const updatedAt = rows.reduce(
     (latest, row) => (!latest || row.updated_at > latest ? row.updated_at : latest),
     null,
@@ -357,22 +371,26 @@ export async function persistEditorialEdition(
 
 export async function findStoryInEditorialStore(env, id) {
   const db = database(env)
-  if (!db || !id) return null
-  const row = await db
-    .prepare(
-      `SELECT payload_json
-      FROM stories
-      WHERE id = ? AND editorial_status != 'rejected'
-      LIMIT 1`,
-    )
-    .bind(id)
-    .first()
-  if (!row?.payload_json) return null
-  try {
-    return JSON.parse(row.payload_json)
-  } catch {
-    return null
+  if (!id) return null
+  if (db) {
+    const row = await db
+      .prepare(
+        `SELECT payload_json
+        FROM stories
+        WHERE id = ? AND editorial_status != 'rejected'
+        LIMIT 1`,
+      )
+      .bind(id)
+      .first()
+    if (row?.payload_json) {
+      try {
+        return JSON.parse(row.payload_json)
+      } catch {
+        // Si la fila persistent és invàlida, encara podem resoldre una llavor.
+      }
+    }
   }
+  return editorialSeedStories.find((story) => story.id === id) || null
 }
 
 export async function readEditionStories(env, editionId, limit = 30) {

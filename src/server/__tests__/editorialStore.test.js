@@ -3,6 +3,7 @@ import {
   backfillEditorialArchive,
   beginPipelineJob,
   editionIdFor,
+  findStoryInEditorialStore,
   persistEditorialEdition,
   readEditorialStoryCatalog,
   readUniqueEditorialStats,
@@ -142,10 +143,38 @@ describe('editorial D1 store', () => {
       },
     }
 
-    await expect(readEditorialStoryCatalog({ EDITORIAL_DB: db })).resolves.toMatchObject({
-      available: true,
-      count: 1,
-      stories: [expect.objectContaining({ id: 'story-cultura', category: 'Cultura' })],
+    const catalog = await readEditorialStoryCatalog({ EDITORIAL_DB: db })
+    expect(catalog.available).toBe(true)
+    expect(catalog.stories).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'story-cultura', category: 'Cultura' }),
+        expect.objectContaining({
+          id: 'webb-aigua-pols-sagittarius-a-2026',
+          topic: 'Astronomia',
+          circuit: 'A',
+        }),
+      ]),
+    )
+  })
+
+  it('exposa les cinc peces llavor aprovades sense escriure a D1', async () => {
+    const catalog = await readEditorialStoryCatalog({})
+    expect(catalog).toMatchObject({ available: false, count: 5 })
+    expect(catalog.stories.map((story) => story.id)).toEqual(
+      expect.arrayContaining([
+        'webb-aigua-pols-sagittarius-a-2026',
+        'geoneutrins-calor-mantell-terra-2026',
+        'limostatina-creixement-larves-nutrients-2026',
+        'hegel-desacords-conversa-publica-2026',
+        'revistes-literaries-comunitat-escriptors-2026',
+      ]),
+    )
+    await expect(
+      findStoryInEditorialStore({}, 'webb-aigua-pols-sagittarius-a-2026'),
+    ).resolves.toMatchObject({
+      source: 'ESA/Webb',
+      reuseLicense: 'CC BY 4.0',
+      imageRights: { verified: true, license: 'CC BY 4.0' },
     })
   })
 

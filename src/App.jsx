@@ -304,6 +304,7 @@ function normalizeStory(story) {
 
   const imageAnalysis = classifyImage(resolvedImageUrl)
   const hasPhoto = hasOriginalPhoto({
+    ...story,
     imageUrl: resolvedImageUrl,
     imageAlt: story.imageAlt,
     imageCredit: story.imageCredit,
