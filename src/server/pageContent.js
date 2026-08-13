@@ -67,6 +67,32 @@ function dedupeStories(stories) {
   return out
 }
 
+// UN DIARI S'ORDENA PER DATA (13-08-2026).
+//
+// Fins ara aquestes llistes sortien en l'ordre en què arribaven: primer el lot
+// en viu, després les peces llavor tal com estan escrites al fitxer. Amb el
+// tall a 40, les peces noves —que s'afegeixen al final de la llista— queden
+// enterrades sota peces de fa mesos i no arriben mai a la portada. És el que
+// va passar el dia del gir editorial: cap de les cinc peces aprovades no va
+// sortir a la portada, tot i ser les més recents del diari.
+//
+// L'Hemeroteca, a més, ja prometia al lector que estava "ordenada de la més
+// recent a la més antiga" sense estar-ho.
+// Una peça SENSE data no pot caure al fons: totes les peces llavor en tenen,
+// així que si en falta és perquè ve del radar en viu, i aquelles són d'avui per
+// definició. Enfonsar-les les faria desaparèixer del tall de 40.
+function storyTime(story) {
+  for (const camp of ['publishedAt', 'sourcePublishedAt', 'firstSeenAt']) {
+    const value = new Date(story?.[camp] || 0).getTime()
+    if (Number.isFinite(value) && value > 0) return value
+  }
+  return Number.POSITIVE_INFINITY
+}
+
+function byNewestFirst(stories) {
+  return [...stories].sort((left, right) => storyTime(right) - storyTime(left))
+}
+
 function storyListItem(story) {
   const href = `/noticia/${encodeURIComponent(storyLinkId(story))}`
   const title = escapeHtml(story.title)
@@ -125,7 +151,7 @@ async function archiveStories(env) {
 
 async function buildHome(env) {
   const live = await liveStories(env)
-  const stories = dedupeStories([...live, ...seedArticles]).slice(0, 40)
+  const stories = byNewestFirst(dedupeStories([...live, ...seedArticles])).slice(0, 40)
   return buildListBody({
     heading: `${siteName} · Periodisme constructiu`,
     intro: siteIntro,
@@ -135,7 +161,7 @@ async function buildHome(env) {
 
 async function buildHemeroteca(env) {
   const archive = await archiveStories(env)
-  const stories = dedupeStories([...archive, ...seedArticles]).slice(0, 80)
+  const stories = byNewestFirst(dedupeStories([...archive, ...seedArticles])).slice(0, 80)
   return buildListBody({
     heading: `Hemeroteca · ${siteName}`,
     intro:
@@ -150,9 +176,9 @@ async function buildTopic(slug, env) {
   if (!topic) return null
   const [live, archive] = await Promise.all([liveStories(env), archiveStories(env)])
   const pool = dedupeStories([...live, ...archive, ...seedArticles])
-  const stories = pool
-    .filter((story) => classifyAllowedEditorialTopic(story) === topic.label)
-    .slice(0, 40)
+  const stories = byNewestFirst(
+    pool.filter((story) => classifyAllowedEditorialTopic(story) === topic.label),
+  ).slice(0, 40)
   return buildListBody({
     heading: `${topic.label} · ${siteName}`,
     intro: topic.description,
