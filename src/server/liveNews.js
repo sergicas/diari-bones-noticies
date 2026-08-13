@@ -1912,8 +1912,15 @@ export async function collectLivePositiveNews(env, { seenUrls } = {}) {
     // Són bones fonts, però d'un diari de proximitat, no d'un diari
     // especialitzat d'abast mundial. Es tornen a encendre amb la mateixa
     // constant que la resta.
+    // Cada col·lector torna { stories, candidates }, no una llista: el consum
+    // de sota fa `result.stories`. Tornar-hi llistes buides trencava el radar
+    // sencer amb "result.stories is not iterable".
     NOMES_FONTS_DEL_GIR
-      ? Promise.resolve([[], [], []])
+      ? Promise.resolve([
+          { stories: [], candidates: 0 },
+          { stories: [], candidates: 0 },
+          { stories: [], candidates: 0 },
+        ])
       : Promise.all([
           collectAgendaStories(),
           collectRaiscOpportunities(),
