@@ -13,7 +13,7 @@ import { storyImagePath } from '../lib/story-image-path.js'
 import { applyOwnContent } from './storyText.js'
 import { runTextModel, activeTextProvider } from './ai/textModel.js'
 import { attachRealPhotos, sanitizeStoryPhotos } from './storyPhoto.js'
-import { validateFeedActivation } from './rss/feedActivation.js'
+import { isValidConfiguredFeedXml, validateFeedActivation } from './rss/feedActivation.js'
 import {
   selectPublishableStories,
 } from './editorialQuality.js'
@@ -566,6 +566,13 @@ const advertorialUrlPatterns = [
 ]
 
 const advertorialPhrasePatterns = [
+  // Marques explícites de contingut pagat o fet en col·laboració. La detecció
+  // es fa també sobre el summary perquè molts RSS no les posen al titular.
+  /\b(sponsored|sponsor(?:ed|ship)?|paid\s+(?:post|content)|advertorial|branded\s+content|partner\s+content|in\s+partnership\s+with|produced\s+with|presented\s+by|brand\s+studio|insights\s+in\s+partnership)\b/i,
+  /\b(patrocinad[oa]|contenido\s+de\s+marca|contenido\s+patrocinado|en\s+colaboraci[oó]n\s+con|producido\s+con|presentado\s+por|publicitat|contingut\s+patrocinat|contingut\s+de\s+marca|en\s+col·laboraci[oó]\s+amb|produ[iï]t\s+amb|presentat\s+per)\b/i,
+  // Butlletins-resum i autopromoció de la capçalera: no són una peça
+  // editorial independent encara que enllacin a notícies potencialment útils.
+  /^\s*(?:the\s+download|daily\s+(?:download|digest|briefing|roundup)|morning\s+(?:roundup|briefing)|weekly\s+(?:roundup|digest)|newsletter)\s*[:—–-]?/i,
   // Patrons al començament del títol — fórmules típiques de llistes de productes
   /^\s*(els?\s+millors?|las?\s+mejor(?:es)?|los\s+mejores|the\s+best|top\s*\d*|les?\s+meilleur)\b/i,
   /^\s*\d+\s+(productes?|producto?s|products?|coses?|cosas?|things?|raons?|razones?|reasons?|claves?|tips?|marcas?|marques?|brands?|opciones|opcions|formas|formes|maneres|maneras|trucos|trucs|hacks?|secretos|secrets|errores|errors)\b/i,
@@ -678,6 +685,98 @@ export function looksLikeAdvertorial({ url, title, summary }) {
     }
     return re.test(combinedText)
   })
+}
+
+function cleanEuropePmcText(value) {
+  return decodeHtmlEntities(stripHtml(String(value || '')))
+    .replace(/<!\[CDATA\[|\]\]>/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function extractEuropePmcTag(block, tag) {
+  return cleanEuropePmcText(extractTag(block, tag))
+}
+
+function normalizeEuropePmcItem(block, feed) {
+  const pmcid = extractEuropePmcTag(block, 'pmcid')
+  const title = extractEuropePmcTag(block, 'title')
+  const publishedAt = parseRfc822Date(extractEuropePmcTag(block, 'firstPublicationDate'))
+  const license = extractEuropePmcTag(block, 'license').toLowerCase()
+  const abstract = extractEuropePmcTag(block, 'abstractText')
+  const authors = extractEuropePmcTag(block, 'authorString')
+  const journal =
+    extractEuropePmcTag(block, 'journalTitle') ||
+    extractEuropePmcTag(extractTag(block, 'journal'), 'title')
+  const doi = extractEuropePmcTag(block, 'doi')
+  const pubTypes = [...String(block || '').matchAll(/<pubType\b[^>]*>([\s\S]*?)<\/pubType>/gi)]
+    .map((item) => cleanEuropePmcText(item[1]).toLowerCase())
+  const isPeerReviewedStudy =
+    pubTypes.includes('journal article') && !pubTypes.every((type) => type === 'review')
+  // La paraula "longevity" també s'utilitza en materials, odontologia o fauna.
+  // Aquesta font ha d'alimentar exclusivament la línia d'envelliment saludable
+  // en persones, no qualsevol estudi que contingui el mot al títol.
+  const longevityMaterial = `${title} ${abstract}`.toLowerCase()
+  const hasHumanLongevityScope =
+    /<descriptorName>Humans<\/descriptorName>/i.test(String(block || '')) &&
+    /\b(?:centenarian|older adults?|healthy aging|healthy ageing|healthspan|age-related)\b/i.test(longevityMaterial)
+  const makesTherapeuticClaim =
+    /\b(?:therapeutic|treatment|small[- ]molecule|drug|inhibitor|clinical trial)\b/i.test(longevityMaterial)
+  if (
+    !pmcid ||
+    !title ||
+    !publishedAt ||
+    license !== 'cc by' ||
+    !isPeerReviewedStudy ||
+    !hasHumanLongevityScope ||
+    makesTherapeuticClaim
+  ) {
+    return null
+  }
+
+  const url = `https://europepmc.org/articles/${pmcid}`
+  const summary = abstract || title
+  if (looksLikeAdvertorial({ url, title, summary })) return null
+  return {
+    title,
+    category: feed.defaultCategory,
+    location: '',
+    summary: `${summary.slice(0, 180)}${summary.length > 180 ? '...' : ''}`,
+    sourceContext: [
+      journal && `Revista: ${journal}.`,
+      authors && `Autoria: ${authors}.`,
+      doi && `DOI: ${doi}.`,
+      abstract,
+    ].filter(Boolean).join(' '),
+    impact: 'Estudi revisat per parells d’accés obert, pendent de revisió editorial.',
+    source: feed.name,
+    circuit: feed.circuit || 'A',
+    sourceCircuit: feed.circuit || 'A',
+    sourceTopic: feed.sourceTopic || '',
+    reuseLicense: feed.reuseLicense,
+    sourceCredit: `${authors || feed.sourceCredit || feed.name} / ${journal || feed.name}`,
+    originalUrl: doi ? `https://doi.org/${doi}` : url,
+    sourceTier: feed.sourceTier || 'A',
+    editorialFormat: 'constructive',
+    language: feed.language,
+    outputLanguage: feed.outputLanguage || 'ca',
+    url,
+    imageUrl: storyImagePath(url, { title, category: feed.defaultCategory }),
+    imageAlt: `Il·lustració editorial per a ${title}.`,
+    imageCredit: 'El Bon Diari (il·lustració IA)',
+    imageAttributionUrl: '',
+    editorialScore: 0,
+    curated: false,
+    editorialVersion: liveEditorialVersion,
+    publishedAt,
+    study: {
+      journal,
+      doi,
+      peerReviewed: true,
+      openAccessLicense: 'CC BY',
+      pmcUrl: url,
+    },
+  }
 }
 
 // Sostre per font: cap diari pot dominar més de N peces del lot final.
@@ -1152,6 +1251,9 @@ export function isMaritimeRescue(text, language = 'ca') {
 }
 
 export function normalizeFeedItem(block, feed) {
+  if (feed?.format === 'europe-pmc-search') {
+    return normalizeEuropePmcItem(block, feed)
+  }
   const title = decodeHtmlEntities(stripHtml(extractTag(block, 'title')))
   const linkTag = extractTag(block, 'link')
   const link = decodeHtmlEntities(linkTag || extractAtomLink(block))
@@ -1400,7 +1502,7 @@ export async function fetchFeed(feed, options = {}) {
         if (!retryableFeedStatus(response.status)) return lastResult
       } else {
         const xml = await response.text()
-        if (!/<rss[\s>]|<feed[\s>]/i.test(xml)) {
+        if (!isValidConfiguredFeedXml(feed, xml)) {
           return {
             ok: false,
             status: response.status,
@@ -1495,13 +1597,16 @@ export async function collectFeedStories(feed, options = {}) {
     return { stories: [], candidates: 0, disabled: true, healthUpdate }
   }
 
-  const itemRegex = /<(item|entry)\b[^>]*>([\s\S]*?)<\/\1>/gi
+  const itemRegex = feed.format === 'europe-pmc-search'
+    ? /<result\b[^>]*>([\s\S]*?)<\/result>/gi
+    : /<(item|entry)\b[^>]*>([\s\S]*?)<\/\1>/gi
   const stories = []
   let candidates = 0
   let match
   while ((match = itemRegex.exec(result.xml)) !== null) {
     candidates += 1
-    const story = normalizeFeedItem(match[2], feed)
+    const block = feed.format === 'europe-pmc-search' ? match[1] : match[2]
+    const story = normalizeFeedItem(block, feed)
     if (story) stories.push(story)
   }
 

@@ -5,6 +5,20 @@
 
 const DEFAULT_MAX_ITEM_AGE_MS = 60 * 24 * 60 * 60 * 1000
 
+function cleanXmlText(value) {
+  return String(value || '')
+    .replace(/<!\[CDATA\[/g, '')
+    .replace(/\]\]>/g, '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 function extractTag(block, tag) {
   const match = String(block || '').match(
     new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i'),
@@ -17,7 +31,35 @@ function extractAtomLink(block) {
   return match ? match[1] : ''
 }
 
+function extractEuropePmcEntries(xml) {
+  const entries = []
+  const resultRegex = /<result\b[^>]*>([\s\S]*?)<\/result>/gi
+  let match
+  while ((match = resultRegex.exec(String(xml || ''))) !== null) {
+    const block = match[1]
+    const pmcid = cleanXmlText(extractTag(block, 'pmcid'))
+    const title = cleanXmlText(extractTag(block, 'title'))
+    const publishedAt = cleanXmlText(extractTag(block, 'firstPublicationDate'))
+    const license = cleanXmlText(extractTag(block, 'license'))
+    const pubTypes = [...block.matchAll(/<pubType\b[^>]*>([\s\S]*?)<\/pubType>/gi)]
+      .map((item) => cleanXmlText(item[1]).toLowerCase())
+    const isPeerReviewedStudy =
+      pubTypes.includes('journal article') && !pubTypes.every((type) => type === 'review')
+    if (!pmcid || !title || !publishedAt || !isPeerReviewedStudy) continue
+    entries.push({
+      title,
+      url: `https://europepmc.org/articles/${pmcid}`,
+      publishedAt,
+      license,
+    })
+  }
+  return entries
+}
+
 export function extractFeedEntries(xml) {
+  if (/<responseWrapper\b/i.test(String(xml || ''))) {
+    return extractEuropePmcEntries(xml)
+  }
   const entries = []
   const itemRegex = /<(item|entry)\b[^>]*>([\s\S]*?)<\/\1>/gi
   let match
@@ -35,6 +77,13 @@ export function extractFeedEntries(xml) {
   return entries
 }
 
+export function isValidConfiguredFeedXml(feed, xml) {
+  if (feed?.format === 'europe-pmc-search') {
+    return /<responseWrapper\b/i.test(String(xml || ''))
+  }
+  return /<rss[\s>]|<feed[\s>]/i.test(String(xml || ''))
+}
+
 export function validateFeedActivation(feed, xml, now = Date.now()) {
   const activation = feed?.activation
   if (!activation?.required) return { active: true, reason: null, entries: [] }
@@ -42,7 +91,7 @@ export function validateFeedActivation(feed, xml, now = Date.now()) {
   if (!activation.licenseConfirmed || !String(feed?.reuseLicense || '').trim()) {
     return { active: false, reason: 'llicència de la font no confirmada', entries: [] }
   }
-  if (!/<rss[\s>]|<feed[\s>]/i.test(String(xml || ''))) {
+  if (!isValidConfiguredFeedXml(feed, xml)) {
     return { active: false, reason: 'XML RSS/Atom invàlid', entries: [] }
   }
 

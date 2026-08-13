@@ -434,6 +434,21 @@ describe('línia temàtica — només els vuit àmbits autoritzats', () => {
     ).toBe('Longevitat')
   })
 
+  it('classifica automàticament les fonts humanístiques de Circuit B', () => {
+    expect(assignEditorialTopic({
+      circuit: 'B', source: 'Psyche', category: 'Cultura', title: 'How to think like a Hegelian',
+    })).toBe('Filosofia')
+    expect(assignEditorialTopic({
+      circuit: 'B', source: 'Aeon', category: 'Cultura', title: 'How we meet the future',
+    })).toBe('Filosofia')
+    expect(assignEditorialTopic({
+      circuit: 'B', source: 'Literary Hub', category: 'Cultura', title: 'Mia',
+    })).toBe('Literatura')
+    expect(assignEditorialTopic({
+      circuit: 'B', source: 'Public Domain Review', category: 'Cultura', title: 'Ars Notoria',
+    })).toBe('Literatura')
+  })
+
   it('fixa els desempats: longevitat preval sobre biotecnologia', () => {
     expect(EDITORIAL_TOPIC_TIEBREAK_ORDER).toEqual([
       'Longevitat',
@@ -950,6 +965,18 @@ describe('looksLikeAdvertorial — per URL', () => {
 })
 
 describe('looksLikeAdvertorial — per patrons de títol', () => {
+  it('descarta patrocinis i butlletins-resum abans de la redacció', () => {
+    expect(looksLikeAdvertorial({
+      url: 'https://example.test/article', title: 'Scaling AI agents with trustworthy data',
+      summary: 'In partnership with Google Cloud',
+    })).toBe(true)
+    expect(looksLikeAdvertorial({
+      url: 'https://example.test/article', title: 'The Download: our 35 young innovators', summary: '',
+    })).toBe(true)
+    expect(looksLikeAdvertorial({
+      url: 'https://example.test/article', title: 'Una recerca revisada per parells', summary: 'Resultats de l’estudi.',
+    })).toBe(false)
+  })
   it('detecta "Los/Las mejores [X]" i variants catalanes/angleses', () => {
     expect(looksLikeAdvertorial({ url: '', title: 'Los mejores robots de cocina', summary: '' })).toBe(true)
     expect(looksLikeAdvertorial({ url: '', title: 'Las mejores playas para el verano', summary: '' })).toBe(true)

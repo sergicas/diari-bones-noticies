@@ -134,6 +134,34 @@ describe('feed health and circuit breaker', () => {
     globalThis.fetch = origFetch
   })
 
+  it('la font Europe PMC de longevitat només admet estudis humans CC BY', async () => {
+    const origFetch = globalThis.fetch
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => `<?xml version="1.0"?><responseWrapper><resultList>
+        <result><pmcid>PMC-HUMAN</pmcid><title>Immune resilience in human longevity</title><firstPublicationDate>2026-08-10</firstPublicationDate><license>cc by</license><pubType>Journal Article</pubType><abstractText>Centenarian participants show an ageing-related immune pattern.</abstractText><meshHeadingList><meshHeading><descriptorName>Humans</descriptorName></meshHeading></meshHeadingList><journal><title>Aging Cell</title></journal></result>
+        <result><pmcid>PMC-MOSQUIT</pmcid><title>Longevity in mosquitoes</title><firstPublicationDate>2026-08-10</firstPublicationDate><license>cc by</license><pubType>Journal Article</pubType><abstractText>Adult mosquitoes show a lifespan change.</abstractText></result>
+      </resultList></responseWrapper>`,
+    })
+    const res = await collectFeedStories({
+      name: 'Europe PMC · Longevitat',
+      url: 'https://example.com/europe-pmc.xml',
+      format: 'europe-pmc-search',
+      language: 'en', outputLanguage: 'ca', defaultCategory: 'Salut', circuit: 'A',
+      sourceTopic: 'Longevitat', reuseLicense: 'CC BY',
+      activation: { required: true, licenseConfirmed: true },
+    }, { now: Date.parse('2026-08-12T12:00:00Z') })
+
+    expect(res.candidates).toBe(2)
+    expect(res.stories).toHaveLength(1)
+    expect(res.stories[0]).toMatchObject({
+      title: 'Immune resilience in human longevity',
+      study: { journal: 'Aging Cell', peerReviewed: true, openAccessLicense: 'CC BY' },
+    })
+    globalThis.fetch = origFetch
+  })
+
   it('collectFeedStories triggers circuit breaker after 5 failures', async () => {
     const origFetch = globalThis.fetch
     globalThis.fetch = vi.fn().mockResolvedValue({

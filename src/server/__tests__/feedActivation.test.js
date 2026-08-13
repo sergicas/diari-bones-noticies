@@ -20,4 +20,14 @@ describe('validació recurrent d’activació de fonts', () => {
     const old = recentRss.replace('10 Aug 2026', '10 Jan 2026')
     expect(validateFeedActivation(feed, old, now).active).toBe(false)
   })
+
+  it('valida la cerca XML de Europe PMC només si aporta estudis recents', () => {
+    const europePmc = `<?xml version="1.0"?><responseWrapper><resultList><result><pmcid>PMC123</pmcid><title>Longevity study</title><firstPublicationDate>2026-08-10</firstPublicationDate><license>cc by</license><pubType>Journal Article</pubType></result></resultList></responseWrapper>`
+    const source = {
+      ...feed,
+      format: 'europe-pmc-search',
+      reuseLicense: 'CC BY (validada individualment per Europe PMC)',
+    }
+    expect(validateFeedActivation(source, europePmc, now)).toMatchObject({ active: true })
+  })
 })

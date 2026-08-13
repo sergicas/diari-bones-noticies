@@ -39,6 +39,15 @@ describe('rssFeeds catalog integrity', () => {
     for (const name of ['Phys.org', 'Quanta Magazine', 'MIT Technology Review', 'Aeon', 'Psyche', 'Literary Hub', 'Public Domain Review', 'STAT']) {
       expect(byName.get(name)?.circuit, name).toBe('B')
     }
+    expect(byName.get('Europe PMC · Longevitat')).toMatchObject({
+      circuit: 'A',
+      sourceTopic: 'Longevitat',
+      format: 'europe-pmc-search',
+    })
+    expect(byName.get('Psyche')?.sourceTopic).toBe('Filosofia')
+    expect(byName.get('Aeon')?.sourceTopic).toBeUndefined()
+    expect(byName.get('Literary Hub')?.sourceTopic).toBe('Literatura')
+    expect(byName.get('Public Domain Review')?.sourceTopic).toBe('Literatura')
     expect(byName.get('NIH Research Matters')?.enabled).toBe(false)
     expect(byName.has('EurekAlert!')).toBe(false)
     expect(byName.has('esa.int')).toBe(false)

@@ -299,6 +299,10 @@ const ASTRONOMY_CIRCUIT_A_SOURCES = [
   /esa\/?hubble/i,
   /esa\/?webb/i,
 ]
+const HUMANITIES_CIRCUIT_B_SOURCES = [
+  { pattern: /\b(?:psyche|aeon)\b/i, topic: 'Filosofia' },
+  { pattern: /\b(?:literary hub|public domain review)\b/i, topic: 'Literatura' },
+]
 const STRICTLY_OUTSIDE_TOPIC_CATEGORIES = new Set([
   'Internacional',
   'Món',
@@ -397,6 +401,16 @@ function sourceAssignedTopic(story) {
   // que farà servir feedsConfig per a NASA, ESO i les missions ESA.
   const configuredTopic = String(story?.sourceTopic || '').trim()
   if (ALLOWED_EDITORIAL_TOPIC_SET.has(configuredTopic)) return configuredTopic
+
+  // Defensa en profunditat de la configuració: aquestes fonts de Circuit B
+  // humanístiques tenen un àmbit editorial estable i no depenen del vocabulari
+  // variable del titular o de l'editor que l'hagi preparat.
+  if (story?.circuit === 'B' || story?.sourceCircuit === 'B') {
+    const matchedHumanitiesSource = HUMANITIES_CIRCUIT_B_SOURCES.find(
+      ({ pattern }) => pattern.test(sourceText(story)),
+    )
+    if (matchedHumanitiesSource) return matchedHumanitiesSource.topic
+  }
 
   // Sense un hint, les fonts astronòmiques de Circuit A tenen una assignació
   // segura. PLOS i NIH no es forcen: es resolen pel contingut, perquè cobreixen

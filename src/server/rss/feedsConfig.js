@@ -136,21 +136,38 @@ export const rssFeeds = [
   },
   {
     name: 'Psyche', url: 'https://psyche.co/feed', language: 'en', outputLanguage: 'ca', defaultCategory: 'Cultura',
-    circuit: 'B', reuseLicense: 'Pista: redacció original obligatòria', activation: { required: true, licenseConfirmed: true },
+    circuit: 'B', sourceTopic: 'Filosofia', reuseLicense: 'Pista: redacció original obligatòria', activation: { required: true, licenseConfirmed: true },
   },
   {
     name: 'Literary Hub', url: 'https://lithub.com/feed/', language: 'en', outputLanguage: 'ca', defaultCategory: 'Cultura',
-    circuit: 'B', reuseLicense: 'Pista: redacció original obligatòria', activation: { required: true, licenseConfirmed: true },
+    circuit: 'B', sourceTopic: 'Literatura', reuseLicense: 'Pista: redacció original obligatòria', activation: { required: true, licenseConfirmed: true },
   },
   {
     name: 'Public Domain Review', url: 'https://publicdomainreview.org/feed/', language: 'en', outputLanguage: 'ca', defaultCategory: 'Cultura',
-    circuit: 'B', reuseLicense: 'Pista: redacció original obligatòria', activation: { required: true, licenseConfirmed: true },
+    circuit: 'B', sourceTopic: 'Literatura', reuseLicense: 'Pista: redacció original obligatòria', activation: { required: true, licenseConfirmed: true },
   },
   // Mentrestant NIH és fora: Longevitat només té pistes Circuit B. El model
   // redacta una peça original i no reutilitza text ni imatge de STAT.
   {
     name: 'STAT', url: 'https://www.statnews.com/feed/', language: 'en', outputLanguage: 'ca', defaultCategory: 'Salut',
     circuit: 'B', reuseLicense: 'Pista: redacció original obligatòria', activation: { required: true, licenseConfirmed: true },
+  },
+  // Cerca viva d'articles de longevitat a Europe PMC. La consulta restringeix
+  // el catàleg a PMC OA amb CC BY; el parser torna a comprovar la llicència i
+  // que sigui un Journal Article abans que una peça pugui entrar al pipeline.
+  {
+    name: 'Europe PMC · Longevitat',
+    url: 'https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=TITLE%3Alongevity%20AND%20OPEN_ACCESS%3AY%20AND%20IN_PMC%3AY%20AND%20LICENSE%3A%22CC%20BY%22%20sort_date%3Ay&format=xml&resultType=core&pageSize=20',
+    format: 'europe-pmc-search',
+    language: 'en',
+    outputLanguage: 'ca',
+    defaultCategory: 'Salut',
+    circuit: 'A',
+    sourceTopic: 'Longevitat',
+    reuseLicense: 'CC BY (validada individualment per Europe PMC)',
+    sourceCredit: 'Europe PMC i autoria de l’estudi',
+    licenseProofUrl: 'https://europepmc.org/developers',
+    activation: { required: true, licenseConfirmed: true },
   },
   // ===== FONTS AMPLIADES (jul. 2026): proximitat CAT, estatal i europeu =====
   { name: 'El 9 Nou Osona', url: 'https://el9nou.cat/feed/?post_type=post&edicio=osona-ripolles', language: 'ca', defaultCategory: 'Comarcal' },
