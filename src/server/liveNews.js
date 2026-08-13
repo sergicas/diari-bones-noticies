@@ -29,6 +29,7 @@ import {
   allowedSourceNames,
   selectFeedsForRun,
   tickerFeedNames,
+  NOMES_FONTS_DEL_GIR,
 } from './rss/feedsConfig.js'
 import {
   normalizeAgendaItem,
@@ -1901,11 +1902,23 @@ export async function collectLivePositiveNews(env, { seenUrls } = {}) {
         }),
       ),
     ),
-    Promise.all([
-      collectAgendaStories(),
-      collectRaiscOpportunities(),
-      collectIdescatUpdates(),
-    ]),
+    // LES FONTS DE SERVEI TAMBÉ S'APAGUEN AMB EL GIR (13-08-2026).
+    //
+    // L'agenda cultural, les oportunitats i les dades obertes van per un camí
+    // a part i no passaven per l'interruptor de fonts: la primera nit del gir,
+    // la portada d'un diari d'astronomia i filosofia obria amb una exposició
+    // de Gaudí a Mataró, etiquetada com a Ciència.
+    //
+    // Són bones fonts, però d'un diari de proximitat, no d'un diari
+    // especialitzat d'abast mundial. Es tornen a encendre amb la mateixa
+    // constant que la resta.
+    NOMES_FONTS_DEL_GIR
+      ? Promise.resolve([[], [], []])
+      : Promise.all([
+          collectAgendaStories(),
+          collectRaiscOpportunities(),
+          collectIdescatUpdates(),
+        ]),
   ])
 
   for (const result of feedResults) {
