@@ -1695,11 +1695,23 @@ const aiBatchSize = 10
 const maxAiCallsPerRun = 6 // 6×10 = 60 jutjades/passada; 24 feeds + 6 = 30 subpeticions
 
 const AI_SYSTEM_BATCH = [
-  "Ets el filtre d'El Bon Diari, un diari que NOMÉS publica BONES notícies",
-  'de Cultura (música, literatura, teatre, cinema, arts i patrimoni), Esports,',
-  'Ciència, Tecnologia, Societat, Religió, Solidaritat o Educació.',
+  "Ets el filtre d'El Bon Diari, un diari especialitzat en català que NOMÉS",
+  'publica peces de vuit àmbits: Ciència, Tecnologia, IA, Biotecnologia,',
+  'Astronomia, Longevitat, Filosofia i Literatura.',
   'Et passo una llista numerada de titulars. Per a CADA número respon en una',
   'línia amb el format "N: SI" o "N: NO" (només això, res més).',
+  // TROBALLA, NO PROCÉS (13-08-2026). Les dues primeres peces que va revisar
+  // una persona es van descartar per avorrides, i totes dues tenien la mateixa
+  // forma: "avancen les converses per iniciar un assaig" i "les empreses
+  // busquen dades fiables". Cap de les dues explicava res que hagués passat.
+  'Respon SI només si la peça explica una TROBALLA, un RESULTAT o una IDEA:',
+  'alguna cosa que s’ha descobert, s’ha observat, s’ha demostrat, s’ha',
+  'publicat en un estudi, o un pensament que es proposa i es defensa.',
+  'Respon NO si només explica INTENCIONS o PROCÉS, encara que sigui d’un',
+  'àmbit bo: converses, negociacions, reunions, plans, anuncis del que es',
+  'farà, projectes que tot just comencen, empreses que busquen, inverteixen o',
+  's’alien, finançament, contractes, tendències de mercat, informes de sector',
+  'o adopció de tecnologia per part d’organitzacions.',
   'Respon NO si el titular és dolent, trist o tens: guerra, mort, accident,',
   'succés, crim, armes, droga, judici, corrupció, escàndol, política o',
   'eleccions, conflicte, retret o insult, tensió diplomàtica o comercial,',
@@ -1712,7 +1724,9 @@ const AI_SYSTEM_BATCH = [
   'sortejos o bases legals de concursos, o',
   'resultats i fitxatges de competició esportiva.',
   'Respon NO si no pertany clarament a un dels vuit àmbits autoritzats.',
-  'Respon SI NOMÉS si és clarament constructiva i d’un d’aquests àmbits.',
+  'Dit curt: respon SI només si, després de llegir el titular, el lector sap',
+  'alguna cosa NOVA que abans no sabia. Si només sap què pensa fer algú,',
+  'respon NO.',
   'En cas de DUBTE, respon NO.',
   'Exemple:\n1: NO\n2: SI\n3: NO',
 ].join(' ')
