@@ -61,6 +61,42 @@ describe('feed health and circuit breaker', () => {
     globalThis.fetch = origFetch
   })
 
+  it('envia capçaleres de navegador a totes les fonts RSS', async () => {
+    const origFetch = globalThis.fetch
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => '<rss><channel><item><title>Prova</title></item></channel></rss>',
+    })
+
+    await fetchFeed({ name: 'Browser headers', url: 'https://example.com/feed.xml' })
+    const request = globalThis.fetch.mock.calls[0][1]
+    expect(request.headers['user-agent']).toContain('Mozilla/5.0')
+    expect(request.headers.accept).toContain('application/rss+xml')
+    expect(request.headers['accept-language']).toContain('ca-ES')
+    globalThis.fetch = origFetch
+  })
+
+  it('reintenta errors transitoris amb el timeout configurat de la font', async () => {
+    const origFetch = globalThis.fetch
+    globalThis.fetch = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('xarxa temporal'))
+      .mockRejectedValueOnce(new Error('xarxa temporal'))
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: async () => '<rss><channel><item><title>Prova</title></item></channel></rss>',
+      })
+
+    const result = await fetchFeed(
+      { name: 'Retry', url: 'https://example.com/feed.xml', fetch: { timeoutMs: 12000, maxAttempts: 3, retryDelayMs: 0 } },
+    )
+    expect(result).toMatchObject({ ok: true, attempts: 3 })
+    expect(globalThis.fetch).toHaveBeenCalledTimes(3)
+    globalThis.fetch = origFetch
+  })
+
   it('collectFeedStories updates consecutiveFailures on failure', async () => {
     const origFetch = globalThis.fetch
     globalThis.fetch = vi.fn().mockResolvedValue({

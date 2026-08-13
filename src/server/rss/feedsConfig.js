@@ -60,6 +60,7 @@ export const rssFeeds = [
     sourceCredit: 'ESA/Hubble',
     licenseProofUrl: 'https://esahubble.org/copyright/',
     activation: { required: true, licenseConfirmed: true },
+    fetch: { timeoutMs: 12000, maxAttempts: 3, retryDelayMs: 300 },
     imageRights: { license: 'CC BY 4.0', credit: 'ESA/Hubble' },
   },
   {
@@ -114,15 +115,13 @@ export const rssFeeds = [
     sourceCredit: 'NIH Research Matters',
     licenseProofUrl: 'https://www.nih.gov/about-nih/what-we-do/website-policies#copyright',
     activation: { required: true, licenseConfirmed: true },
+    enabled: false,
+    disabledReason: 'Cloudflare del NIH retorna HTTP 403 a tots els endpoints oficials provats; pendent de recuperació.',
     imageRights: { license: 'Public domain', credit: 'NIH' },
   },
 
   // Circuit B: només pistes. El pipeline n'obté fets i enllaç, però sempre
   // escriu una peça original en català; mai no reutilitza el text ni la imatge.
-  {
-    name: 'EurekAlert!', url: 'https://www.eurekalert.org/rss.xml', language: 'en', outputLanguage: 'ca', defaultCategory: 'Ciència',
-    circuit: 'B', reuseLicense: 'Pista: redacció original obligatòria', activation: { required: true, licenseConfirmed: true },
-  },
   {
     name: 'Quanta Magazine', url: 'https://www.quantamagazine.org/feed/', language: 'en', outputLanguage: 'ca', defaultCategory: 'Ciència',
     circuit: 'B', reuseLicense: 'Pista: redacció original obligatòria', activation: { required: true, licenseConfirmed: true },
@@ -145,6 +144,12 @@ export const rssFeeds = [
   },
   {
     name: 'Public Domain Review', url: 'https://publicdomainreview.org/feed/', language: 'en', outputLanguage: 'ca', defaultCategory: 'Cultura',
+    circuit: 'B', reuseLicense: 'Pista: redacció original obligatòria', activation: { required: true, licenseConfirmed: true },
+  },
+  // Mentrestant NIH és fora: Longevitat només té pistes Circuit B. El model
+  // redacta una peça original i no reutilitza text ni imatge de STAT.
+  {
+    name: 'STAT', url: 'https://www.statnews.com/feed/', language: 'en', outputLanguage: 'ca', defaultCategory: 'Salut',
     circuit: 'B', reuseLicense: 'Pista: redacció original obligatòria', activation: { required: true, licenseConfirmed: true },
   },
   // ===== FONTS AMPLIADES (jul. 2026): proximitat CAT, estatal i europeu =====
@@ -310,7 +315,7 @@ export const rssFeeds = [
 // català sí que hi entra sencera. Mesurat el 27-07-2026: de 121 peces aprovades
 // per passada només 3 eren catalanes, i la portada es quedava encallada en 5.
 const fontsNoCore = (language) =>
-  rssFeeds.filter((feed) => feed.language === language && !feed.core).length
+  rssFeeds.filter((feed) => feed.enabled !== false && feed.language === language && !feed.core).length
 
 export const rotatingPerLanguage = {
   // El català i el castellà es calculen del catàleg, no es fixen a mà: així,
@@ -337,12 +342,13 @@ export const allowedSourceNames = new Set([
 ])
 
 export function selectFeedsForRun(nowMs) {
-  const core = rssFeeds.filter((feed) => feed.core)
+  const enabledFeeds = rssFeeds.filter((feed) => feed.enabled !== false)
+  const core = enabledFeeds.filter((feed) => feed.core)
   const tick = Math.floor(nowMs / refreshIntervalMs)
   const seen = new Set(core.map((feed) => feed.url))
   const picked = []
   for (const [language, count] of Object.entries(rotatingPerLanguage)) {
-    const pool = rssFeeds.filter(
+    const pool = enabledFeeds.filter(
       (feed) => !feed.core && feed.language === language,
     )
     if (!pool.length) continue

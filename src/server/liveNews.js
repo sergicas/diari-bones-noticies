@@ -1311,6 +1311,21 @@ export function normalizeFeedItem(block, feed) {
 export const FEED_HEALTH_KV_KEY = 'feed-health-stats'
 const CIRCUIT_BREAKER_MAX_FAILURES = 5
 const CIRCUIT_BREAKER_PAUSE_MS = 24 * 60 * 60 * 1000 // 24 hores
+const BROWSER_FEED_HEADERS = {
+  accept: 'application/rss+xml, application/atom+xml, application/xml, text/xml;q=0.9, */*;q=0.8',
+  'accept-language': 'ca-ES,ca;q=0.9,en;q=0.8',
+  // Alguns gestors de bot bloquegen clients que només s'identifiquen amb un
+  // nom de producte. El mateix perfil s'aplica a TOT el pipeline de feeds.
+  'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 ElBonDiari/1.0 (+https://bondiari.com)',
+}
+
+function retryableFeedStatus(status) {
+  return status === 408 || status === 429 || status >= 500
+}
+
+function waitForFeedRetry(delayMs) {
+  return new Promise((resolve) => setTimeout(resolve, delayMs))
+}
 
 export async function readFeedHealthStats(kvOrEnv) {
   const kv = kvOrEnv?.LIVE_NEWS_KV || kvOrEnv
@@ -1358,63 +1373,68 @@ export function isSignificantHealthChange(oldRecord, newRecord) {
 }
 
 export async function fetchFeed(feed, options = {}) {
-  const timeoutMs = options.timeoutMs ?? 6000
-  const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+  const timeoutMs = options.timeoutMs ?? feed.fetch?.timeoutMs ?? 6000
+  const maxAttempts = options.maxAttempts ?? feed.fetch?.maxAttempts ?? 1
+  const retryDelayMs = options.retryDelayMs ?? feed.fetch?.retryDelayMs ?? 250
   const startTime = Date.now()
+  let lastResult = null
 
-  try {
-    const response = await fetch(feed.url, {
-      headers: {
-        accept: 'application/rss+xml, application/xml, application/atom+xml, text/xml, */*',
-        'user-agent': 'El Bon Diari/1.0 (+https://bondiari.com)',
-      },
-      signal: controller.signal,
-    })
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+    try {
+      const response = await fetch(feed.url, {
+        headers: BROWSER_FEED_HEADERS,
+        signal: controller.signal,
+      })
 
-    if (!response.ok) {
-      const durationMs = Date.now() - startTime
-      return {
+      if (!response.ok) {
+        lastResult = {
+          ok: false,
+          status: response.status,
+          xml: null,
+          error: `HTTP ${response.status}`,
+          durationMs: Date.now() - startTime,
+          attempts: attempt,
+        }
+        if (!retryableFeedStatus(response.status)) return lastResult
+      } else {
+        const xml = await response.text()
+        if (!/<rss[\s>]|<feed[\s>]/i.test(xml)) {
+          return {
+            ok: false,
+            status: response.status,
+            xml,
+            error: 'Not valid RSS/Atom XML',
+            durationMs: Date.now() - startTime,
+            attempts: attempt,
+          }
+        }
+        return {
+          ok: true,
+          status: response.status,
+          xml,
+          error: null,
+          durationMs: Date.now() - startTime,
+          attempts: attempt,
+        }
+      }
+    } catch (error) {
+      const isAbort = error.name === 'AbortError' || controller.signal?.aborted
+      lastResult = {
         ok: false,
-        status: response.status,
+        status: 0,
         xml: null,
-        error: `HTTP ${response.status}`,
-        durationMs,
+        error: isAbort ? `Timeout (${timeoutMs}ms)` : (error?.message || 'Fetch error'),
+        durationMs: Date.now() - startTime,
+        attempts: attempt,
       }
+    } finally {
+      clearTimeout(timeoutId)
     }
-
-    const xml = await response.text()
-    const durationMs = Date.now() - startTime
-    if (!/<rss[\s>]|<feed[\s>]/i.test(xml)) {
-      return {
-        ok: false,
-        status: response.status,
-        xml,
-        error: 'Not valid RSS/Atom XML',
-        durationMs,
-      }
-    }
-
-    return {
-      ok: true,
-      status: response.status,
-      xml,
-      error: null,
-      durationMs,
-    }
-  } catch (error) {
-    const durationMs = Date.now() - startTime
-    const isAbort = error.name === 'AbortError' || controller.signal?.aborted
-    return {
-      ok: false,
-      status: 0,
-      xml: null,
-      error: isAbort ? `Timeout (${timeoutMs}ms)` : (error?.message || 'Fetch error'),
-      durationMs,
-    }
-  } finally {
-    clearTimeout(timeoutId)
+    if (attempt < maxAttempts) await waitForFeedRetry(retryDelayMs)
   }
+  return lastResult
 }
 
 export async function collectFeedStories(feed, options = {}) {

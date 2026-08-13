@@ -36,9 +36,11 @@ describe('rssFeeds catalog integrity', () => {
       expect(feed?.licenseProofUrl, name).toMatch(/^https:\/\//)
       expect(feed?.imageRights?.license, name).toBeTruthy()
     }
-    for (const name of ['Phys.org', 'EurekAlert!', 'Quanta Magazine', 'MIT Technology Review', 'Aeon', 'Psyche', 'Literary Hub', 'Public Domain Review']) {
+    for (const name of ['Phys.org', 'Quanta Magazine', 'MIT Technology Review', 'Aeon', 'Psyche', 'Literary Hub', 'Public Domain Review', 'STAT']) {
       expect(byName.get(name)?.circuit, name).toBe('B')
     }
+    expect(byName.get('NIH Research Matters')?.enabled).toBe(false)
+    expect(byName.has('EurekAlert!')).toBe(false)
     expect(byName.has('esa.int')).toBe(false)
     expect(byName.has('NOIRLab')).toBe(false)
   })
