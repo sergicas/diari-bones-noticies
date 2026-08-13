@@ -60,8 +60,14 @@ describe('rssFeeds catalog integrity', () => {
   // consulten SENCERES a cada passada i la resta segueix rotant.
   it('consulta totes les fonts en català i en castellà a cada passada', () => {
     const dotzeHores = 12 * 60 * 60 * 1000
-    const esperatCa = rssFeeds.filter((f) => f.language === 'ca').map((f) => f.name)
-    const esperatEs = rssFeeds.filter((f) => f.language === 'es').map((f) => f.name)
+    // Només les ENCESES: des del gir editorial, les fonts generalistes es
+    // queden al catàleg apagades (vegeu NOMES_FONTS_DEL_GIR a feedsConfig).
+    const esperatCa = rssFeeds
+      .filter((f) => f.language === 'ca' && f.enabled !== false)
+      .map((f) => f.name)
+    const esperatEs = rssFeeds
+      .filter((f) => f.language === 'es' && f.enabled !== false)
+      .map((f) => f.name)
 
     for (let finestra = 0; finestra < 4; finestra += 1) {
       const noms = selectFeedsForRun(Date.now() + finestra * dotzeHores).map(
@@ -76,13 +82,22 @@ describe('rssFeeds catalog integrity', () => {
     }
   })
 
-  it('segueix rotant les llengües amb sostre, sense baixar-les totes', () => {
+  it('cap font encesa no es queda sense consultar, i el sostre de peticions es respecta', () => {
+    // Aquesta prova abans deia "sense baixar-les totes" i passava comparant amb
+    // fonts APAGADES, o sigui per la raó equivocada. El que de debò ha de ser
+    // cert són dues coses alhora: que cap font encesa quedi fora en silenci
+    // —amb el gir, rotar les 15 hauria fet que Europe PMC, l'única font de
+    // Longevitat, es consultés un cop per setmana— i que la selecció no es
+    // dispari mai per damunt del sostre de subpeticions del pla gratuït.
+    const enceses = rssFeeds.filter((f) => f.enabled !== false)
     const seleccio = selectFeedsForRun(Date.now())
-    const angleses = seleccio.filter((f) => f.language === 'en')
-    const totalAngleses = rssFeeds.filter((f) => f.language === 'en')
-    expect(angleses.length).toBeLessThan(totalAngleses.length)
-    // Prou contingut per omplir el sostre de 3 peces en anglès.
-    expect(angleses.length).toBeGreaterThanOrEqual(3)
+    const noms = new Set(seleccio.map((f) => f.name))
+
+    for (const feed of enceses) {
+      expect(noms, `falta ${feed.name}`).toContain(feed.name)
+    }
+    expect(seleccio.length).toBeLessThanOrEqual(30)
+    expect(noms.size).toBe(seleccio.length)
   })
 
   it('includes service feeds in allowedSourceNames', () => {

@@ -11,7 +11,9 @@ export const maxStoriesPerLanguage = { es: 6, en: 3, fr: 1, it: 1, pt: 1 }
 
 export const sections = []
 
-export const rssFeeds = [
+// Catàleg complet de fonts. El que el radar consulta de debò és `rssFeeds`,
+// que es deriva d'aquesta llista just després de tancar-la.
+const catalegDeFonts = [
   // ===== PIVOT EDITORIAL: fonts amb llicència comprovable =====
   // Circuit A: la llicència permet traduir/adaptar al català, sempre amb el
   // crèdit i l'enllaç original. La imatge de la institució només es conserva
@@ -331,20 +333,53 @@ export const rssFeeds = [
 // la portada —només faria rotar la mateixa plaça única—, mentre que l'oferta en
 // català sí que hi entra sencera. Mesurat el 27-07-2026: de 121 peces aprovades
 // per passada només 3 eren catalanes, i la portada es quedava encallada en 5.
+// EL GIR EDITORIAL APAGA LES FONTS GENERALISTES (13-08-2026).
+//
+// El gir va AFEGIR les fonts dels vuit àmbits però no en va treure cap: el
+// radar seguia pescant al riu de sempre (premsa local, actualitat espanyola,
+// política europea) i la portada s'omplia d'onades de calor i de famosos.
+//
+// Amb la porta d'aprovació humana això deixa de ser un problema de portada i
+// passa a ser un problema de persona: cada matí caldria descartar a mà desenes
+// de notícies locals per trobar-hi la peça d'astronomia. Cada dia.
+//
+// Una font pertany al diari especialitzat si té circuit editorial (A o B).
+// La resta es queden al catàleg, apagades: no es perden, i tornar-les a
+// encendre és posar aquesta constant a false.
+export const NOMES_FONTS_DEL_GIR = true
+
+export const rssFeeds = catalegDeFonts.map((feed) =>
+  NOMES_FONTS_DEL_GIR && !feed.circuit ? { ...feed, enabled: false } : feed,
+)
+
 const fontsNoCore = (language) =>
   rssFeeds.filter((feed) => feed.enabled !== false && feed.language === language && !feed.core).length
+
+// Per sota d'aquest nombre de fonts enceses, consultar-les totes a cada passada
+// cap de sobres dins del sostre de subpeticions, i rotar només faria mal.
+const MAX_FONTS_SENSE_ROTACIO = 30
+const senseRotacio =
+  rssFeeds.filter((feed) => feed.enabled !== false).length <= MAX_FONTS_SENSE_ROTACIO
 
 export const rotatingPerLanguage = {
   // El català i el castellà es calculen del catàleg, no es fixen a mà: així,
   // afegir una font nova no en deixa cap fora en silenci. (Va passar en afegir
   // Mètode, Sanitat i Educació amb el número escrit a mà: les tres últimes
   // catalanes deixaven de consultar-se i només ho va cantar la prova.)
+  // Els números escrits a mà (en: 2, fr: 1...) venien de quan el catàleg tenia
+  // vuitanta fonts i calia repartir-les entre passades per no passar del sostre
+  // de subpeticions del pla gratuït de Cloudflare (~50 per refresc).
+  //
+  // Amb el gir, el catàleg encès ha passat de 80 fonts a 15, i totes són en
+  // anglès. Amb els números vells, cada passada n'hauria consultat DUES: Europe
+  // PMC (l'única font de Longevitat) s'hauria mirat un cop per setmana. Per
+  // això, quan el catàleg encès és petit, no es rota res i es consulten totes.
   ca: fontsNoCore('ca'),
   es: fontsNoCore('es'),
-  en: 2,
-  fr: 1,
-  it: 1,
-  pt: 1,
+  en: senseRotacio ? fontsNoCore('en') : 2,
+  fr: senseRotacio ? fontsNoCore('fr') : 1,
+  it: senseRotacio ? fontsNoCore('it') : 1,
+  pt: senseRotacio ? fontsNoCore('pt') : 1,
 }
 
 export const serviceSourceNames = [
