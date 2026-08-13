@@ -1,5 +1,23 @@
 // Catàleg i configuració de fonts RSS per al radar d'El Bon Diari.
 
+// EL GIR EDITORIAL APAGA LES FONTS GENERALISTES (13-08-2026).
+//
+// El gir va AFEGIR les fonts dels vuit àmbits però no en va treure cap: el
+// radar seguia pescant al riu de sempre (premsa local, actualitat espanyola,
+// política europea) i la portada s'omplia d'onades de calor i de famosos.
+//
+// Amb la porta d'aprovació humana això deixava de ser un problema de portada i
+// passava a ser un problema de persona: cada matí caldria descartar a mà
+// desenes de notícies locals per trobar-hi la peça d'astronomia. Cada dia.
+//
+// Una font pertany al diari especialitzat si té circuit editorial (A o B). La
+// resta es queden al catàleg, apagades: no es perden, i tornar-les a encendre
+// és posar aquesta constant a false.
+//
+// Aquesta constant també governa el sostre per llengua i la rotació de fonts,
+// que eren ajustos pensats per a un catàleg de vuitanta mitjans generalistes.
+export const NOMES_FONTS_DEL_GIR = true
+
 export const refreshIntervalMs = 12 * 60 * 60 * 1000
 
 // La qualitat editorial passa davant del volum: una edició curta i completa és
@@ -7,7 +25,20 @@ export const refreshIntervalMs = 12 * 60 * 60 * 1000
 export const targetStoryLimit = 12
 export const maxStoriesPerSource = 3
 export const collectionPoolSize = 30
-export const maxStoriesPerLanguage = { es: 6, en: 3, fr: 1, it: 1, pt: 1 }
+// SOSTRE PER LLENGUA D'ORIGEN.
+//
+// Existia per protegir la portada: amb vuitanta fonts, l'allau de bones
+// notícies en anglès ofegava el català i el castellà, que eren la raó de ser
+// del diari. Per això l'anglès es quedava en 3 peces per passada.
+//
+// Amb el gir editorial això es gira del tot: les quinze fonts dels vuit àmbits
+// són TOTES estrangeres, i totes les peces s'escriuen en català. L'allau que
+// el sostre evitava ja no existeix, i el que feia el sostre era tallar el
+// diari sencer a tres peces per passada. Quan només hi ha fonts del gir, no
+// s'aplica cap sostre; si es tornen a encendre les generalistes, torna.
+export const maxStoriesPerLanguage = NOMES_FONTS_DEL_GIR
+  ? {}
+  : { es: 6, en: 3, fr: 1, it: 1, pt: 1 }
 
 export const sections = []
 
@@ -343,11 +374,8 @@ const catalegDeFonts = [
 // passa a ser un problema de persona: cada matí caldria descartar a mà desenes
 // de notícies locals per trobar-hi la peça d'astronomia. Cada dia.
 //
-// Una font pertany al diari especialitzat si té circuit editorial (A o B).
-// La resta es queden al catàleg, apagades: no es perden, i tornar-les a
-// encendre és posar aquesta constant a false.
-export const NOMES_FONTS_DEL_GIR = true
-
+// L'interruptor NOMES_FONTS_DEL_GIR és a dalt de tot del fitxer, perquè també
+// governa el sostre per llengua, que es declara abans que aquesta llista.
 export const rssFeeds = catalegDeFonts.map((feed) =>
   NOMES_FONTS_DEL_GIR && !feed.circuit ? { ...feed, enabled: false } : feed,
 )
