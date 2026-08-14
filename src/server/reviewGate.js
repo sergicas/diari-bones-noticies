@@ -80,12 +80,16 @@ export async function readDecisions(env, ids) {
       const placeholders = group.map(() => '?').join(', ')
       const { results } = await db
         .prepare(
-          `SELECT id, editorial_status FROM stories WHERE id IN (${placeholders})`,
+          `SELECT id, editorial_status, human_decision
+             FROM stories WHERE id IN (${placeholders})`,
         )
         .bind(...group)
         .all()
       for (const row of results || []) {
-        decisions.set(row.id, row.editorial_status)
+        decisions.set(row.id, {
+          status: row.editorial_status,
+          humanDecision: row.human_decision || null,
+        })
       }
     }
   } catch (error) {
@@ -120,8 +124,19 @@ export function splitByReviewDecision(
       approved.push(story)
       continue
     }
-    const status = decisions.get(candidateId(story))
-    if (PUBLIC_STATUSES.has(status)) {
+    const decision = decisions.get(candidateId(story))
+    const status = decision?.status
+    // NO N'HI HA PROU AMB L'ESTAT PÚBLIC (14-08-2026).
+    //
+    // D1 porta 209 peces publicades per l'automatisme ANTERIOR, d'abans que
+    // existís cap revisió humana. Donant per bona qualsevol fila amb estat
+    // públic, una d'aquelles reapareixia a portada sola: el sistema no sabia
+    // distingir "ho va aprovar una persona" de "ho va publicar el robot vell".
+    //
+    // Ara cal la marca explícita. Les peces velles tenen human_decision a NULL
+    // i, per tant, tornen a revisió si mai reapareixen. Val més fer llegir dues
+    // vegades una peça bona que publicar-ne una que ningú no ha llegit mai.
+    if (PUBLIC_STATUSES.has(status) && decision?.humanDecision === 'approve') {
       approved.push(story)
     } else if (status === REJECTED_STATUS) {
       rejected.push(story)
@@ -286,13 +301,24 @@ export async function decideCandidate(env, id, decision) {
       .bind(id)
       .first()
     if (!row) return { ok: false, error: 'not-pending' }
+    // Deixa rastre de QUI ha decidit i quan. Sense aquesta marca, una peça
+    // publicada per l'automatisme antic seria indistingible d'una aprovada per
+    // una persona (vegeu splitByReviewDecision).
     await db
       .prepare(
         `UPDATE stories
-            SET editorial_status = ?, published_at = ?, updated_at = ?
+            SET editorial_status = ?, published_at = ?, updated_at = ?,
+                human_reviewed_at = ?, human_decision = ?
           WHERE id = ? AND editorial_status = '${PENDING_STATUS}'`,
       )
-      .bind(status, decision === 'approve' ? timestamp : null, timestamp, id)
+      .bind(
+        status,
+        decision === 'approve' ? timestamp : null,
+        timestamp,
+        timestamp,
+        decision,
+        id,
+      )
       .run()
     const story = parsePayload(row.payload_json)
     let live = { live: false }
@@ -330,8 +356,11 @@ export async function expireStaleCandidates(
   try {
     const outcome = await db
       .prepare(
+        // 'expired' i no 'reject': una peça que ha caducat no és una peça que
+        // algú hagi llegit i descartat, i el registre no ho ha de confondre.
         `UPDATE stories
-            SET editorial_status = '${REJECTED_STATUS}', updated_at = ?
+            SET editorial_status = '${REJECTED_STATUS}', updated_at = ?,
+                human_decision = 'expired'
           WHERE editorial_status = '${PENDING_STATUS}' AND first_seen_at < ?`,
       )
       .bind(nowIso(), cutoff)

@@ -98,13 +98,37 @@ describe('porta d’aprovació humana', () => {
     const espera = story({ id: 'espera', url: 'https://example.com/espera' })
     const { approved, pending, rejected } = splitByReviewDecision([si, no, espera], {
       decisions: new Map([
-        ['si', 'published'],
-        ['no', 'rejected'],
+        ['si', { status: 'published', humanDecision: 'approve' }],
+        ['no', { status: 'rejected', humanDecision: 'reject' }],
       ]),
     })
     expect(approved.map((s) => s.id)).toEqual(['si'])
     expect(rejected.map((s) => s.id)).toEqual(['no'])
     expect(pending.map((s) => s.id)).toEqual(['espera'])
+  })
+
+  it('una peça publicada pel robot ANTIC no es dona per aprovada', () => {
+    // D1 porta 209 peces publicades abans que existís cap revisió humana. Si
+    // una es torna a recollir, ha de passar per la sala com qualsevol altra:
+    // val més fer llegir dues vegades una peça bona que publicar-ne una que
+    // ningú no ha llegit mai.
+    const vella = story({ id: 'de-labans', url: 'https://example.com/de-labans' })
+    const { approved, pending } = splitByReviewDecision([vella], {
+      decisions: new Map([['de-labans', { status: 'published', humanDecision: null }]]),
+    })
+    expect(approved).toHaveLength(0)
+    expect(pending.map((s) => s.id)).toEqual(['de-labans'])
+  })
+
+  it('tampoc si consta com a arxivada o distribuïda sense marca humana', () => {
+    for (const status of ['archived', 'distributed']) {
+      const { approved, pending } = splitByReviewDecision(
+        [story({ id: 'x', url: 'https://example.com/x' })],
+        { decisions: new Map([['x', { status, humanDecision: null }]]) },
+      )
+      expect(approved, `${status} no hauria de passar sol`).toHaveLength(0)
+      expect(pending).toHaveLength(1)
+    }
   })
 
   it('sense base de dades no inventa cap aprovació', async () => {
@@ -137,6 +161,10 @@ describe('porta d’aprovació humana', () => {
     expect(outcome.live).toBe(true)
     const update = db.calls.find((call) => call.query.includes('UPDATE'))
     expect(update.values[0]).toBe('published')
+    // Deixa rastre que ho ha decidit una PERSONA: sense això seria
+    // indistingible d'una peça publicada per l'automatisme antic.
+    expect(update.query).toContain('human_decision')
+    expect(update.values).toContain('approve')
     const lot = JSON.parse(kv.store.get('latest'))
     expect(lot.stories.map((s) => s.url)).toContain(peca.url)
     expect(kv.store.has('story:peca-1')).toBe(true)
@@ -183,6 +211,8 @@ describe('porta d’aprovació humana', () => {
     expect(outcome.expired).toBe(3)
     const update = db.calls.find((call) => call.query.includes('UPDATE'))
     expect(update.query).toContain("'rejected'")
+    // 'expired', no 'reject': caducar no és el mateix que llegir-la i dir que no.
+    expect(update.query).toContain("human_decision = 'expired'")
     expect(update.values[1]).toBe('2026-08-06T12:00:00.000Z')
   })
 
