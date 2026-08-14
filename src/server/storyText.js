@@ -34,7 +34,18 @@ import {
 // REGLA: sempre que es canviï el que se li demana al redactor, s'ha de pujar
 // aquesta versió. Si no, el canvi només afecta les peces que encara no
 // existeixen. Les claus velles caduquen soles als 90 dies.
-const KV_PREFIX = 'own:v4:'
+const KV_PREFIX = 'own:v5:'
+
+// La clau del cau porta la LLENGUA DE SORTIDA, no només l'identificador.
+//
+// Sense això, una peça pot reutilitzar una redacció feta per a una altra
+// llengua: exactament el que va passar mentre `outputLanguage` es perdia pel
+// camí i el text es generava en anglès. Amb la llengua a la clau, un text en
+// anglès i un en català no poden ocupar mai el mateix lloc.
+function cacheKeyFor(story, id) {
+  const lang = story?.outputLanguage || story?.language || 'ca'
+  return `${KV_PREFIX}${lang}:${id}`
+}
 const CACHE_TTL_SECONDS = 90 * 24 * 3600
 const BATCH_SIZE = 5
 const MAX_BATCHES = 8 // sostre: fins a 40 peces noves per refresc
@@ -283,8 +294,13 @@ async function aiOwnContentBatch(env, items) {
 
 // Una línia de camp: "1 cos: ...", "1. cos: ...", "**cos**: ..." o simplement
 // "cos: ...". El número és OPCIONAL a propòsit.
+//
+// També s'accepta que el model repeteixi la marca de l'entrada abans del nom
+// del camp: "1. [escriu en català] titular: …". Sense això es perdien TOTS els
+// camps d'aquella peça i quedava sense text — una peça bona perduda per una
+// floritura del model.
 const FIELD_LINE =
-  /^[\s*#>–—-]*(?:(\d{1,2})\s*[.)]?\s*)?\**\s*(titular|cos|impacte|imatge)\**\s*[:–-]\s*\**\s*(.*?)\**\s*$/i
+  /^[\s*#>–—-]*(?:(\d{1,2})\s*[.)]?\s*)?(?:\[[^\]]*\]\s*)?\**\s*(titular|cos|impacte|imatge)\**\s*[:–-]\s*\**\s*(.*?)\**\s*$/i
 
 // Llegeix la resposta del model línia a línia.
 //
@@ -374,7 +390,7 @@ export async function applyOwnContent(stories, env) {
 
   // 1) Contingut ja generat (cache)
   if (kv) {
-    const cached = await Promise.all(entries.map((e) => kv.get(KV_PREFIX + e.id)))
+    const cached = await Promise.all(entries.map((e) => kv.get(cacheKeyFor(e.story, e.id))))
     entries.forEach((e, i) => {
       if (e.own) return
       if (!cached[i]) return
@@ -403,9 +419,16 @@ export async function applyOwnContent(stories, env) {
       try {
         const generated = await aiOwnContentBatch(
           env,
+          // `outputLanguage` és la llengua en què s'ha d'ESCRIURE; `language`
+          // és la de la font. Aquí només es passava la segona, i com que
+          // aiOwnContentBatch fa `outputLanguage || language`, el model rebia
+          // literalment "[escriu en anglès]" mentre el sistema li deia que
+          // escrivís en català. Dues ordres contràries: d'aquí venia que unes
+          // vegades sortís en català i altres en anglès.
           group.map((e) => ({
             title: e.story.title,
             language: e.story.language,
+            outputLanguage: e.story.outputLanguage,
             editorialFormat: e.story.editorialFormat,
             summary: e.story.summary,
             sourceContext: e.story.sourceContext,
@@ -439,7 +462,7 @@ export async function applyOwnContent(stories, env) {
             }
             e.own = candidate
             return kv
-              ? kv.put(KV_PREFIX + e.id, JSON.stringify(e.own), { expirationTtl: CACHE_TTL_SECONDS })
+              ? kv.put(cacheKeyFor(e.story, e.id), JSON.stringify(e.own), { expirationTtl: CACHE_TTL_SECONDS })
               : null
           }),
         )

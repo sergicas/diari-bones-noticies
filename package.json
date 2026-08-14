@@ -28,7 +28,9 @@
     "types:worker": "wrangler types worker-configuration.d.ts",
     "ios:assets": "capacitor-assets generate --ios",
     "ios:sync": "cap sync ios",
-    "ios:open": "cap open ios"
+    "ios:open": "cap open ios",
+    "predeploy": "npm run verify",
+    "predeploy:staging": "npm run verify"
   },
   "dependencies": {
     "@capacitor/core": "^7.0.0",
