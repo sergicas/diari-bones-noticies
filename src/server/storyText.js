@@ -24,7 +24,9 @@ import {
 // El model de text el tria ara ./ai/textModel.js (Gemini o Cloudflare segons hi
 // hagi clau). Aquí ja no s'anomena cap model directament.
 // v2 invalida els textos breus de l'etapa inicial. Les claus v1 caduquen soles.
-// v3 (14-08-2026) invalida TOT el text escrit mentre la instrucció deia "no el
+// v4 (14-08-2026) invalida el text escrit abans de posar la regla de la llengua
+// al final del prompt i amb exemple.
+// v3 invalidava TOT el text escrit mentre la instrucció deia "no el
 // tradueixis": eren peces en anglès en un diari en català. Sense pujar la
 // versió, arreglar la instrucció no hauria servit de res, perquè el text ja
 // generat se serveix d'aquesta còpia i no es torna a demanar mai.
@@ -32,7 +34,7 @@ import {
 // REGLA: sempre que es canviï el que se li demana al redactor, s'ha de pujar
 // aquesta versió. Si no, el canvi només afecta les peces que encara no
 // existeixen. Les claus velles caduquen soles als 90 dies.
-const KV_PREFIX = 'own:v3:'
+const KV_PREFIX = 'own:v4:'
 const CACHE_TTL_SECONDS = 90 * 24 * 3600
 const BATCH_SIZE = 5
 const MAX_BATCHES = 8 // sostre: fins a 40 peces noves per refresc
@@ -84,6 +86,29 @@ const REWRITE_SYSTEM = [
   'objectes i entorn (exemple: "a modern tram on a tree-lined city avenue at',
   'sunrise"). Sense noms propis, sense marques, sense persones reals identificables',
   'i sense cap text. Simbòlica i serena, màxim 12 paraules.',
+  // LA REGLA DE LA LLENGUA, AL FINAL I AMB EXEMPLE.
+  //
+  // Dir-ho un cop enmig del prompt no bastava: amb un titular i 1.400
+  // caràcters de context en anglès, el model seguia la llengua del material i
+  // escrivia en anglès, encara que la peça anés marcada [català]. Va tornar a
+  // passar amb la instrucció ja corregida.
+  //
+  // Per això va al final (és l'última cosa que llegeix) i amb un exemple
+  // d'entrada anglesa i sortida catalana, que és el senyal que de debò
+  // convenç un model petit.
+  'REGLA MÉS IMPORTANT DE TOTES, per damunt de qualsevol altra:',
+  'el titular, el cos i l’impacte s’han d’escriure EN LA LLENGUA marcada entre',
+  'claudàtors a cada peça. Gairebé sempre serà [català]. El titular original i',
+  'el context estaran gairebé sempre en ANGLÈS: és material de treball, no un',
+  'model d’estil. No copiïs la seva llengua.',
+  'Exemple. Entrada: "1. [català; CONSTRUCTIVA] Scientists find new method to',
+  'clean water with sunlight | context: A team developed a low-cost solar',
+  'device that purifies water in rural areas."',
+  'Sortida correcta: "1 titular: Un dispositiu solar de baix cost potabilitza',
+  'aigua en zones rurals" i el cos i l’impacte també en català.',
+  'Sortida INCORRECTA: qualsevol titular, cos o impacte en anglès.',
+  '(L’única excepció és la línia "imatge:", que va sempre en anglès perquè és',
+  'una instrucció per a un generador d’imatges, no un text per al lector.)',
 ].join(' ')
 
 const LANG_NAMES = {
@@ -213,7 +238,9 @@ async function aiOwnContentBatch(env, items) {
   }
   const list = items
     .map((it, i) => {
-      const lang = LANG_NAMES[it.outputLanguage || it.language] || 'català'
+      // "escriu en català" i no només "català": la marca ha de ser una ordre,
+      // no una etiqueta que es pugui llegir com "aquesta peça és catalana".
+      const lang = `escriu en ${LANG_NAMES[it.outputLanguage || it.language] || 'català'}`
       const type = typeLabels[it.editorialFormat] || typeLabels.constructive
       const title = String(it.title || '').replace(/\s+/g, ' ').slice(0, 160)
       // El context de la font s'aporta NOMÉS com a material factual intern; el
