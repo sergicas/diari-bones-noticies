@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { shareContent, haptic, isNativePlatform } from '../lib/native.js'
+import { creaTargetaInstagram } from '../lib/instagram-card.js'
 
 const siteUrl = 'https://bondiari.com'
 
@@ -95,30 +96,26 @@ export default function ShareRow({ story }) {
   // enviem la il·lustració de la peça i deixem l'adreça al porta-retalls: a
   // Stories s'hi pot enganxar després amb un adhesiu d'enllaç.
   async function comparteixImatge() {
-    if (!story.imageUrl) return false
     if (typeof navigator === 'undefined' || !navigator.share || !navigator.canShare) {
       return false
     }
     try {
-      const resposta = await fetch(story.imageUrl)
-      if (!resposta.ok) return false
-      const blob = await resposta.blob()
-      if (!blob.type.startsWith('image/')) return false
-      const extensio = blob.type.split('/')[1]?.split('+')[0] || 'png'
-      const fitxer = new File([blob], `bondiari.${extensio}`, { type: blob.type })
-      if (!navigator.canShare({ files: [fitxer] })) return false
+      // La targeta porta el titular escrit a sobre, així que la publicació
+      // s'entén sola: no cal afegir-hi cap enllaç ni escriure-hi res.
+      const fitxer = await creaTargetaInstagram(story.title)
+      if (!fitxer || !navigator.canShare({ files: [fitxer] })) return false
       // L'adreça, al porta-retalls abans d'obrir el menú: després de compartir,
-      // la pàgina pot haver perdut el permís d'escriure-hi.
+      // la pàgina pot haver perdut el permís d'escriure-hi. És per si es vol
+      // posar un adhesiu d'enllaç, no perquè faci falta.
       try {
         await navigator.clipboard?.writeText(url)
       } catch {
-        // No és imprescindible; la imatge ja és el que importa.
+        // No és imprescindible; la targeta ja diu de què va la notícia.
       }
-      await navigator.share({ files: [fitxer], text })
+      await navigator.share({ files: [fitxer] })
       return true
     } catch {
-      // Imatge d'un altre domini, menú cancel·lat o navegador que no admet
-      // compartir fitxers → provem la via de sempre.
+      // Menú cancel·lat, o navegador que no sap compartir fitxers.
       return false
     }
   }
