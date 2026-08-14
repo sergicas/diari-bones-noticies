@@ -27,6 +27,7 @@ import {
   backfillEditorialArchive,
   persistEditorialEdition,
   readEditorialStoryCatalog,
+  readPipelineJob,
   readPipelineHealth,
   readUniqueEditorialStats,
 } from './server/editorialStore.js'
@@ -167,6 +168,56 @@ async function handleLiveNews(request, env) {
   }
 }
 
+/**
+ * Estat d'una feina de la cua, per clau d'idempotència.
+ *
+ * Protegida amb el mateix testimoni que el refresc: diu com va la maquinària
+ * per dins i no ha de ser pública. La clau va a l'URL perquè NO és cap secret
+ * —el secret és el testimoni de la capçalera— i així l'adreça es pot desar i
+ * tornar a consultar.
+ */
+async function handlePipelineJob(request, env) {
+  if (request.method !== 'GET' && request.method !== 'HEAD') {
+    return methodNotAllowed('GET, HEAD')
+  }
+  if (!(await isRefreshAuthorized(request, env))) {
+    return jsonResponse(
+      { ok: false, error: 'unauthorized' },
+      {
+        status: 401,
+        headers: {
+          'cache-control': 'no-store',
+          'www-authenticate': 'Bearer realm="bondiari-refresh"',
+        },
+      },
+    )
+  }
+  const key = new URL(request.url).searchParams.get('key') || ''
+  if (!key) {
+    return jsonResponse(
+      { ok: false, error: 'missing-key' },
+      { status: 400, headers: { 'cache-control': 'no-store' } },
+    )
+  }
+  try {
+    const job = await readPipelineJob(env, key)
+    if (!job) {
+      // Encara no ha començat: la cua pot trigar a repartir el missatge.
+      return jsonResponse(
+        { ok: true, status: 'queued', idempotencyKey: key },
+        { status: 200, headers: { 'cache-control': 'no-store' } },
+      )
+    }
+    return jsonResponse(
+      { ok: true, ...job },
+      { status: 200, headers: { 'cache-control': 'no-store' } },
+    )
+  } catch (error) {
+    console.error('No s’ha pogut llegir l’estat de la feina', error)
+    return jsonResponse({ ok: false }, { status: 500 })
+  }
+}
+
 async function handleRefreshNews(request, env) {
   if (request.method !== 'POST') return methodNotAllowed('POST')
   if (!(await isRefreshAuthorized(request, env))) {
@@ -193,9 +244,24 @@ async function handleRefreshNews(request, env) {
       await env.INGEST_QUEUE.send(message, { contentType: 'json' })
       // 202: acceptat, encara no fet. Retornar 200 faria creure a qui truca
       // que el refresc ja ha acabat, i llegiria el lot vell pensant que és nou.
+      //
+      // S'hi torna l'adreça per consultar AQUESTA feina. Sondejar la data del
+      // lot no serveix: una feina aliena que acabi abans la canviaria, i una de
+      // pròpia que acabi sense novetats no la canviaria.
+      const statusUrl = `${new URL(request.url).origin}/api/pipeline-job?key=${encodeURIComponent(
+        message.idempotencyKey,
+      )}`
       return jsonResponse(
-        { ok: true, queued: true, idempotencyKey: message.idempotencyKey },
-        { status: 202, headers: { 'cache-control': 'no-store' } },
+        {
+          ok: true,
+          queued: true,
+          idempotencyKey: message.idempotencyKey,
+          statusUrl,
+        },
+        {
+          status: 202,
+          headers: { 'cache-control': 'no-store', location: statusUrl },
+        },
       )
     }
     // Sense cua configurada (desenvolupament local), es fa aquí mateix.
@@ -582,6 +648,7 @@ async function route(request, env, ctx) {
     }
   }
   if (path === '/api/refresh-news') return handleRefreshNews(request, env)
+  if (path === '/api/pipeline-job') return handlePipelineJob(request, env)
   if (path === '/api/stats') return handleStats(request, env)
   if (path === '/api/editorial-stats') return handleEditorialStats(request, env)
   // Una peça concreta per id. La fa servir el front quan es demana /noticia/:id

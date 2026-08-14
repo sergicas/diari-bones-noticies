@@ -490,6 +490,47 @@ export async function failPipelineJob(env, idempotencyKey, error) {
     .run()
 }
 
+/**
+ * L'estat d'una feina concreta de la cua.
+ *
+ * Sense això, qui demanava un refresc només podia mirar si la data del lot
+ * canviava, i això és un senyal indirecte que enganya de dues maneres: una
+ * feina ALIENA que acabi abans fa creure que ha acabat la teva, i una feina
+ * PRÒPIA que acabi sense canviar el lot (perquè no hi havia res nou) fa creure
+ * que no ha acabat. Amb la clau d'idempotència es pregunta per la feina que
+ * s'ha encuat i per cap altra.
+ */
+export async function readPipelineJob(env, idempotencyKey) {
+  const db = database(env)
+  if (!db || !idempotencyKey) return null
+  const row = await db
+    .prepare(
+      `SELECT idempotency_key, job_type, status, attempts, result_json,
+              last_error, created_at, updated_at, completed_at
+         FROM pipeline_jobs WHERE idempotency_key = ? LIMIT 1`,
+    )
+    .bind(idempotencyKey)
+    .first()
+  if (!row) return null
+  let result = null
+  try {
+    result = row.result_json ? JSON.parse(row.result_json) : null
+  } catch {
+    result = null
+  }
+  return {
+    idempotencyKey: row.idempotency_key,
+    type: row.job_type,
+    status: row.status,
+    attempts: Number(row.attempts || 0),
+    result,
+    error: row.last_error || null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    completedAt: row.completed_at || null,
+  }
+}
+
 export async function recordDeliveryRun(
   env,
   { idempotencyKey, editionId = null, channel, status, sent = 0, failed = 0, result },

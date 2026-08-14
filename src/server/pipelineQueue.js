@@ -126,9 +126,16 @@ async function processRefreshMessage(env, message) {
       trigger: 'queue',
     })
     const distribution = await queueDistribution(env, message, edition)
+    // El resultat ha de dir prou perquè qui esperi la feina sàpiga què ha
+    // passat sense haver d'endevinar-ho mirant el lot: si el radar va sortir
+    // per una porta d'avaria (`cache`), quina data té l'edició i quantes peces
+    // hi ha. Amb `cache: 'stale'` la data pot no haver canviat, i això és
+    // correcte, no un senyal que la feina no s'hagi fet.
     const result = {
       editionId: edition.editionId,
       storyCount: edition.storyCount,
+      cache: payload.cache || null,
+      updatedAt: payload.updatedAt || null,
       distribution,
     }
     await completePipelineJob(env, message.idempotencyKey, result)

@@ -58,10 +58,13 @@ async function main() {
     if (!r.ok) throw new Error(`HTTP ${r.status}`)
     return r.json()
   }
+  // Se sondeja la FEINA encuada, no la data del lot: una feina aliena que
+  // acabi primer canviaria la data i faria creure que ha acabat la nostra, i
+  // una de pròpia que acabi sense novetats no la canviaria i faria creure que
+  // no ha acabat.
   const ESPERA_MAXIMA_MS = 3 * 60 * 1000
   let lot
   try {
-    const abans = await llegeixLot().catch(() => ({}))
     const r = await fetch(`${BASE}/api/refresh-news`, {
       method: 'POST',
       headers: { authorization: `Bearer ${REFRESH_TOKEN}` },
@@ -70,29 +73,33 @@ async function main() {
     const j = await r.json()
     if (j.queued) {
       const limit = Date.now() + ESPERA_MAXIMA_MS
-      while (Date.now() < limit) {
+      let acabada = false
+      while (Date.now() < limit && !acabada) {
         await new Promise((res) => setTimeout(res, 3000))
-        const ara = await llegeixLot()
-        if (ara.updatedAt && ara.updatedAt !== abans.updatedAt) {
-          lot = ara
-          break
+        const e = await fetch(j.statusUrl, {
+          headers: { authorization: `Bearer ${REFRESH_TOKEN}` },
+        })
+        if (!e.ok) throw new Error(`estat HTTP ${e.status}`)
+        const feina = await e.json()
+        if (feina.status === 'completed') acabada = true
+        else if (feina.status === 'failed') {
+          throw new Error(`la feina ha fallat: ${feina.error || 'sense detall'}`)
         }
       }
-      if (!lot) {
+      if (!acabada) {
         throw new Error(
           `el radar no ha acabat en ${ESPERA_MAXIMA_MS / 1000} s (la feina pot seguir a la cua)`,
         )
       }
-    } else {
-      lot = await llegeixLot()
     }
+    lot = await llegeixLot()
     console.log(`✓ Radar refrescat: ${(lot.stories || []).length} notícies al lot.`)
   } catch (e) {
     console.error('✗ No s\'ha pogut refrescar el radar:', e.message)
     process.exit(1)
   }
 
-  // 2. El lot ja el tenim de l'espera.
+  // 2. El lot ja el tenim.
   const stories = lot.stories || []
 
   // 3. Informe per secció.
