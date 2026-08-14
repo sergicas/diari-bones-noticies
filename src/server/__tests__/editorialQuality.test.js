@@ -258,7 +258,7 @@ describe('reescriptura editorial amb context factual', () => {
   const validBody =
     'La cooperativa Nou Mercat ha reobert aquest dilluns l’edifici municipal després de sis mesos de reforma. El projecte posa en marxa dotze parades gestionades per productors locals i reserva dos espais per a iniciatives que comencen. En aquesta primera etapa hi treballen divuit persones vinculades al comerç i a la gestió de l’equipament. L’acord amb l’ajuntament incorpora formació específica i un sistema de lloguers progressius durant els dos primers anys. Els responsables hauran de comprovar ara si l’activitat comercial permet consolidar els llocs de treball i mantenir l’edifici obert.'
 
-  it('utilitza el context ampliat, desa la versió v2 i no el publica', async () => {
+  it('utilitza el context ampliat, desa la versió vigent del cau i no el publica', async () => {
     const run = vi.fn().mockResolvedValue({
       response: [
         '1 titular: Una cooperativa recupera el mercat municipal i crea activitat local',
@@ -279,7 +279,11 @@ describe('reescriptura editorial amb context factual', () => {
     expect(story.sourceContext).toBeUndefined()
     expect(story.body.join(' ')).toContain('divuit persones')
     expect(run.mock.calls[0][1].messages[1].content).toContain('dotze parades')
-    expect(put.mock.calls[0][0]).toMatch(/^own:v2:/)
+    // La versió puja cada cop que canvia el que se li demana al redactor; el
+    // que ha de ser cert sempre és que la clau en porti una i que no sigui
+    // cap de les que ja s'han invalidat.
+    expect(put.mock.calls[0][0]).toMatch(/^own:v\d+:/)
+    expect(put.mock.calls[0][0]).not.toMatch(/^own:v[12]:/)
   })
 
   // Una resposta curta es CONSERVA i es jutja una sola vegada, a la porta de
