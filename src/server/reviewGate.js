@@ -250,33 +250,104 @@ export async function countPendingCandidates(env) {
  * detall. Sense això, aprovar-la no es notaria fins al pròxim refresc (fins a
  * dotze hores després) i la revisió semblaria que no fa res.
  */
-async function pushApprovedStoryLive(env, story) {
-  const kv = env?.LIVE_NEWS_KV
-  if (!kv || !story?.url) return { live: false }
-  try {
+const LIVE_EDITION_ATTEMPTS = 3
+
+/**
+ * Afegeix la peça al lot públic i CONFIRMA que hi ha quedat.
+ *
+ * El `get` + `put` de sempre perdia actualitzacions: dues peces aprovades
+ * alhora llegien la mateixa edició, cadascuna hi afegia la seva i la segona
+ * escriptura esborrava la primera. Les dues deien "publicada" i a la portada
+ * només n'hi havia una.
+ *
+ * Rellegint i reintentant, el cas convergeix: qui es troba que no hi és, hi
+ * torna a entrar sobre l'edició ja actualitzada. KV té consistència eventual,
+ * així que una relectura pot sortir endarrerida; per això es reintenta unes
+ * quantes vegades i, si tot i així no es confirma, es prefereix dir que NO
+ * s'ha publicat (la peça torna a la sala) abans que dir que sí sense saber-ho.
+ */
+async function addToLiveEdition(kv, story) {
+  for (let attempt = 0; attempt < LIVE_EDITION_ATTEMPTS; attempt += 1) {
     const cached = await kv.get('latest', 'json')
     const stories = Array.isArray(cached?.stories) ? cached.stories : []
-    if (!stories.some((item) => item.url === story.url)) {
-      const next = {
+    if (stories.some((item) => item.url === story.url)) return true
+    await kv.put(
+      'latest',
+      JSON.stringify({
         ...(cached || {}),
         updatedAt: cached?.updatedAt || nowIso(),
         stories: [story, ...stories],
-      }
-      await kv.put('latest', JSON.stringify(next))
-    }
-    await kv.put(
-      `story:${candidateId(story)}`,
-      JSON.stringify(story),
-      { expirationTtl: STORY_DETAIL_TTL_SECONDS },
+      }),
     )
+    const after = await kv.get('latest', 'json')
+    if ((after?.stories || []).some((item) => item.url === story.url)) return true
+  }
+  return false
+}
+
+/**
+ * Desfà una publicació a mitges. La còpia de detall és la part MÉS delicada:
+ * `findStory` mira KV abans que D1, així que una clau `story:<id>` òrfena
+ * deixaria l'esborrany accessible per /noticia/:id encara que la base de
+ * dades el tornés a marcar com a pendent. Seria reobrir per un costat el
+ * forat que s'acaba de tapar per l'altre.
+ */
+async function undoLivePublication(kv, id, url) {
+  try {
+    await kv.delete(`story:${id}`)
+  } catch {
+    // Continuem: encara hem de treure-la del lot públic.
+  }
+  try {
+    const cached = await kv.get('latest', 'json')
+    const stories = Array.isArray(cached?.stories) ? cached.stories : []
+    if (stories.some((item) => item.url === url)) {
+      await kv.put(
+        'latest',
+        JSON.stringify({
+          ...(cached || {}),
+          stories: stories.filter((item) => item.url !== url),
+        }),
+      )
+    }
+  } catch (error) {
+    // Si això falla, la peça pot quedar visible tot i tornar a la sala. Es
+    // deixa constància perquè es pugui arreglar a mà; el pròxim refresc també
+    // la reescriurà a partir del que hi hagi aprovat.
+    console.error(
+      JSON.stringify({
+        event: 'review.publish.undo-failed',
+        id,
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    )
+  }
+}
+
+async function pushApprovedStoryLive(env, story) {
+  const kv = env?.LIVE_NEWS_KV
+  const id = candidateId(story)
+  if (!kv || !story?.url || !id) return { live: false }
+  try {
+    // La pàgina de detall PRIMER. Si després falla el lot, la peça encara no
+    // és enlloc de cara al lector, i el desfer la treu del tot. A l'inrevés
+    // (lot primer) una peça podia quedar a portada sense pàgina pròpia.
+    await kv.put(`story:${id}`, JSON.stringify(story), {
+      expirationTtl: STORY_DETAIL_TTL_SECONDS,
+    })
+    if (!(await addToLiveEdition(kv, story))) {
+      throw new Error('live-edition-not-confirmed')
+    }
     return { live: true }
   } catch (error) {
     console.error(
       JSON.stringify({
         event: 'review.publish.kv-failed',
+        id,
         error: error instanceof Error ? error.message : String(error),
       }),
     )
+    await undoLivePublication(kv, id, story.url)
     return { live: false }
   }
 }

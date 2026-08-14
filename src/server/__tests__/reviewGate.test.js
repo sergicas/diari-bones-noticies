@@ -54,17 +54,25 @@ function fakeDb({ rows = [], first = null, changes = 3 } = {}) {
   }
 }
 
-function fakeKv(initial = null) {
+function fakeKv(initial = null, { falla = () => false } = {}) {
   const store = new Map()
   if (initial) store.set('latest', JSON.stringify(initial))
   return {
     store,
     async get(key) {
+      // Un tall real de planificació entre llegir i escriure: és aquí on es
+      // perdien les actualitzacions quan dues peces s'aprovaven alhora.
+      await Promise.resolve()
       const raw = store.get(key)
       return raw ? JSON.parse(raw) : null
     },
     async put(key, value) {
+      await Promise.resolve()
+      if (falla(key)) throw new Error(`KV no ha pogut escriure ${key}`)
       store.set(key, value)
+    },
+    async delete(key) {
+      store.delete(key)
     },
   }
 }
@@ -224,6 +232,52 @@ describe('porta d’aprovació humana', () => {
     const desfet = db.calls.filter((c) => c.query.includes('UPDATE')).pop()
     expect(desfet.query).toContain("'captured'")
     expect(desfet.query).toContain('human_decision = NULL')
+  })
+
+  it('si el lot públic falla, no queda cap rastre de la peça al web', async () => {
+    // Reproduït per Codex: la còpia de detall s'escrivia bé i el lot fallava.
+    // D1 tornava a 'captured' però la peça es quedava publicada. I com que
+    // /noticia/:id mira KV ABANS que D1, una clau story:<id> òrfena tornava a
+    // fer pública una peça que ningú no havia aprovat.
+    const db = fakeDb({ first: { payload_json: JSON.stringify(story()) } })
+    const kv = fakeKv({ stories: [] }, { falla: (key) => key === 'latest' })
+    const outcome = await decideCandidate(
+      { EDITORIAL_DB: db, LIVE_NEWS_KV: kv },
+      'peca-1',
+      'approve',
+    )
+    expect(outcome.ok).toBe(false)
+    expect(outcome.error).toBe('not-published')
+    expect(kv.store.has('story:peca-1'), 'la pàgina de detall ha de desaparèixer').toBe(
+      false,
+    )
+    const lot = JSON.parse(kv.store.get('latest'))
+    expect(lot.stories).toHaveLength(0)
+    const desfet = db.calls.filter((c) => c.query.includes('UPDATE')).pop()
+    expect(desfet.query).toContain("'captured'")
+  })
+
+  it('dues peces aprovades alhora hi són totes dues, no només l’última', async () => {
+    // Reproduït per Codex: totes dues deien ok/live, D1 les tenia publicades i
+    // la portada només en contenia una. El get + put perdia una actualització.
+    const a = story({ id: 'peca-a', url: 'https://example.com/a' })
+    const b = story({ id: 'peca-b', url: 'https://example.com/b' })
+    const kv = fakeKv({ stories: [] })
+    const env = (peca) => ({
+      EDITORIAL_DB: fakeDb({ first: { payload_json: JSON.stringify(peca) } }),
+      LIVE_NEWS_KV: kv,
+    })
+    const [ra, rb] = await Promise.all([
+      decideCandidate(env(a), 'peca-a', 'approve'),
+      decideCandidate(env(b), 'peca-b', 'approve'),
+    ])
+    expect(ra.ok).toBe(true)
+    expect(rb.ok).toBe(true)
+    const lot = JSON.parse(kv.store.get('latest'))
+    expect(lot.stories.map((s) => s.url).sort()).toEqual([
+      'https://example.com/a',
+      'https://example.com/b',
+    ])
   })
 
   it('no accepta cap decisió que no sigui publicar o descartar', async () => {
