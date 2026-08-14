@@ -34,14 +34,30 @@ function consumidor(nom) {
   return [...deProduccio, ...dEntorns].find((c) => c.queue === nom) || null
 }
 
-describe('la configuració de la cua i el codi diuen el mateix', () => {
-  for (const cua of ['bondiari-ingest', 'bondiari-ingest-staging']) {
+// TOTES les cues passen pel mateix `handlePipelineBatch`, i per tant totes
+// obeeixen `MAX_INTENTS`. Si una tingués un `max_retries` diferent, les seves
+// feines es marcarien malament sense que res ho digués.
+const AMB_REINTENTS = [
+  'bondiari-ingest',
+  'bondiari-ingest-staging',
+  'bondiari-distribute',
+  'bondiari-distribute-staging',
+]
+
+// El consumidor únic només cal a la ingesta: és qui escriu el lot públic. La
+// distribució (butlletí, push, xarxes) no el toca i pot anar en paral·lel.
+const AMB_CONSUMIDOR_UNIC = ['bondiari-ingest', 'bondiari-ingest-staging']
+
+describe('la configuració de les cues i el codi diuen el mateix', () => {
+  for (const cua of AMB_REINTENTS) {
     it(`${cua}: MAX_INTENTS = max_retries + 1`, () => {
       const c = consumidor(cua)
       expect(c, `no s'ha trobat el consumidor ${cua}`).not.toBeNull()
       expect(MAX_INTENTS).toBe(Number(c.max_retries) + 1)
     })
+  }
 
+  for (const cua of AMB_CONSUMIDOR_UNIC) {
     it(`${cua}: un sol consumidor alhora`, () => {
       // Sense això, dues execucions del radar es trepitgen el lot públic. Les
       // configuracions d'entorn de Wrangler no s'hereten: cal a totes dues.
