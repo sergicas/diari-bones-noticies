@@ -281,7 +281,11 @@ export async function handleReviewRoutes(request, env) {
     // d'haver publicat una cosa que no hi era.
     const missatge = outcome.ok
       ? decisio === 'approve'
-        ? 'Publicada.'
+        ? outcome.live
+          ? 'Publicada.'
+          : // L'aprovació queda feta; només falta que arribi al web. Ho diem
+            // en lloc d'assegurar una cosa que encara no s'ha pogut confirmar.
+            'Aprovada, pendent de sincronitzar amb el web.'
         : 'Descartada.'
       : outcome.error === 'not-pending'
       ? 'Aquesta peça ja estava decidida.'

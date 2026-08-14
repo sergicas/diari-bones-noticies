@@ -286,75 +286,112 @@ async function addToLiveEdition(kv, story) {
 }
 
 /**
- * Desfà una publicació a mitges. La còpia de detall és la part MÉS delicada:
- * `findStory` mira KV abans que D1, així que una clau `story:<id>` òrfena
- * deixaria l'esborrany accessible per /noticia/:id encara que la base de
- * dades el tornés a marcar com a pendent. Seria reobrir per un costat el
- * forat que s'acaba de tapar per l'altre.
+ * Escriu la peça al web. NO desfà res si falla: vegeu decideCandidate.
+ *
+ * Torna true només si s'ha pogut CONFIRMAR. Amb KV, "no confirmat" no vol dir
+ * "no publicat" —les lectures són eventualment coherents i una relectura pot
+ * sortir endarrerida—, per això el que no es confirma es deixa pendent de
+ * sincronitzar i ho recull el radar, en lloc de treure-ho.
  */
-async function undoLivePublication(kv, id, url) {
-  try {
-    await kv.delete(`story:${id}`)
-  } catch {
-    // Continuem: encara hem de treure-la del lot públic.
-  }
-  try {
-    const cached = await kv.get('latest', 'json')
-    const stories = Array.isArray(cached?.stories) ? cached.stories : []
-    if (stories.some((item) => item.url === url)) {
-      await kv.put(
-        'latest',
-        JSON.stringify({
-          ...(cached || {}),
-          stories: stories.filter((item) => item.url !== url),
-        }),
-      )
-    }
-  } catch (error) {
-    // Si això falla, la peça pot quedar visible tot i tornar a la sala. Es
-    // deixa constància perquè es pugui arreglar a mà; el pròxim refresc també
-    // la reescriurà a partir del que hi hagi aprovat.
-    console.error(
-      JSON.stringify({
-        event: 'review.publish.undo-failed',
-        id,
-        error: error instanceof Error ? error.message : String(error),
-      }),
-    )
-  }
-}
-
 async function pushApprovedStoryLive(env, story) {
   const kv = env?.LIVE_NEWS_KV
   const id = candidateId(story)
-  if (!kv || !story?.url || !id) return { live: false }
+  if (!kv || !story?.url || !id) return false
   try {
-    // La pàgina de detall PRIMER. Si després falla el lot, la peça encara no
-    // és enlloc de cara al lector, i el desfer la treu del tot. A l'inrevés
-    // (lot primer) una peça podia quedar a portada sense pàgina pròpia.
     await kv.put(`story:${id}`, JSON.stringify(story), {
       expirationTtl: STORY_DETAIL_TTL_SECONDS,
     })
-    if (!(await addToLiveEdition(kv, story))) {
-      throw new Error('live-edition-not-confirmed')
-    }
-    return { live: true }
+    return await addToLiveEdition(kv, story)
   } catch (error) {
-    console.error(
+    console.warn(
       JSON.stringify({
-        event: 'review.publish.kv-failed',
+        event: 'review.publish.not-confirmed',
         id,
         error: error instanceof Error ? error.message : String(error),
       }),
     )
-    await undoLivePublication(kv, id, story.url)
-    return { live: false }
+    return false
+  }
+}
+
+/**
+ * Les peces que una persona ha aprovat i que encara no consten al web.
+ *
+ * El radar les recull a cada passada i les torna a posar al lot. És el
+ * reintent: idempotent, sense cua nova i amb un sol escriptor del lot públic.
+ */
+export async function pendingLiveStories(env) {
+  const db = database(env)
+  if (!db) return []
+  try {
+    const { results } = await db
+      .prepare(
+        `SELECT id, payload_json FROM stories
+          WHERE human_decision = 'approve' AND live_state = 'pending'
+          ORDER BY published_at ASC LIMIT 50`,
+      )
+      .all()
+    return (results || [])
+      .map((row) => {
+        const story = parsePayload(row.payload_json)
+        return story ? { ...story, id: row.id } : null
+      })
+      .filter(Boolean)
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        event: 'review.pending-live.read-failed',
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    )
+    return []
+  }
+}
+
+/** Marca com a sincronitzades les peces que ja consten al lot públic. */
+export async function markStoriesLive(env, ids) {
+  const db = database(env)
+  const llista = [...new Set((ids || []).filter(Boolean))]
+  if (!db || llista.length === 0) return { marked: 0 }
+  try {
+    let marked = 0
+    for (const group of chunks(llista)) {
+      const placeholders = group.map(() => '?').join(', ')
+      const outcome = await db
+        .prepare(
+          `UPDATE stories SET live_state = 'live', updated_at = ?
+            WHERE id IN (${placeholders}) AND live_state = 'pending'`,
+        )
+        .bind(nowIso(), ...group)
+        .run()
+      marked += Number(outcome?.meta?.changes || 0)
+    }
+    return { marked }
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        event: 'review.mark-live.failed',
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    )
+    return { marked: 0 }
   }
 }
 
 /**
  * La decisió d'una persona sobre una peça concreta.
- * Només actua sobre peces que encara esperen: no es pot despublicar per aquí.
+ *
+ * REGLA (14-08-2026, després de la tercera revisió de Codex): una aprovació
+ * humana NO es desfà mai. Abans, si la peça no es podia confirmar al web,
+ * s'anul·lava l'aprovació i tornava a la sala. Semblava prudent i era just al
+ * revés: KV té consistència eventual, així que "no ho he pogut confirmar" no
+ * vol dir "no s'ha publicat". Una lectura endarrerida podia fer que una peça
+ * aprovada tornés a constar com a esborrany mentre continuava sent pública
+ * —exactament la inversió que aquesta porta ha d'evitar.
+ *
+ * Ara la decisió és definitiva a D1 i el que té estat és la SINCRONIA amb el
+ * web: pending o live. El que queda pendent ho recull el radar a la pròxima
+ * passada, i la sala ho diu clarament en lloc d'assegurar una cosa que no sap.
  */
 export async function decideCandidate(env, id, decision) {
   const db = database(env)
@@ -372,17 +409,14 @@ export async function decideCandidate(env, id, decision) {
       .bind(id)
       .first()
     if (!row) return { ok: false, error: 'not-pending' }
-    // PRIMER ES RESERVA LA PEÇA, I NOMÉS SI LA RESERVA PROSPERA ES PUBLICA.
-    //
-    // La condició `editorial_status = 'captured'` fa d'exclusió mútua: si dues
-    // decisions arriben alhora (dues pestanyes, dos aparells), només una canvia
-    // la fila i l'altra veu changes = 0. Sense mirar `changes`, la segona diria
-    // "Publicada" havent-la potser descartada la primera.
+
+    // La condició fa d'exclusió mútua entre dues decisions simultànies sobre
+    // la MATEIXA peça: només una canvia la fila, i l'altra veu changes = 0.
     const reserva = await db
       .prepare(
         `UPDATE stories
             SET editorial_status = ?, published_at = ?, updated_at = ?,
-                human_reviewed_at = ?, human_decision = ?
+                human_reviewed_at = ?, human_decision = ?, live_state = ?
           WHERE id = ? AND editorial_status = '${PENDING_STATUS}'`,
       )
       .bind(
@@ -391,6 +425,7 @@ export async function decideCandidate(env, id, decision) {
         timestamp,
         timestamp,
         decision,
+        decision === 'approve' ? 'pending' : null,
         id,
       )
       .run()
@@ -407,29 +442,11 @@ export async function decideCandidate(env, id, decision) {
           id,
           publishedAt: story.publishedAt || timestamp,
         })
-      : { live: false }
-
-    // TOT O RES. Si la peça no arriba al web, es desfà la reserva i torna a la
-    // sala. Deixar-la marcada com a publicada seria pitjor que no fer res: la
-    // pantalla diria que sí, la peça no sortiria enlloc, i ja no es podria
-    // tornar a aprovar perquè constaria com a decidida.
-    if (!live.live) {
-      await db
-        .prepare(
-          `UPDATE stories
-              SET editorial_status = '${PENDING_STATUS}', published_at = NULL,
-                  updated_at = ?, human_reviewed_at = NULL, human_decision = NULL
-            WHERE id = ?`,
-        )
-        .bind(nowIso(), id)
-        .run()
-      console.error(
-        JSON.stringify({ event: 'review.approve.rolled-back', id }),
-      )
-      return { ok: false, error: 'not-published', id }
-    }
-
-    return { ok: true, id, decision, ...live }
+      : false
+    if (live) await markStoriesLive(env, [id])
+    // Publicada o no, l'aprovació es queda feta. `live: false` només vol dir
+    // que encara no s'ha confirmat; el radar ho reintentarà.
+    return { ok: true, id, decision, live }
   } catch (error) {
     console.error(
       JSON.stringify({

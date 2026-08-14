@@ -41,6 +41,8 @@ import {
 } from './rss/serviceFeeds.js'
 import {
   candidateId,
+  markStoriesLive,
+  pendingLiveStories,
   readDecisions,
   recordPendingCandidates,
   splitByReviewDecision,
@@ -2357,6 +2359,26 @@ export async function getLiveNewsPayload(
     )
   }
 
+  // EL REINTENT DE PUBLICACIÓ.
+  //
+  // Una aprovació humana no es desfà mai (vegeu reviewGate.decideCandidate). Si
+  // en el moment d'aprovar-la la peça no es va poder confirmar al web, queda
+  // marcada com a pendent de sincronitzar i la recollim aquí: el radar ja és
+  // l'únic que reescriu el lot públic, així que és el lloc natural per
+  // reintentar-ho, sense cap cua nova i sense dos escriptors barallant-se.
+  const perSincronitzar = await pendingLiveStories(env)
+  const jaAlLot = new Set(approvedStories.map((story) => story.url))
+  const recuperades = perSincronitzar.filter((story) => !jaAlLot.has(story.url))
+  if (recuperades.length > 0) {
+    approvedStories.unshift(...recuperades)
+    console.log(
+      JSON.stringify({
+        event: 'review.gate.resynced',
+        recuperades: recuperades.length,
+      }),
+    )
+  }
+
   // Marquem com a "vistes" NOMÉS les noves que de debò entren al lot. Una
   // notícia acceptada que avui queda fora (pel sostre d'una altra llengua o per
   // diversitat de font) segueix sent elegible al pròxim refresc en lloc de
@@ -2393,6 +2415,13 @@ export async function getLiveNewsPayload(
       return { ...cached, cache: 'stale-awaiting-review' }
     }
     const payload = await setCachedPayload(kv, approvedStories)
+    // El lot s'ha escrit: les que esperaven sincronitzar-se ja són al web.
+    if (perSincronitzar.length > 0) {
+      await markStoriesLive(
+        env,
+        perSincronitzar.map((story) => candidateId(story)),
+      )
+    }
     // Persistim sota story:<id> només les peces que entren per primer cop.
     // Les peces arrossegades ja tenen aquesta còpia i reescriure fins a 50 claus
     // a cada refresc consumia quota de KV sense canviar-ne el contingut.

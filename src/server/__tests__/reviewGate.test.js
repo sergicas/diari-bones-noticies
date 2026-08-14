@@ -3,6 +3,8 @@ import {
   candidateId,
   decideCandidate,
   expireStaleCandidates,
+  markStoriesLive,
+  pendingLiveStories,
   readDecisions,
   recordPendingCandidates,
   splitByReviewDecision,
@@ -209,36 +211,12 @@ describe('porta d’aprovació humana', () => {
     expect(outcome.error).toBe('not-pending')
   })
 
-  it('si la peça no arriba al web, es desfà l’aprovació i torna a la sala', async () => {
-    // Tot o res: deixar-la marcada com a publicada seria pitjor que no fer
-    // res, perquè la pantalla diria que sí, la peça no sortiria enlloc i ja no
-    // es podria tornar a aprovar.
-    const db = fakeDb({ first: { payload_json: JSON.stringify(story()) } })
-    const kvAvariat = {
-      async get() {
-        return { stories: [] }
-      },
-      async put() {
-        throw new Error('KV no disponible')
-      },
-    }
-    const outcome = await decideCandidate(
-      { EDITORIAL_DB: db, LIVE_NEWS_KV: kvAvariat },
-      'peca-1',
-      'approve',
-    )
-    expect(outcome.ok).toBe(false)
-    expect(outcome.error).toBe('not-published')
-    const desfet = db.calls.filter((c) => c.query.includes('UPDATE')).pop()
-    expect(desfet.query).toContain("'captured'")
-    expect(desfet.query).toContain('human_decision = NULL')
-  })
-
-  it('si el lot públic falla, no queda cap rastre de la peça al web', async () => {
-    // Reproduït per Codex: la còpia de detall s'escrivia bé i el lot fallava.
-    // D1 tornava a 'captured' però la peça es quedava publicada. I com que
-    // /noticia/:id mira KV ABANS que D1, una clau story:<id> òrfena tornava a
-    // fer pública una peça que ningú no havia aprovat.
+  it('si el web no confirma, l’aprovació NO es desfà: queda pendent de sincronitzar', async () => {
+    // Regla que va costar tres revisions d'entendre: KV té consistència
+    // eventual, així que "no ho he pogut confirmar" NO vol dir "no s'ha
+    // publicat". Desfer l'aprovació convertia una peça que una persona havia
+    // aprovat en un esborrany que podia continuar sent públic: just la
+    // inversió que aquesta porta ha d'evitar.
     const db = fakeDb({ first: { payload_json: JSON.stringify(story()) } })
     const kv = fakeKv({ stories: [] }, { falla: (key) => key === 'latest' })
     const outcome = await decideCandidate(
@@ -246,15 +224,18 @@ describe('porta d’aprovació humana', () => {
       'peca-1',
       'approve',
     )
-    expect(outcome.ok).toBe(false)
-    expect(outcome.error).toBe('not-published')
-    expect(kv.store.has('story:peca-1'), 'la pàgina de detall ha de desaparèixer').toBe(
-      false,
+    expect(outcome.ok, "l'aprovació es dona per feta").toBe(true)
+    expect(outcome.live, 'però encara no confirmada al web').toBe(false)
+    // Cap consulta no ha de TORNAR A POSAR l'estat a 'captured'. (La reserva
+    // sí que porta 'captured' a la condició WHERE; el que no hi pot haver és
+    // cap SET que hi torni.)
+    const tornaEnrere = db.calls.some((c) =>
+      /SET\s+editorial_status\s*=\s*'captured'/i.test(c.query),
     )
-    const lot = JSON.parse(kv.store.get('latest'))
-    expect(lot.stories).toHaveLength(0)
-    const desfet = db.calls.filter((c) => c.query.includes('UPDATE')).pop()
-    expect(desfet.query).toContain("'captured'")
+    expect(tornaEnrere, 'una aprovació humana no es desfà mai').toBe(false)
+    // I queda apuntada com a pendent de sincronitzar, perquè el radar la reculli.
+    const reserva = db.calls.find((c) => c.query.includes('live_state'))
+    expect(reserva.values).toContain('pending')
   })
 
   it('dues peces aprovades alhora hi són totes dues, no només l’última', async () => {
@@ -307,6 +288,29 @@ describe('porta d’aprovació humana', () => {
     // 'expired', no 'reject': caducar no és el mateix que llegir-la i dir que no.
     expect(update.query).toContain("human_decision = 'expired'")
     expect(update.values[1]).toBe('2026-08-06T12:00:00.000Z')
+  })
+
+  it('el radar recull les aprovades que no van arribar al web', async () => {
+    // El reintent: com que el radar és l'únic que reescriu el lot públic, és
+    // ell qui recupera el que va quedar pendent de sincronitzar. Idempotent i
+    // sense cap cua nova.
+    const db = fakeDb({
+      rows: [{ id: 'peca-1', payload_json: JSON.stringify(story()) }],
+    })
+    const perSincronitzar = await pendingLiveStories({ EDITORIAL_DB: db })
+    expect(perSincronitzar.map((s) => s.id)).toEqual(['peca-1'])
+    const consulta = db.calls.find((c) => c.query.includes('live_state'))
+    expect(consulta.query).toContain("human_decision = 'approve'")
+    expect(consulta.query).toContain("live_state = 'pending'")
+  })
+
+  it('marcar-les com a sincronitzades només afecta les pendents', async () => {
+    const db = fakeDb()
+    const outcome = await markStoriesLive({ EDITORIAL_DB: db }, ['peca-1'])
+    expect(outcome.marked).toBe(3)
+    const update = db.calls.find((c) => c.query.includes('UPDATE'))
+    expect(update.query).toContain("live_state = 'live'")
+    expect(update.query).toContain("live_state = 'pending'")
   })
 
   it('dona el mateix identificador que fa servir la resta del diari', () => {
