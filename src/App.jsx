@@ -23,7 +23,6 @@ import {
   defaultDistanceFilter,
   getDistanceBand,
   selectGeographicRescue,
-  sortByDistanceAndDate,
 } from './lib/distance.js'
 import {
   editorialSections,
@@ -842,7 +841,7 @@ function waitForSwController() {
     normalizedQuery === '' &&
     !isServiceSection
   ) {
-    const general = [...activeStories].sort(sortByDistanceAndDate)
+    const general = [...activeStories].sort(sortByPublishedAtDesc)
     if (general.length > 0) {
       filteredStories = general
       sectionShowingGeneral = true
@@ -856,16 +855,13 @@ function waitForSwController() {
     (story) =>
       editionReferenceTime - getStoryTimestamp(story) <= featuredStoryMaxAgeMs,
   )
-  const nearestAvailableBand = headlineEligibleStories[0]
-    ? getDistanceBand(headlineEligibleStories[0])
-    : null
-
+  // La destacada es tria per criteri editorial, no per proximitat. Abans havia
+  // de ser de la banda geogràfica més propera disponible: en un diari de
+  // proximitat tenia sentit, però en un diari especialitzat d'abast mundial
+  // feia que una exposició a Mataró encapçalés la portada per damunt d'una
+  // observació del telescopi Webb.
   const featuredStory =
-    headlineEligibleStories.find(
-      (story) =>
-        story.featured &&
-        getDistanceBand(story).rank === nearestAvailableBand?.rank,
-    ) ??
+    headlineEligibleStories.find((story) => story.featured) ??
     headlineEligibleStories[0] ??
     null
 
@@ -883,8 +879,16 @@ function waitForSwController() {
     archiveStories,
     activeDistanceOption.maxRank,
   ).filter(matchesFilters)
+  // UN DIARI ESPECIALITZAT S'ORDENA PER DATA, NO PER DISTÀNCIA (14-08-2026).
+  //
+  // L'ordre per proximitat és una resta de quan El Bon Diari era un diari de
+  // proximitat. La barra geogràfica ja es va retirar en fer el gir, però
+  // l'ordre no: el servidor enviava l'edició nova i el navegador la reordenava
+  // posant al davant tot el que fos de Mataró. La portada semblava encallada
+  // en l'edició vella quan en realitat era ben ordenada... per un criteri que
+  // ja no és el d'aquest diari.
   const portadaStories = [...remainingStories, ...geographicRescue].sort(
-    sortByDistanceAndDate,
+    sortByPublishedAtDesc,
   )
   // Pàgina pròpia d'un tema (/tema/<slug>): una "portada petita" de l'àmbit.
   // Es nodreix de TOT (recent + hemeroteca) del tema perquè no quedi buida; la
@@ -933,7 +937,7 @@ function waitForSwController() {
             (getStorySection(story).id === getStorySection(currentStory).id ||
               story.origin === currentStory.origin),
         )
-        .sort(sortByDistanceAndDate)
+        .sort(sortByPublishedAtDesc)
         .slice(0, 3)
     : []
   const requestedArchiveTopic =
