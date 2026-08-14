@@ -59,7 +59,8 @@ export {
 // Les peces publicades es desen també sota una clau estable story:<id> perquè la
 // seva pàgina de detall es pugui resoldre encara que surtin de la portada (finestra
 // de 30 peces / 4 dies). Així els enllaços compartits o indexats no fan 404.
-const storyDetailTtlSeconds = 30 * 24 * 60 * 60
+// Qui les desa és `persistStoryDetails` (server/reviewGate.js), que és on viu
+// ara la durada d'aquestes còpies.
 
 const cacheKey = 'latest'
 // El Bon Diari és un DIARI: el radar només manté notícies de pocs dies. Una
@@ -2212,53 +2213,60 @@ export async function getLiveNewsPayload(
   // Aquest és també l'ÚNIC lloc del programa que escriu el lot públic quan
   // s'aprova una peça: la sala de revisió només registra decisions a D1. Tenir
   // dos escriptors era el que feia perdre aprovacions simultànies.
+  // Es llegeixen ARA —abans de qualsevol sortida anticipada— però NO es marquen
+  // aquí. Marcar-les abans d'aplicar els límits era el forat: si els sostres
+  // per llengua o per font deixaven fora una peça aprovada, ja constava com a
+  // publicada i no es tornava a intentar mai. Es perdia en silenci.
+  //
+  // Qui marca és `tancaEdicio`, l'única porta de sortida del radar, i només
+  // marca el que ha quedat de debò al lot escrit I té la pàgina de detall
+  // desada. El que caigui pels límits o falli en desar-se, segueix pendent i
+  // es torna a intentar a la pròxima passada.
   const cachedStories = Array.isArray(cached?.stories) ? cached.stories : []
   const perSincronitzar = await pendingLiveStories(env)
-  if (perSincronitzar.length > 0) {
-    const jaAlLot = new Set(cachedStories.map((story) => story.url))
-    const recuperades = perSincronitzar.filter((story) => !jaAlLot.has(story.url))
-    const lot = recuperades.length > 0 ? [...recuperades, ...cachedStories] : cachedStories
-    let escrit = recuperades.length === 0
-    if (recuperades.length > 0) {
-      try {
-        await kv.put(
-          cacheKey,
-          JSON.stringify({
-            ...(cached || {}),
-            updatedAt: cached?.updatedAt || new Date().toISOString(),
-            stories: lot,
-          }),
-        )
-        await persistStoryDetails(kv, recuperades)
-        escrit = true
-        // El lot de memòria també, perquè les sortides anticipades i
-        // l'arrossegament de sota les incloguin.
-        cached = { ...(cached || {}), stories: lot }
-      } catch (error) {
-        console.error(
-          JSON.stringify({
-            event: 'review.sync.failed',
-            error: error instanceof Error ? error.message : String(error),
-          }),
-        )
-      }
-    }
-    // Es marquen com a publicades NOMÉS les que de debò han quedat al lot.
-    if (escrit) {
-      const alLot = new Set(lot.map((story) => story.url))
-      const sincronitzades = perSincronitzar
+  const jaAlLot = new Set(cachedStories.map((story) => story.url))
+  const recuperades = perSincronitzar.filter((story) => !jaAlLot.has(story.url))
+  if (recuperades.length > 0) {
+    // Entren al lot de treball perquè participin com una peça més: passaran
+    // pels mateixos límits que la resta, i si en queden fora, esperaran.
+    cached = { ...(cached || {}), stories: [...recuperades, ...cachedStories] }
+  }
+
+  /**
+   * ÚNICA SORTIDA DEL RADAR que toca el lot públic.
+   *
+   * Fa les tres coses en ordre i en un sol lloc: desa les pàgines de detall,
+   * escriu el lot i marca com a publicades NOMÉS les peces aprovades que
+   * compleixen totes dues condicions. Tenir-ho escampat per les sortides feia
+   * que una peça pogués constar com a publicada sense ser-hi.
+   */
+  async function tancaEdicio(stories, { detallDe = [], etiqueta } = {}) {
+    // 1) Les pàgines de detall. Torna QUINES s'han desat de debò.
+    //    Les aprovades que es recuperen hi van sempre: sense pàgina pròpia,
+    //    una peça al lot donaria 404 en obrir-la.
+    const desades = await persistStoryDetails(kv, [...perSincronitzar, ...detallDe])
+    // 2) El lot definitiu.
+    const payload = await setCachedPayload(kv, stories)
+    // 3) I només ara, marcar. Dues condicions, totes dues obligatòries:
+    //    ser al lot escrit i tenir la pàgina de detall desada.
+    if (perSincronitzar.length > 0) {
+      const alLot = new Set(stories.map((story) => story.url))
+      const marcar = perSincronitzar
         .filter((story) => alLot.has(story.url))
         .map((story) => candidateId(story))
-      if (sincronitzades.length > 0) {
-        await markStoriesLive(env, sincronitzades)
-        console.log(
-          JSON.stringify({
-            event: 'review.sync.done',
-            sincronitzades: sincronitzades.length,
-          }),
-        )
-      }
+        .filter((id) => desades.has(id))
+      if (marcar.length > 0) await markStoriesLive(env, marcar)
+      console.log(
+        JSON.stringify({
+          event: 'review.sync.committed',
+          etiqueta,
+          marcades: marcar.length,
+          // La resta segueix pendent i es torna a intentar a la pròxima passada.
+          quedenPendents: perSincronitzar.length - marcar.length,
+        }),
+      )
     }
+    return payload
   }
 
   // Les ja publicades es llegeixen ABANS de recollir, perquè la recollida les
@@ -2283,7 +2291,10 @@ export async function getLiveNewsPayload(
   // cinc dies. Sortint per aquí, el lot es quedaria congelat i les velles no
   // marxarien mai.
   if (reviewedThisPass === 0 && cached?.stories?.length) {
-    return { ...cached, cache: 'stale' }
+    // Encara que no hi hagi res nou, cal tancar l'edició: és per aquí que
+    // surten al web les peces que una persona ha aprovat.
+    const payload = await tancaEdicio(cached.stories, { etiqueta: 'stale' })
+    return { ...payload, cache: 'stale' }
   }
 
   // (El marcatge de "vistes" es fa MÉS AVALL, només per a les que de debò entren
@@ -2367,9 +2378,11 @@ export async function getLiveNewsPayload(
   if (publishedStories.length === 0 && cached?.stories?.length) {
     const safeCachedStories = selectPublishableStories(cached.stories)
     if (safeCachedStories.length > 0) {
+      const payload = await tancaEdicio(safeCachedStories, {
+        etiqueta: 'stale-incomplete',
+      })
       return {
-        ...cached,
-        stories: safeCachedStories,
+        ...payload,
         cache: 'stale-incomplete',
         qualityRejectedCount,
         qualityRejectedByIssue,
@@ -2452,19 +2465,19 @@ export async function getLiveNewsPayload(
           keptFromPreviousEdition: cached.stories.length,
         }),
       )
-      return { ...cached, cache: 'stale-awaiting-review' }
+      const payload = await tancaEdicio(cached.stories, {
+        etiqueta: 'stale-awaiting-review',
+      })
+      return { ...payload, cache: 'stale-awaiting-review' }
     }
-    const payload = await setCachedPayload(kv, approvedStories)
-    // Persistim sota story:<id> només les peces que entren per primer cop.
-    // Les peces arrossegades ja tenen aquesta còpia i reescriure fins a 50 claus
-    // a cada refresc consumia quota de KV sense canviar-ne el contingut.
-    await Promise.all(
-      storiesRequiringDetailPersistence(approvedStories, shownFreshUrls).map((story) =>
-        kv.put(`story:${feedStoryId(story.url)}`, JSON.stringify(story), {
-          expirationTtl: storyDetailTtlSeconds,
-        }),
-      ),
-    )
+    // Una sola porta: desa els detalls, escriu el lot i marca. Els detalls que
+    // toquen són els de les peces que entren per primer cop (les arrossegades
+    // ja tenen la còpia, i reescriure-les cremava quota de KV sense canviar
+    // res) més, sempre, les aprovades que s'estan recuperant.
+    const payload = await tancaEdicio(approvedStories, {
+      detallDe: storiesRequiringDetailPersistence(approvedStories, shownFreshUrls),
+      etiqueta: 'refresh',
+    })
     await updateEditorialStats(kv, {
       reviewed: reviewedThisPass,
       published: shownFreshUrls.length,

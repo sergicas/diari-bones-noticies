@@ -182,6 +182,22 @@ async function handleRefreshNews(request, env) {
     )
   }
   try {
+    // PASSA PER LA CUA, NO EXECUTA DIRECTAMENT (14-08-2026).
+    //
+    // Executant-lo aquí, un refresc manual podia coincidir amb el del cron i
+    // totes dues execucions es trepitjaven el lot públic. Amb la cua
+    // serialitzada (max_concurrency: 1 a wrangler.jsonc) hi ha un sol
+    // escriptor de debò, que és el que aquesta arquitectura dona per suposat.
+    if (env.INGEST_QUEUE) {
+      const message = buildManualRefreshQueueMessage()
+      await env.INGEST_QUEUE.send(message, { contentType: 'json' })
+      return jsonResponse({
+        ok: true,
+        queued: true,
+        idempotencyKey: message.idempotencyKey,
+      })
+    }
+    // Sense cua configurada (desenvolupament local), es fa aquí mateix.
     const payload = await getLiveNewsPayload(env.LIVE_NEWS_KV, { force: true, env })
     const edition = await persistEditorialEdition(env, payload, {
       slot: 'manual',
@@ -189,6 +205,7 @@ async function handleRefreshNews(request, env) {
     })
     return jsonResponse({
       ok: true,
+      queued: false,
       count: payload.stories.length,
       editionId: edition.editionId,
       nextRefreshAt: payload.nextRefreshAt,

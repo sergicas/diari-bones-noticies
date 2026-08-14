@@ -58,7 +58,13 @@
         "max_batch_timeout": 5,
         "max_retries": 3,
         "dead_letter_queue": "bondiari-ingest-dlq",
-        "retry_delay": 30
+        "retry_delay": 30,
+        // UN SOL CONSUMIDOR (14-08-2026). Per defecte, Cloudflare escala els
+        // consumidors en paral·lel. Dues execucions del radar alhora es
+        // trepitgen el lot públic, perquè KV no té operacions atòmiques de
+        // llegir-modificar-escriure. Amb el radar com a únic escriptor, la
+        // manera de garantir un sol escriptor és serialitzar la cua.
+        "max_concurrency": 1
       },
       {
         "queue": "bondiari-distribute",

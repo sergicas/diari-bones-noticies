@@ -33,6 +33,35 @@ function kvDeMentida(inicial) {
   }
 }
 
+function rssAmbUnItem() {
+  return `<?xml version="1.0"?><rss version="2.0"><channel><title>Font</title>
+    <item>
+      <title>A hopeful discovery about ocean life</title>
+      <link>https://example.org/descoberta-oceans</link>
+      <description>Researchers report a positive finding.</description>
+      <pubDate>${new Date().toUTCString()}</pubDate>
+    </item>
+  </channel></rss>`
+}
+
+function pecaValida(i) {
+  return {
+    url: `https://example.com/valida-${i}`,
+    title: `Una notícia constructiva ben escrita número ${i} del diari`,
+    category: 'Ciència',
+    source: 'Font de prova',
+    language: 'ca',
+    ownContent: true,
+    editorialFormat: 'constructive',
+    publishedAt: new Date().toISOString(),
+    body: [
+      'La institució ha presentat aquesta setmana un programa amb quaranta places noves i dades públiques trimestrals. El projecte incorpora formació, seguiment i una avaluació independent que es publicarà cada any. Les entitats del barri hi participen des del primer dia i el calendari preveu una revisió al cap de dotze mesos.',
+    ],
+    impact:
+      'Ofereix quaranta places noves i dades públiques per comprovar-ne els resultats.',
+  }
+}
+
 function d1AmbUnaPendent(peca) {
   const marcades = []
   return {
@@ -118,6 +147,73 @@ describe('les aprovades surten encara que el radar no trobi res', () => {
     expect(kv.store.has(`story:${aprovada.id}`)).toBe(true)
     // ...i consta com a sincronitzada.
     expect(db.marcades.flat()).toContain(aprovada.id)
+  })
+
+  it('si la peça aprovada NO entra al lot definitiu, segueix pendent', async () => {
+    // El forat que va trobar Codex: es marcava com a publicada abans d'aplicar
+    // els límits i els filtres. Si després en quedava fora, es perdia per
+    // sempre, perquè ja no es tornava a intentar.
+    //
+    // Aquí la peça aprovada no supera el llistó de contingut propi, així que
+    // cau del lot que s'escriu. NO s'ha de marcar.
+    const aprovadaPrima = {
+      id: 'aprovada-prima',
+      url: 'https://example.com/aprovada-prima',
+      title: 'Peça massa curta',
+      publishedAt: new Date().toISOString(),
+    }
+    const kv = kvDeMentida({
+      updatedAt: new Date().toISOString(),
+      stories: Array.from({ length: 12 }, (_, i) => pecaValida(i)),
+    })
+    const db = d1AmbUnaPendent(aprovadaPrima)
+    // Les fonts responen (així el radar NO surt per la porta d'avaria i arriba
+    // a filtrar de debò), però sense IA cap peça nova no assoleix contingut
+    // propi: es cau per la xarxa de seguretat, que sí que passa el llistó de
+    // qualitat al lot que escriu.
+    globalThis.fetch = vi.fn(async () => new Response(rssAmbUnItem(), { status: 200 }))
+
+    const payload = await getLiveNewsPayload(kv, {
+      force: true,
+      env: { EDITORIAL_DB: db },
+    })
+
+    expect(payload.cache).toBe('stale-incomplete')
+    const lot = JSON.parse(kv.store.get('latest'))
+    // Les bones hi són...
+    expect(lot.stories.length).toBeGreaterThan(0)
+    // ...i la prima NO consta com a publicada, encara que se n'hagi desat la
+    // pàgina de detall: segueix a la cua per tornar-ho a intentar.
+    expect(db.marcades.flat()).not.toContain(aprovadaPrima.id)
+  })
+
+  it('si no es pot desar la pàgina de detall, tampoc es marca', async () => {
+    // Marcar-la sense pàgina pròpia deixaria una peça al lot que dona 404 en
+    // obrir-la. Val més que esperi i es torni a intentar.
+    const aprovada = {
+      id: 'aprovada-3',
+      url: 'https://example.com/aprovada-3',
+      title: 'Peça aprovada amb el detall avariat',
+      publishedAt: new Date().toISOString(),
+    }
+    const kv = kvDeMentida({
+      updatedAt: new Date().toISOString(),
+      stories: [pecaValida(1)],
+    })
+    const putOriginal = kv.put.bind(kv)
+    kv.put = async (key, value) => {
+      if (key.startsWith('story:')) throw new Error('KV avariat per al detall')
+      return putOriginal(key, value)
+    }
+    const db = d1AmbUnaPendent(aprovada)
+
+    await getLiveNewsPayload(kv, { force: true, env: { EDITORIAL_DB: db } })
+
+    const lot = JSON.parse(kv.store.get('latest'))
+    expect(lot.stories.map((s) => s.url)).toContain(aprovada.url)
+    expect(db.marcades.flat(), 'sense detall desat, no es marca').not.toContain(
+      aprovada.id,
+    )
   })
 
   it('el que retorna el radar ja inclou la peça recuperada', async () => {

@@ -257,8 +257,8 @@ export async function countPendingCandidates(env) {
  * Vegeu decideCandidate.
  */
 export async function persistStoryDetails(kv, stories) {
-  if (!kv || !Array.isArray(stories) || stories.length === 0) return { written: 0 }
-  let written = 0
+  const desades = new Set()
+  if (!kv || !Array.isArray(stories) || stories.length === 0) return desades
   for (const story of stories) {
     const id = candidateId(story)
     if (!id) continue
@@ -266,8 +266,11 @@ export async function persistStoryDetails(kv, stories) {
       await kv.put(`story:${id}`, JSON.stringify(story), {
         expirationTtl: STORY_DETAIL_TTL_SECONDS,
       })
-      written += 1
+      desades.add(id)
     } catch (error) {
+      // Torna QUINES s'han desat, no quantes. Abans això s'empassava l'error i
+      // qui cridava marcava igualment totes les peces com a publicades, encara
+      // que alguna s'hagués quedat sense pàgina de detall.
       console.warn(
         JSON.stringify({
           event: 'review.detail.write-failed',
@@ -277,7 +280,7 @@ export async function persistStoryDetails(kv, stories) {
       )
     }
   }
-  return { written }
+  return desades
 }
 
 /** Quantes aprovades esperen sortir al web (per ensenyar-ho a la sala). */
