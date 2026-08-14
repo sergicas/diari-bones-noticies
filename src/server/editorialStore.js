@@ -375,9 +375,19 @@ export async function findStoryInEditorialStore(env, id) {
   if (db) {
     const row = await db
       .prepare(
+        // LLISTA BLANCA, NO NEGRA (14-08-2026).
+        //
+        // Abans deia `editorial_status != 'rejected'`, i això deixava passar
+        // les peces en estat `captured`: qualsevol esborrany pendent de
+        // revisió era llegible per /noticia/:id abans que ningú l'aprovés.
+        // La porta d'aprovació tenia, doncs, una escletxa pública.
+        //
+        // Amb una llista blanca, un estat nou neix INVISIBLE i cal decidir
+        // expressament de publicar-lo. Amb una llista negra passava el
+        // contrari, que és el costat perillós.
         `SELECT payload_json
         FROM stories
-        WHERE id = ? AND editorial_status != 'rejected'
+        WHERE id = ? AND editorial_status IN ('published', 'distributed', 'archived')
         LIMIT 1`,
       )
       .bind(id)
