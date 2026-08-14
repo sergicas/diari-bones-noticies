@@ -3,9 +3,33 @@ import { shareContent, haptic, isNativePlatform } from '../lib/native.js'
 
 const siteUrl = 'https://bondiari.com'
 
+// INSTAGRAM, NOMÉS ON POT FER ALGUNA COSA (14-08-2026).
+//
+// Instagram és l'ÚNICA xarxa de la fila que no permet compartir un enllaç des
+// del web: no té cap adreça per fer-ho. Les altres set són enllaços de debò i
+// obren la pàgina de la xarxa amb la notícia posada.
+//
+// Al mòbil el botó sí que serveix, perquè obre el menú de compartir del
+// sistema i des d'allà es pot triar Instagram. A l'ordinador no hi ha aquest
+// menú: el botó només copiava l'enllaç i canviava el text un moment, cosa que
+// passava desapercebuda. El lector clicava, no s'obria res, i semblava
+// espatllat — i pitjor encara, semblava espatllat NOSTRE.
+//
+// La condició mira si l'aparell té menú de compartir, que és exactament la
+// capacitat que fa útil el botó, en lloc d'endevinar si és un mòbil per la
+// mida de la pantalla o pel nom del navegador.
+function potCompartirDeVeritat() {
+  if (typeof navigator === 'undefined') return false
+  return isNativePlatform() || typeof navigator.share === 'function'
+}
+
 export default function ShareRow({ story }) {
   const [copied, setCopied] = useState(false)
   const [instaCopied, setInstaCopied] = useState(false)
+  // Es calcula una sola vegada, en néixer el component. El diari es dibuixa
+  // sempre al navegador (l'HTML prerenderitzat porta el #root buit a propòsit,
+  // vegeu server/storyMeta.js), així que aquí ja hi ha `navigator`.
+  const [mostraInstagram] = useState(potCompartirDeVeritat)
   const storyPath = `/noticia/${encodeURIComponent(story.id)}`
   const url = `${siteUrl}${storyPath}`
   const text = `${story.title} — El Bon Diari`
@@ -118,14 +142,16 @@ export default function ShareRow({ story }) {
           {target.label}
         </a>
       ))}
-      <button
-        type="button"
-        className="share-row__chip share-row__chip--instagram"
-        onClick={shareInstagram}
-        aria-label="Compartir a Instagram (obre el menú nadiu o copia l'enllaç)"
-      >
-        {instaCopied ? 'Enllaç copiat per a Instagram ✓' : 'Instagram'}
-      </button>
+      {mostraInstagram && (
+        <button
+          type="button"
+          className="share-row__chip share-row__chip--instagram"
+          onClick={shareInstagram}
+          aria-label="Compartir a Instagram amb el menú de l'aparell"
+        >
+          {instaCopied ? 'Enllaç copiat per a Instagram ✓' : 'Instagram'}
+        </button>
+      )}
       <button
         type="button"
         className="share-row__chip share-row__chip--copy"
