@@ -85,12 +85,52 @@ export default function ShareRow({ story }) {
       .catch(() => {})
   }
 
-  // Instagram no permet compartir enllaços directament des de web. En
-  // mòbil intentem el menú nadiu (share() de Web Share API); en desktop
-  // copiem l'enllaç i avisem perquè l'enganxin a la bio o als Stories.
+  // INSTAGRAM VOL UNA IMATGE, NO UN ENLLAÇ (14-08-2026).
+  //
+  // Compartint l'ENLLAÇ, Instagram només en sap fer un missatge privat: obre
+  // la llista de seguidors i demana a qui l'envies. No hi ha manera de
+  // publicar-lo, perquè Instagram no accepta enllaços com a contingut.
+  //
+  // Compartint una IMATGE, en canvi, ofereix Stories i publicació. Per això
+  // enviem la il·lustració de la peça i deixem l'adreça al porta-retalls: a
+  // Stories s'hi pot enganxar després amb un adhesiu d'enllaç.
+  async function comparteixImatge() {
+    if (!story.imageUrl) return false
+    if (typeof navigator === 'undefined' || !navigator.share || !navigator.canShare) {
+      return false
+    }
+    try {
+      const resposta = await fetch(story.imageUrl)
+      if (!resposta.ok) return false
+      const blob = await resposta.blob()
+      if (!blob.type.startsWith('image/')) return false
+      const extensio = blob.type.split('/')[1]?.split('+')[0] || 'png'
+      const fitxer = new File([blob], `bondiari.${extensio}`, { type: blob.type })
+      if (!navigator.canShare({ files: [fitxer] })) return false
+      // L'adreça, al porta-retalls abans d'obrir el menú: després de compartir,
+      // la pàgina pot haver perdut el permís d'escriure-hi.
+      try {
+        await navigator.clipboard?.writeText(url)
+      } catch {
+        // No és imprescindible; la imatge ja és el que importa.
+      }
+      await navigator.share({ files: [fitxer], text })
+      return true
+    } catch {
+      // Imatge d'un altre domini, menú cancel·lat o navegador que no admet
+      // compartir fitxers → provem la via de sempre.
+      return false
+    }
+  }
+
   async function shareInstagram(event) {
     event.preventDefault()
     haptic('light')
+    if (await comparteixImatge()) {
+      setInstaCopied(true)
+      setTimeout(() => setInstaCopied(false), 3500)
+      return
+    }
     if (isNativePlatform()) {
       await shareContent({ title: text, text, url })
       return
