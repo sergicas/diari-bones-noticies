@@ -274,9 +274,14 @@ async function aiOwnContentBatch(env, items) {
         .replace(/\s+/g, ' ')
         .slice(0, 1400)
       const font = String(it.source || '').replace(/\s+/g, ' ').trim()
-      const marca = font
-        ? `[${lang}; ${type}; font: ${font}]`
-        : `[${lang}; ${type}]`
+      // El CIRCUIT també s'hi envia: al B no es pot republicar ni traduir, i el
+      // redactor ho ha de saber en escriure. Abans es copiava a l'objecte
+      // intermedi i es perdia aquí, sense arribar mai al model.
+      const circuit = it.circuit === 'A' || it.circuit === 'B' ? it.circuit : null
+      const parts = [lang, type]
+      if (font) parts.push(`font: ${font}`)
+      if (circuit) parts.push(`circuit ${circuit}`)
+      const marca = `[${parts.join('; ')}]`
       return context
         ? `${i + 1}. ${marca} ${title}\n   context: ${context}`
         : `${i + 1}. ${marca} ${title}`

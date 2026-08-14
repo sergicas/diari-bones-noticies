@@ -50,7 +50,25 @@ function comuns(a, b) {
  *  - que aquests siguin una part apreciable de la peça més curta, perquè dos
  *    titulars llargs amb tres mots comuns per casualitat no s'ajuntin.
  */
+/** Els números del titular: anys, xifres, quantitats. */
+function xifres(story) {
+  return new Set(String(story?.title || '').match(/\d+/g) || [])
+}
+
+function xifresIncompatibles(a, b) {
+  const xa = xifres(a)
+  const xb = xifres(b)
+  if (xa.size === 0 || xb.size === 0) return false
+  // Si totes dues porten números i no coincideixen, parlen de fets diferents.
+  // "Un eclipsi visible a Espanya el 2026" i el mateix titular amb 2027 només
+  // es diferencien en l'any, i la resta de mots són idèntics: sense aquesta
+  // regla es prenien per la mateixa notícia.
+  for (const n of xa) if (xb.has(n)) return false
+  return true
+}
+
 export function mateixEsdeveniment(a, b, { minComuns = 3, minProporcio = 0.5 } = {}) {
+  if (xifresIncompatibles(a, b)) return false
   const sa = signaturaEsdeveniment(a)
   const sb = signaturaEsdeveniment(b)
   if (sa.size === 0 || sb.size === 0) return false
@@ -60,16 +78,29 @@ export function mateixEsdeveniment(a, b, { minComuns = 3, minProporcio = 0.5 } =
 }
 
 /**
- * Es queda una peça per esdeveniment, la primera de la llista.
- * L'ordre d'entrada mana: qui la crida ja les ha posades com vol.
+ * Agrupa peces que semblen el mateix fet SENSE descartar-ne cap.
+ *
+ * La primera versió d'això suprimia les repetides, i era un camí de pèrdua
+ * silenciosa: una peça que el programa considerava duplicada no arribava a la
+ * sala, es marcava com a vista durant catorze dies i desapareixia sense que
+ * cap persona l'hagués vista mai. Amb un criteri que confonia l'eclipsi del
+ * 2026 amb el del 2027, això és perdre notícies de veritat.
+ *
+ * Ara totes arriben a la sala. Les que semblen repetides porten
+ * `possibleDuplicateOf` amb l'identificador de la representant, i la sala les
+ * ensenya agrupades perquè decideixi una persona. El programa suggereix; no
+ * decideix.
  */
-export function dedupePerEsdeveniment(stories, opcions) {
-  const quedades = []
-  const descartades = []
-  for (const story of stories || []) {
-    const igual = quedades.find((altra) => mateixEsdeveniment(story, altra, opcions))
-    if (igual) descartades.push({ story, com: igual })
-    else quedades.push(story)
-  }
-  return { quedades, descartades }
+export function agrupaPerEsdeveniment(stories, { idDe = (s) => s?.id, ...opcions } = {}) {
+  const representants = []
+  return (stories || []).map((story) => {
+    const igual = representants.find((altra) =>
+      mateixEsdeveniment(story, altra, opcions),
+    )
+    if (!igual) {
+      representants.push(story)
+      return story
+    }
+    return { ...story, possibleDuplicateOf: idDe(igual) || null }
+  })
 }

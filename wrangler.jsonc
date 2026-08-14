@@ -95,7 +95,11 @@
         "crons": []
       },
       "vars": {
-        "ENVIRONMENT": "staging"
+        "ENVIRONMENT": "staging",
+        // Les vars d'entorn de Wrangler NO s'hereten: sense declarar-lo aquí,
+        // staging cauria al valor per defecte del codi (flash-lite) i no
+        // reproduiria el comportament de producció.
+        "GEMINI_MODEL": "gemini-flash-latest"
       },
       "kv_namespaces": [
         { "binding": "LIVE_NEWS_KV", "id": "3763eba40f604b528c8c968ba2280131" },

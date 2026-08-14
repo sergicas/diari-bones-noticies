@@ -116,6 +116,12 @@ const STYLES = `
     background: #ecefe8; color: #3d5245; border-radius: 8px;
     padding: .6rem .8rem; margin: 0 0 1.25rem;
   }
+  .peca--repetida { border-left: 4px solid #c9a227; }
+  .repetida {
+    font-family: system-ui, sans-serif; font-size: .85rem;
+    color: #7a5c10; background: #fbf3d9; border-radius: 6px;
+    padding: .5rem .7rem; margin: 0 0 .75rem;
+  }
   label { display: block; font-family: system-ui, sans-serif; margin-bottom: .5rem; }
   input[type=password] {
     width: 100%; padding: .7rem; font-size: 1rem; border-radius: 8px;
@@ -129,6 +135,7 @@ const STYLES = `
     .marca { background: #26332c; color: #b8ccbe; }
     .marca.b { background: #35291f; color: #d8b48d; }
     .cua { background: #26332c; color: #b8ccbe; }
+    .repetida { background: #33301f; color: #e2ce8f; }
     input[type=password] { background: #14171a; color: #e8e4dc; border-color: #3a4046; }
     .descarta { background: #33292a; color: #e6b3a6; }
   }
@@ -190,7 +197,12 @@ function storyCard(story) {
   ]
     .filter(Boolean)
     .join('')
-  return `<article class="peca">
+  // No s'amaga cap peça per semblar repetida: s'avisa i decideix qui llegeix.
+  const avisRepetida = story.possibleDuplicateOf
+    ? '<p class="repetida">Sembla que explica el mateix fet que una altra peça d’aquesta llista. Mira-les totes dues abans de decidir.</p>'
+    : ''
+  return `<article class="peca${story.possibleDuplicateOf ? ' peca--repetida' : ''}">
+  ${avisRepetida}
   ${story.imageUrl ? `<img src="${escapeHtml(story.imageUrl)}" alt="${escapeHtml(story.imageAlt || '')}">` : ''}
   <div class="marques">${marques}</div>
   <h2>${escapeHtml(story.title)}</h2>

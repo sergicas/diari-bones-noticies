@@ -39,7 +39,7 @@ import {
   normalizeIdescatUpdate,
   collectIdescatUpdates,
 } from './rss/serviceFeeds.js'
-import { dedupePerEsdeveniment } from '../lib/event-dedupe.js'
+import { agrupaPerEsdeveniment } from '../lib/event-dedupe.js'
 import {
   candidateId,
   markStoriesLive,
@@ -2444,24 +2444,6 @@ export async function getLiveNewsPayload(
     pending: pendingStories,
     rejected: rejectedStories,
   } = splitByReviewDecision(publishedStories, { decisions, publicUrls })
-  // Una peça per esdeveniment abans d'arribar a la sala. La sala va rebre
-  // alhora tres peces del MATEIX eclipsi, de fonts diferents: cap era
-  // duplicada per URL, i qui revisa havia de llegir tres vegades el mateix.
-  // Només s'apliquen a les que ESPEREN: les ja públiques no es toquen.
-  const { quedades: pendentsUniques, descartades: repetides } =
-    dedupePerEsdeveniment(pendingStories)
-  if (repetides.length > 0) {
-    console.log(
-      JSON.stringify({
-        event: 'review.dedupe.event',
-        descartades: repetides.length,
-        exemple: repetides[0]?.story?.title?.slice(0, 80) || null,
-      }),
-    )
-  }
-  if (pendentsUniques.length > 0) {
-    await recordPendingCandidates(env, pendentsUniques)
-  }
   if (pendingStories.length > 0 || rejectedStories.length > 0) {
     console.log(
       JSON.stringify({
@@ -2472,14 +2454,35 @@ export async function getLiveNewsPayload(
       }),
     )
   }
-  // Marquem com a "vistes" NOMÉS les noves que de debò entren al lot. Una
-  // notícia acceptada que avui queda fora (pel sostre d'una altra llengua o per
-  // diversitat de font) segueix sent elegible al pròxim refresc en lloc de
-  // cremar-se. Així el català i el castellà no els devora l'allau anglesa.
+
+  // Les que semblen el mateix fet s'AGRUPEN, no es descarten (15-08-2026).
   //
-  // Les que esperen revisió també compten com a vistes: ja són a la sala
-  // d'espera amb el text sencer desat, i tornar-les a recollir a cada passada
-  // només gastaria feina per proposar el mateix.
+  // La primera versió en suprimia les repetides, i era un camí de pèrdua
+  // silenciosa: la peça descartada no arribava a la sala, es marcava com a
+  // vista i desapareixia sense que ningú l'hagués llegida. Amb un criteri que
+  // confonia l'eclipsi del 2026 amb el del 2027, això és perdre notícies.
+  //
+  // Ara totes hi arriben; les sospitoses porten `possibleDuplicateOf` i la
+  // sala les ensenya agrupades. El programa suggereix, decideix una persona.
+  const pendentsAgrupades = agrupaPerEsdeveniment(pendingStories, {
+    idDe: (story) => candidateId(story),
+  })
+  const agrupades = pendentsAgrupades.filter((story) => story.possibleDuplicateOf)
+  if (agrupades.length > 0) {
+    console.log(
+      JSON.stringify({
+        event: 'review.dedupe.grouped',
+        agrupades: agrupades.length,
+        exemple: agrupades[0]?.title?.slice(0, 80) || null,
+      }),
+    )
+  }
+  // Si D1 no ho pot desar, això llança i el radar s'atura ABANS de marcar res
+  // com a vist: la cua reintentarà i no es perdrà cap candidata.
+  if (pendentsAgrupades.length > 0) {
+    await recordPendingCandidates(env, pendentsAgrupades)
+  }
+
   // Es marquen `pendingStories` SENCERES, incloses les que s'han descartat per
   // repetides. És a propòsit: l'esdeveniment ja queda representat per la peça
   // que ha entrat a la sala, i no marcar-les faria que el radar les tornés a

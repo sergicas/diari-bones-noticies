@@ -158,6 +158,30 @@ describe('porta d’aprovació humana', () => {
     expect(insert.query).toContain("'captured'")
   })
 
+  it('si D1 no pot desar les candidates, LLANÇA en lloc de continuar', async () => {
+    // Abans s'empassava l'error i tornava { recorded: 0 }; el radar ho ignorava
+    // i marcava igualment totes les peces com a vistes, de manera que una
+    // avaria transitòria buidava en silenci una passada sencera. Amb l'error
+    // rellançat, el radar s'atura abans de marcar res i la cua reintenta.
+    const dbAvariat = {
+      prepare: (query) => ({
+        query,
+        bind() {
+          return this
+        },
+        async run() {
+          return { meta: { changes: 0 } }
+        },
+      }),
+      async batch() {
+        throw new Error('D1 no disponible')
+      },
+    }
+    await expect(
+      recordPendingCandidates({ EDITORIAL_DB: dbAvariat }, [story()]),
+    ).rejects.toThrow(/D1 no disponible/)
+  })
+
   it('aprovar NO toca el lot públic: només registra la decisió a D1', async () => {
     // La sala de revisió no ha d'escriure mai a KV. Mentre ho feia, hi havia
     // dos escriptors del lot públic i dues aprovacions alhora en perdien una.

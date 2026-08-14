@@ -186,12 +186,20 @@ export async function recordPendingCandidates(env, stories) {
       }
     }
   } catch (error) {
+    // ES RELLANÇA (15-08-2026). Abans s'empassava l'error i es tornava
+    // { recorded: 0 }; el radar ho ignorava i marcava igualment totes les
+    // peces com a vistes, de manera que una avaria transitòria de D1 buidava
+    // en silenci una passada sencera: candidates que ningú no veuria mai.
+    //
+    // Amb l'error rellançat, el radar s'atura abans de marcar res i la cua
+    // reintenta la feina. Val més repetir una passada que perdre-la.
     console.error(
       JSON.stringify({
         event: 'review.pending.write-failed',
         error: error instanceof Error ? error.message : String(error),
       }),
     )
+    throw error
   }
   return { recorded }
 }
