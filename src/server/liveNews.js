@@ -2240,13 +2240,33 @@ export async function getLiveNewsPayload(
    * compleixen totes dues condicions. Tenir-ho escampat per les sortides feia
    * que una peça pogués constar com a publicada sense ser-hi.
    */
-  async function tancaEdicio(stories, { detallDe = [], etiqueta } = {}) {
+  async function tancaEdicio(
+    stories,
+    { detallDe = [], etiqueta, nomesSiCanvia = false } = {},
+  ) {
     // 1) Les pàgines de detall. Torna QUINES s'han desat de debò.
     //    Les aprovades que es recuperen hi van sempre: sense pàgina pròpia,
     //    una peça al lot donaria 404 en obrir-la.
     const desades = await persistStoryDetails(kv, [...perSincronitzar, ...detallDe])
-    // 2) El lot definitiu.
-    const payload = await setCachedPayload(kv, stories)
+    // 2) El lot definitiu — però NOMÉS si de debò ha canviat res.
+    //
+    //    A les sortides d'avaria, reescriure el lot igualment renovava
+    //    `updatedAt` i feia semblar acabada d'actualitzar una edició que no
+    //    s'havia pogut renovar. La data ha de dir la veritat: si el diari
+    //    d'avui és el mateix d'ahir perquè cap font no responia, la data ha de
+    //    seguir sent la d'ahir. És l'únic senyal que tenim que alguna cosa
+    //    falla.
+    //    Es compara amb `cachedStories`, que és el que hi ha DESAT a KV, i no
+    //    amb `cached`, que ja porta fusionades les aprovades que s'estan
+    //    recuperant. Comparar amb el fusionat feia creure que no havia canviat
+    //    res justament quan hi havia una peça nova per publicar.
+    const mateixLot =
+      cachedStories.length === stories.length &&
+      cachedStories.every((story, i) => story.url === stories[i]?.url)
+    const payload =
+      nomesSiCanvia && mateixLot && cached?.updatedAt
+        ? { ...cached }
+        : await setCachedPayload(kv, stories)
     // 3) I només ara, marcar. Dues condicions, totes dues obligatòries:
     //    ser al lot escrit i tenir la pàgina de detall desada.
     if (perSincronitzar.length > 0) {
@@ -2293,7 +2313,10 @@ export async function getLiveNewsPayload(
   if (reviewedThisPass === 0 && cached?.stories?.length) {
     // Encara que no hi hagi res nou, cal tancar l'edició: és per aquí que
     // surten al web les peces que una persona ha aprovat.
-    const payload = await tancaEdicio(cached.stories, { etiqueta: 'stale' })
+    const payload = await tancaEdicio(cached.stories, {
+      etiqueta: 'stale',
+      nomesSiCanvia: true,
+    })
     return { ...payload, cache: 'stale' }
   }
 
@@ -2380,6 +2403,7 @@ export async function getLiveNewsPayload(
     if (safeCachedStories.length > 0) {
       const payload = await tancaEdicio(safeCachedStories, {
         etiqueta: 'stale-incomplete',
+        nomesSiCanvia: true,
       })
       return {
         ...payload,
@@ -2467,6 +2491,7 @@ export async function getLiveNewsPayload(
       )
       const payload = await tancaEdicio(cached.stories, {
         etiqueta: 'stale-awaiting-review',
+        nomesSiCanvia: true,
       })
       return { ...payload, cache: 'stale-awaiting-review' }
     }

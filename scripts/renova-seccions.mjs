@@ -47,21 +47,53 @@ async function main() {
   console.log(`→ Forçant renovació de seccions (${new Date().toLocaleString('ca-ES', { timeZone: 'Europe/Madrid' })})`)
 
   // 1. Força el refresc complet de tots els feeds.
+  //
+  // Des del 14-08-2026 l'endpoint ENCUA la feina i respon 202. Abans, aquest
+  // script donava el refresc per fet a l'instant i tot seguit llegia el lot
+  // VELL: l'informe de salut de les seccions sortia amb dades d'abans.
+  const llegeixLot = async () => {
+    const r = await fetch(`${BASE}/api/live-news`, {
+      headers: { 'cache-control': 'no-cache' },
+    })
+    if (!r.ok) throw new Error(`HTTP ${r.status}`)
+    return r.json()
+  }
+  const ESPERA_MAXIMA_MS = 3 * 60 * 1000
+  let lot
   try {
+    const abans = await llegeixLot().catch(() => ({}))
     const r = await fetch(`${BASE}/api/refresh-news`, {
       method: 'POST',
       headers: { authorization: `Bearer ${REFRESH_TOKEN}` },
     })
     if (!r.ok) throw new Error(`HTTP ${r.status}`)
     const j = await r.json()
-    console.log(`✓ Radar refrescat: ${j.count} notícies al lot.`)
+    if (j.queued) {
+      const limit = Date.now() + ESPERA_MAXIMA_MS
+      while (Date.now() < limit) {
+        await new Promise((res) => setTimeout(res, 3000))
+        const ara = await llegeixLot()
+        if (ara.updatedAt && ara.updatedAt !== abans.updatedAt) {
+          lot = ara
+          break
+        }
+      }
+      if (!lot) {
+        throw new Error(
+          `el radar no ha acabat en ${ESPERA_MAXIMA_MS / 1000} s (la feina pot seguir a la cua)`,
+        )
+      }
+    } else {
+      lot = await llegeixLot()
+    }
+    console.log(`✓ Radar refrescat: ${(lot.stories || []).length} notícies al lot.`)
   } catch (e) {
     console.error('✗ No s\'ha pogut refrescar el radar:', e.message)
     process.exit(1)
   }
 
-  // 2. Llegeix el lot.
-  const stories = (await (await fetch(`${BASE}/api/live-news`)).json()).stories || []
+  // 2. El lot ja el tenim de l'espera.
+  const stories = lot.stories || []
 
   // 3. Informe per secció.
   console.log('\n── Salut de les seccions ──')

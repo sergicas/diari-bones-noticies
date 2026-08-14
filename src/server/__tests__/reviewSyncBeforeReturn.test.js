@@ -216,6 +216,47 @@ describe('les aprovades surten encara que el radar no trobi res', () => {
     )
   })
 
+  it('amb totes les fonts caigudes i res pendent, la data NO es toca', async () => {
+    // La data del lot és l'únic senyal que tenim que el radar funciona.
+    // Renovar-la en una passada que no ha pogut renovar res feia semblar
+    // saludable una edició encallada, i amagava l'avaria.
+    const abans = '2026-08-10T06:00:00.000Z'
+    const kv = kvDeMentida({
+      updatedAt: abans,
+      nextRefreshAt: '2026-08-10T18:00:00.000Z',
+      stories: [pecaValida(1)],
+    })
+    const db = {
+      prepare: () => ({
+        bind() {
+          return this
+        },
+        async all() {
+          return { results: [] }
+        },
+        async first() {
+          return null
+        },
+        async run() {
+          return { meta: { changes: 0 } }
+        },
+      }),
+      async batch(statements) {
+        return statements.map(() => ({ meta: { changes: 0 } }))
+      },
+    }
+
+    const payload = await getLiveNewsPayload(kv, {
+      force: true,
+      env: { EDITORIAL_DB: db },
+    })
+
+    expect(payload.cache).toBe('stale')
+    expect(payload.updatedAt, 'la data ha de ser exactament la d’abans').toBe(abans)
+    const lot = JSON.parse(kv.store.get('latest'))
+    expect(lot.updatedAt, 'i tampoc s’ha de reescriure a KV').toBe(abans)
+  })
+
   it('el que retorna el radar ja inclou la peça recuperada', async () => {
     const aprovada = {
       id: 'aprovada-2',

@@ -191,11 +191,12 @@ async function handleRefreshNews(request, env) {
     if (env.INGEST_QUEUE) {
       const message = buildManualRefreshQueueMessage()
       await env.INGEST_QUEUE.send(message, { contentType: 'json' })
-      return jsonResponse({
-        ok: true,
-        queued: true,
-        idempotencyKey: message.idempotencyKey,
-      })
+      // 202: acceptat, encara no fet. Retornar 200 faria creure a qui truca
+      // que el refresc ja ha acabat, i llegiria el lot vell pensant que és nou.
+      return jsonResponse(
+        { ok: true, queued: true, idempotencyKey: message.idempotencyKey },
+        { status: 202, headers: { 'cache-control': 'no-store' } },
+      )
     }
     // Sense cua configurada (desenvolupament local), es fa aquí mateix.
     const payload = await getLiveNewsPayload(env.LIVE_NEWS_KV, { force: true, env })

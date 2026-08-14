@@ -121,7 +121,11 @@
             "max_batch_timeout": 5,
             "max_retries": 3,
             "dead_letter_queue": "bondiari-ingest-staging-dlq",
-            "retry_delay": 30
+            "retry_delay": 30,
+            // Igual que a producció: les configuracions d'entorn de Wrangler NO
+            // s'hereten, així que sense aquesta línia staging es quedava amb
+            // consumidors concurrents i no reproduïa el comportament real.
+            "max_concurrency": 1
           },
           {
             "queue": "bondiari-distribute-staging",
