@@ -10,6 +10,8 @@
 //
 // Ús: node scripts/renova-seccions.mjs   (o: npm run seccions)
 
+import { esperaFeina, esperaLotVisible } from './lib/esperaRefresc.mjs'
+
 const BASE = process.env.BONDIARI_URL || 'https://bondiari.sergicas.workers.dev'
 const REFRESH_TOKEN = process.env.BONDIARI_REFRESH_TOKEN
 
@@ -58,13 +60,12 @@ async function main() {
     if (!r.ok) throw new Error(`HTTP ${r.status}`)
     return r.json()
   }
-  // Se sondeja la FEINA encuada, no la data del lot: una feina aliena que
-  // acabi primer canviaria la data i faria creure que ha acabat la nostra, i
-  // una de pròpia que acabi sense novetats no la canviaria i faria creure que
-  // no ha acabat.
-  const ESPERA_MAXIMA_MS = 3 * 60 * 1000
+  // Se sondeja la FEINA encuada, no la data del lot; i després s'espera que el
+  // lot públic reflecteixi de debò l'edició nova. Les dues esperes són a
+  // lib/esperaRefresc.mjs i cap de les dues acaba dient que sí sense estar-ne
+  // segura: abans, en exhaurir-se el temps, aquest script imprimia igualment
+  // "✓ Radar refrescat" amb el lot vell a la mà.
   let lot
-  let resultat = null
   try {
     const r = await fetch(`${BASE}/api/refresh-news`, {
       method: 'POST',
@@ -72,45 +73,15 @@ async function main() {
     })
     if (!r.ok) throw new Error(`HTTP ${r.status}`)
     const j = await r.json()
+    let resultat = null
     if (j.queued) {
-      const limit = Date.now() + ESPERA_MAXIMA_MS
-      let acabada = false
-      while (Date.now() < limit && !acabada) {
-        await new Promise((res) => setTimeout(res, 3000))
-        const e = await fetch(j.statusUrl, {
-          headers: { authorization: `Bearer ${REFRESH_TOKEN}` },
-        })
-        if (!e.ok) throw new Error(`estat HTTP ${e.status}`)
-        const feina = await e.json()
-        if (feina.status === 'completed') {
-          acabada = true
-          resultat = feina.result || null
-        } else if (feina.status === 'failed') {
-          throw new Error(`la feina ha fallat: ${feina.error || 'sense detall'}`)
-        }
-      }
-      if (!acabada) {
-        throw new Error(
-          `el radar no ha acabat en ${ESPERA_MAXIMA_MS / 1000} s (la feina pot seguir a la cua)`,
-        )
-      }
-    }
-    // KV és eventualment coherent: la feina pot constar acabada i el lot
-    // trigar a ser visible. S'espera que la data arribi a la que diu la feina.
-    lot = await llegeixLot()
-    if (resultat?.updatedAt) {
-      const limitVis = Date.now() + 60 * 1000
-      while (
-        Date.now() < limitVis
-        && !(lot.updatedAt && new Date(lot.updatedAt) >= new Date(resultat.updatedAt))
-      ) {
-        await new Promise((res) => setTimeout(res, 2000))
-        lot = await llegeixLot()
-      }
+      const feina = await esperaFeina(j.statusUrl, REFRESH_TOKEN)
+      resultat = feina.result || null
     }
     if (resultat?.cache === 'transient') {
-      console.warn("⚠ El lot públic NO s'ha pogut desar (transient): les dades de sota poden ser les d'abans.")
+      throw new Error("el lot públic no s'ha pogut desar (transient)")
     }
+    lot = await esperaLotVisible(llegeixLot, resultat?.updatedAt)
     console.log(`✓ Radar refrescat: ${(lot.stories || []).length} notícies al lot.`)
   } catch (e) {
     console.error('✗ No s\'ha pogut refrescar el radar:', e.message)

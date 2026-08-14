@@ -77,10 +77,16 @@ function ultimaEscripturaDEstat(escrits) {
   return [...escrits].reverse().find((e) => e.query.includes('pipeline_jobs'))
 }
 
+// El radar arriba a escriure el lot i l'escriptura peta: getLiveNewsPayload
+// s'empassa l'error i torna `cache: 'transient'`, i el guard de
+// processRefreshMessage el converteix en fallada. És l'escenari que abans es
+// donava per bo i, per tant, no es reintentava mai.
 async function executaAmbError(attempts) {
   const env = envQueRegistra()
-  // Fem que el radar peti: sense LIVE_NEWS_KV utilitzable, getLiveNewsPayload
-  // llança i la feina entra pel camí d'error.
+  // Cap petició real: si no, la prova depèn de si les fonts responen avui.
+  globalThis.fetch = vi.fn(async () => {
+    throw new Error('cap font no respon')
+  })
   env.LIVE_NEWS_KV = {
     async get() {
       throw new Error('KV avariat')
@@ -95,7 +101,7 @@ async function executaAmbError(attempts) {
 }
 
 describe('reintents de la cua', () => {
-  it('el primer intent fallit NO deixa la feina com a fallida', async () => {
+  it("un 'transient' recuperable NO deixa la feina com a fallida ni la dona per bona", async () => {
     const { env, msg } = await executaAmbError(1)
     const estat = ultimaEscripturaDEstat(env.escrits)
     expect(estat.query).toContain("status = 'processing'")
@@ -103,7 +109,7 @@ describe('reintents de la cua', () => {
     // Però l'error hi queda apuntat: s'està intentant, i l'últim intent va
     // anar malament. Les dues coses alhora són la veritat.
     expect(estat.query).toContain('last_error')
-    expect(estat.values.join(' ')).toContain('KV avariat')
+    expect(estat.values.join(' ')).toContain('transient')
     expect(msg.retry).toHaveBeenCalled()
   })
 
@@ -117,7 +123,7 @@ describe('reintents de la cua', () => {
     const { env } = await executaAmbError(MAX_INTENTS)
     const estat = ultimaEscripturaDEstat(env.escrits)
     expect(estat.query).toContain("status = 'failed'")
-    expect(estat.values.join(' ')).toContain('KV avariat')
+    expect(estat.values.join(' ')).toContain('transient')
   })
 
   it('un reintent posterior que va bé la deixa completada', async () => {

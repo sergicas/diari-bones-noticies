@@ -9,6 +9,8 @@
 // El cron de Cloudflare ja ho fa automàticament cada 4 hores; aquest script és
 // per quan vols veure novetats abans de l'hora del cron.
 
+import { esperaFeina, esperaLotVisible } from './lib/esperaRefresc.mjs'
+
 const endpoint = process.env.BONDIARI_REFRESH_URL
   || 'https://bondiari.sergicas.workers.dev/api/refresh-news'
 const liveNewsEndpoint = endpoint.replace('/api/refresh-news', '/api/live-news')
@@ -30,48 +32,10 @@ async function llegeixLot() {
   return res.json()
 }
 
-// El refresc és ASÍNCRON des del 14-08-2026: l'endpoint encua la feina i
-// respon 202 amb l'adreça per consultar-la.
-//
-// Abans se sondejava la DATA del lot, i això enganya de dues maneres: si hi ha
-// una altra feina a la cua que acaba primer, la data canvia i sembla que ha
-// acabat la teva; i si la teva acaba sense novetats (cap font nova), la data
-// NO canvia i sembla que no ha acabat. Ara es pregunta per la feina encuada i
-// per cap altra.
+// El refresc és ASÍNCRON: l'endpoint encua la feina i respon 202 amb l'adreça
+// per consultar-la. Les dues esperes (la feina i la visibilitat del lot) viuen
+// a lib/esperaRefresc.mjs, compartides amb renova-seccions.mjs i provades.
 const ESPERA_MAXIMA_MS = 3 * 60 * 1000
-const INTERVAL_MS = 3000
-
-async function esperaLotVisible(updatedAtEsperat) {
-  const lot = await llegeixLot()
-  if (!updatedAtEsperat) return lot
-  const limit = Date.now() + 60 * 1000
-  let ara = lot
-  while (Date.now() < limit) {
-    if (ara.updatedAt && new Date(ara.updatedAt) >= new Date(updatedAtEsperat)) return ara
-    await new Promise((r) => setTimeout(r, 2000))
-    process.stdout.write('·')
-    ara = await llegeixLot()
-  }
-  return ara
-}
-
-async function esperaFeina(statusUrl) {
-  const limit = Date.now() + ESPERA_MAXIMA_MS
-  while (Date.now() < limit) {
-    await new Promise((r) => setTimeout(r, INTERVAL_MS))
-    const res = await fetch(statusUrl, {
-      headers: { authorization: `Bearer ${refreshToken}` },
-    })
-    if (!res.ok) throw new Error(`L'estat de la feina no es pot llegir (${res.status})`)
-    const feina = await res.json()
-    if (feina.status === 'completed') return feina
-    if (feina.status === 'failed') {
-      throw new Error(`la feina ha fallat: ${feina.error || 'sense detall'}`)
-    }
-    process.stdout.write('.')
-  }
-  return null
-}
 
 async function refresh() {
   if (!refreshToken) {
@@ -92,19 +56,18 @@ async function refresh() {
   let feina = null
   if (resposta.queued) {
     process.stdout.write('→ Encuat. Esperant que el radar acabi ')
-    feina = await esperaFeina(resposta.statusUrl)
+    feina = await esperaFeina(resposta.statusUrl, refreshToken, {
+      maxMs: ESPERA_MAXIMA_MS,
+      onTick: () => process.stdout.write('.'),
+    })
     process.stdout.write('\n')
-    if (!feina) {
-      throw new Error(
-        `El radar no ha acabat en ${ESPERA_MAXIMA_MS / 1000} s. `
-          + 'Mira els registres del Worker: la feina pot seguir a la cua.',
-      )
-    }
   }
   // I encara: la feina pot constar acabada i el lot trigar a ser visible, perquè
   // KV és eventualment coherent. Esperem que la data del lot arribi a la que la
   // feina diu que ha escrit.
-  const live = await esperaLotVisible(feina?.result?.updatedAt)
+  const live = await esperaLotVisible(llegeixLot, feina?.result?.updatedAt, {
+    onTick: () => process.stdout.write('·'),
+  })
 
   const elapsedMs = Date.now() - startedAt
   console.log(`✓ Refresc completat en ${(elapsedMs / 1000).toFixed(1)} s`)

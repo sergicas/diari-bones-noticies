@@ -126,6 +126,15 @@ async function processRefreshMessage(env, message) {
     force: true,
     env,
   })
+  // 'transient' vol dir que el lot públic NO s'ha pogut desar: getLiveNewsPayload
+  // s'empassa l'error d'escriptura i torna les peces perquè el radar no s'aturi
+  // del tot. Però per a la cua això és una fallada, no un èxit: donant-la per
+  // bona, es completava la feina i el missatge s'acabava confirmant, de manera
+  // que una avaria transitòria —justament la que es reintenta bé— no es
+  // reintentava mai. Es llança ABANS de persistir res i de completar.
+  if (payload.cache === 'transient') {
+    throw new Error('no s’ha pogut desar el lot públic (transient)')
+  }
   const edition = await persistEditorialEdition(env, payload, {
     slot: message.slot,
     trigger: 'queue',
