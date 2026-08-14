@@ -301,10 +301,13 @@ export async function decideCandidate(env, id, decision) {
       .bind(id)
       .first()
     if (!row) return { ok: false, error: 'not-pending' }
-    // Deixa rastre de QUI ha decidit i quan. Sense aquesta marca, una peça
-    // publicada per l'automatisme antic seria indistingible d'una aprovada per
-    // una persona (vegeu splitByReviewDecision).
-    await db
+    // PRIMER ES RESERVA LA PEÇA, I NOMÉS SI LA RESERVA PROSPERA ES PUBLICA.
+    //
+    // La condició `editorial_status = 'captured'` fa d'exclusió mútua: si dues
+    // decisions arriben alhora (dues pestanyes, dos aparells), només una canvia
+    // la fila i l'altra veu changes = 0. Sense mirar `changes`, la segona diria
+    // "Publicada" havent-la potser descartada la primera.
+    const reserva = await db
       .prepare(
         `UPDATE stories
             SET editorial_status = ?, published_at = ?, updated_at = ?,
@@ -320,15 +323,41 @@ export async function decideCandidate(env, id, decision) {
         id,
       )
       .run()
-    const story = parsePayload(row.payload_json)
-    let live = { live: false }
-    if (decision === 'approve' && story) {
-      live = await pushApprovedStoryLive(env, {
-        ...story,
-        id,
-        publishedAt: story.publishedAt || timestamp,
-      })
+    if (Number(reserva?.meta?.changes || 0) === 0) {
+      return { ok: false, error: 'not-pending' }
     }
+
+    if (decision !== 'approve') return { ok: true, id, decision, live: false }
+
+    const story = parsePayload(row.payload_json)
+    const live = story
+      ? await pushApprovedStoryLive(env, {
+          ...story,
+          id,
+          publishedAt: story.publishedAt || timestamp,
+        })
+      : { live: false }
+
+    // TOT O RES. Si la peça no arriba al web, es desfà la reserva i torna a la
+    // sala. Deixar-la marcada com a publicada seria pitjor que no fer res: la
+    // pantalla diria que sí, la peça no sortiria enlloc, i ja no es podria
+    // tornar a aprovar perquè constaria com a decidida.
+    if (!live.live) {
+      await db
+        .prepare(
+          `UPDATE stories
+              SET editorial_status = '${PENDING_STATUS}', published_at = NULL,
+                  updated_at = ?, human_reviewed_at = NULL, human_decision = NULL
+            WHERE id = ?`,
+        )
+        .bind(nowIso(), id)
+        .run()
+      console.error(
+        JSON.stringify({ event: 'review.approve.rolled-back', id }),
+      )
+      return { ok: false, error: 'not-published', id }
+    }
+
     return { ok: true, id, decision, ...live }
   } catch (error) {
     console.error(

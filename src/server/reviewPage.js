@@ -276,10 +276,17 @@ export async function handleReviewRoutes(request, env) {
     const id = String(form.get('id') || '')
     const decisio = String(form.get('decisio') || '')
     const outcome = await decideCandidate(env, id, decisio)
+    // El missatge ha de dir la veritat. Abans deia "Publicada" encara que la
+    // peça no hagués arribat al web, i qui revisava es quedava convençut
+    // d'haver publicat una cosa que no hi era.
     const missatge = outcome.ok
       ? decisio === 'approve'
         ? 'Publicada.'
         : 'Descartada.'
+      : outcome.error === 'not-pending'
+      ? 'Aquesta peça ja estava decidida.'
+      : outcome.error === 'not-published'
+      ? 'No s’ha pogut publicar: la peça segueix aquí. Torna-ho a provar.'
       : 'No s’ha pogut desar la decisió.'
     return htmlResponse(await listPage(env, { missatge }))
   }

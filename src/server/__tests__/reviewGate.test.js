@@ -20,7 +20,7 @@ function story(overrides = {}) {
   }
 }
 
-function fakeDb({ rows = [], first = null } = {}) {
+function fakeDb({ rows = [], first = null, changes = 3 } = {}) {
   const calls = []
   const statement = (query) => ({
     query,
@@ -39,7 +39,7 @@ function fakeDb({ rows = [], first = null } = {}) {
     },
     async run() {
       calls.push({ query: this.query, values: this.values })
-      return { success: true, meta: { changes: 3 } }
+      return { success: true, meta: { changes } }
     },
   })
   return {
@@ -185,6 +185,45 @@ describe('porta d’aprovació humana', () => {
     const lot = JSON.parse(kv.store.get('latest'))
     expect(lot.stories).toHaveLength(0)
     expect(kv.store.has('story:peca-1')).toBe(false)
+  })
+
+  it('si algú altre ha decidit primer, no diu que l’ha publicada', async () => {
+    // Dues pestanyes obertes, dues decisions alhora. La condició de la
+    // consulta fa d'exclusió mútua: la segona no canvia cap fila (changes = 0)
+    // i ha de dir-ho, en lloc d'assegurar que s'ha publicat.
+    const db = fakeDb({ first: { payload_json: JSON.stringify(story()) }, changes: 0 })
+    const outcome = await decideCandidate(
+      { EDITORIAL_DB: db, LIVE_NEWS_KV: fakeKv({ stories: [] }) },
+      'peca-1',
+      'approve',
+    )
+    expect(outcome.ok).toBe(false)
+    expect(outcome.error).toBe('not-pending')
+  })
+
+  it('si la peça no arriba al web, es desfà l’aprovació i torna a la sala', async () => {
+    // Tot o res: deixar-la marcada com a publicada seria pitjor que no fer
+    // res, perquè la pantalla diria que sí, la peça no sortiria enlloc i ja no
+    // es podria tornar a aprovar.
+    const db = fakeDb({ first: { payload_json: JSON.stringify(story()) } })
+    const kvAvariat = {
+      async get() {
+        return { stories: [] }
+      },
+      async put() {
+        throw new Error('KV no disponible')
+      },
+    }
+    const outcome = await decideCandidate(
+      { EDITORIAL_DB: db, LIVE_NEWS_KV: kvAvariat },
+      'peca-1',
+      'approve',
+    )
+    expect(outcome.ok).toBe(false)
+    expect(outcome.error).toBe('not-published')
+    const desfet = db.calls.filter((c) => c.query.includes('UPDATE')).pop()
+    expect(desfet.query).toContain("'captured'")
+    expect(desfet.query).toContain('human_decision = NULL')
   })
 
   it('no accepta cap decisió que no sigui publicar o descartar', async () => {
