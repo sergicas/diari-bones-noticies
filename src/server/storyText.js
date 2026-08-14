@@ -41,14 +41,28 @@ const REWRITE_SYSTEM = [
   'TITULAR: reescriu-lo amb paraules TEVES i originals, fidel als fets (mantén qui',
   'i què, sense inventar xifres, dades ni noms), to serè. Ha de ser una frase',
   'natural i llegible (no telegràfica ni tallada), de 6 a 16 paraules, sense',
-  'cometes ni símbols, i EXACTAMENT en la llengua indicada (no el tradueixis).',
+  // LA LLENGUA DE SORTIDA MANA (14-08-2026).
+  //
+  // Abans aquí hi deia "EXACTAMENT en la llengua indicada (no el tradueixis)".
+  // Amb fonts catalanes volia dir "no canviïs d'idioma" i anava bé. Amb el gir
+  // editorial, TOTES les fonts són en anglès i la sortida ha de ser en català:
+  // el model veia un original en anglès, llegia "no el tradueixis" i el deixava
+  // en anglès. Les 25 primeres peces de la sala van sortir així.
+  //
+  // I no és cap contradicció amb el Circuit B, que prohibeix traduir i
+  // republicar: aquí no es tradueix res, s'escriu de nou a partir dels fets. La
+  // instrucció ho ha de dir amb aquestes paraules.
+  'cometes ni símbols, i escrit SEMPRE en la llengua indicada entre claudàtors,',
+  'encara que el material de context estigui en una altra llengua. No el',
+  'tradueixis paraula per paraula: escriu-lo de nou en aquella llengua.',
   'COS: de 4 a 6 frases i entre 80 i 150 paraules, amb paraules TEVES. Ha',
   'd’explicar què ha passat, qui hi intervé, on o quan si consta al context, i',
   'quin és el pas següent o el límit conegut. Utilitza almenys tres fets concrets',
   'del context. NO inventis xifres, dades, cites, llocs ni noms. Si no hi ha prou',
   'fets per escriure un cos rigorós, escriu exactament INFORMACIO_INSUFICIENT al',
   'cos: és preferible no publicar que omplir amb frases buides.',
-  'Mateixa llengua indicada entre claudàtors. Sense cometes ni opinions.',
+  'Escrit SEMPRE en la llengua indicada entre claudàtors, encara que el context',
+  'estigui en una altra llengua. Sense cometes ni opinions.',
   'Si el tipus és VERIFICACIÓ, estructura el cos amb afirmació comprovada,',
   'veredicte i evidència; conserva amb precisió la negació i no presentis el',
   'rumor desmentit com un fet. Si és AGENDA o OPORTUNITAT, prioritza dates,',
@@ -56,7 +70,8 @@ const REWRITE_SYSTEM = [
   'Si és DADES, conserva exactament les xifres, unitats i períodes de referència.',
   'IMPACTE: una frase específica que expliqui per què aquesta peça importa al',
   'lector. No comencis amb "Permet conèixer", "Informa sobre" ni "Aporta una',
-  'comprovació". Mateixa llengua indicada entre claudàtors, sense cometes.',
+  'comprovació". Escrit SEMPRE en la llengua indicada entre claudàtors, encara',
+  'que el context estigui en una altra llengua. Sense cometes.',
   'IMATGE: una escena visual concreta EN ANGLÈS per dibuixar la notícia; descriu',
   'objectes i entorn (exemple: "a modern tram on a tree-lined city avenue at',
   'sunrise"). Sense noms propis, sense marques, sense persones reals identificables',
