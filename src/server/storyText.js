@@ -24,7 +24,15 @@ import {
 // El model de text el tria ara ./ai/textModel.js (Gemini o Cloudflare segons hi
 // hagi clau). Aquí ja no s'anomena cap model directament.
 // v2 invalida els textos breus de l'etapa inicial. Les claus v1 caduquen soles.
-const KV_PREFIX = 'own:v2:'
+// v3 (14-08-2026) invalida TOT el text escrit mentre la instrucció deia "no el
+// tradueixis": eren peces en anglès en un diari en català. Sense pujar la
+// versió, arreglar la instrucció no hauria servit de res, perquè el text ja
+// generat se serveix d'aquesta còpia i no es torna a demanar mai.
+//
+// REGLA: sempre que es canviï el que se li demana al redactor, s'ha de pujar
+// aquesta versió. Si no, el canvi només afecta les peces que encara no
+// existeixen. Les claus velles caduquen soles als 90 dies.
+const KV_PREFIX = 'own:v3:'
 const CACHE_TTL_SECONDS = 90 * 24 * 3600
 const BATCH_SIZE = 5
 const MAX_BATCHES = 8 // sostre: fins a 40 peces noves per refresc
