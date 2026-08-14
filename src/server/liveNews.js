@@ -39,6 +39,7 @@ import {
   normalizeIdescatUpdate,
   collectIdescatUpdates,
 } from './rss/serviceFeeds.js'
+import { dedupePerEsdeveniment } from '../lib/event-dedupe.js'
 import {
   candidateId,
   markStoriesLive,
@@ -2443,8 +2444,23 @@ export async function getLiveNewsPayload(
     pending: pendingStories,
     rejected: rejectedStories,
   } = splitByReviewDecision(publishedStories, { decisions, publicUrls })
-  if (pendingStories.length > 0) {
-    await recordPendingCandidates(env, pendingStories)
+  // Una peça per esdeveniment abans d'arribar a la sala. La sala va rebre
+  // alhora tres peces del MATEIX eclipsi, de fonts diferents: cap era
+  // duplicada per URL, i qui revisa havia de llegir tres vegades el mateix.
+  // Només s'apliquen a les que ESPEREN: les ja públiques no es toquen.
+  const { quedades: pendentsUniques, descartades: repetides } =
+    dedupePerEsdeveniment(pendingStories)
+  if (repetides.length > 0) {
+    console.log(
+      JSON.stringify({
+        event: 'review.dedupe.event',
+        descartades: repetides.length,
+        exemple: repetides[0]?.story?.title?.slice(0, 80) || null,
+      }),
+    )
+  }
+  if (pendentsUniques.length > 0) {
+    await recordPendingCandidates(env, pendentsUniques)
   }
   if (pendingStories.length > 0 || rejectedStories.length > 0) {
     console.log(
@@ -2464,6 +2480,11 @@ export async function getLiveNewsPayload(
   // Les que esperen revisió també compten com a vistes: ja són a la sala
   // d'espera amb el text sencer desat, i tornar-les a recollir a cada passada
   // només gastaria feina per proposar el mateix.
+  // Es marquen `pendingStories` SENCERES, incloses les que s'han descartat per
+  // repetides. És a propòsit: l'esdeveniment ja queda representat per la peça
+  // que ha entrat a la sala, i no marcar-les faria que el radar les tornés a
+  // recollir i a fer escriure a cada passada, cremant quota per ensenyar el
+  // mateix eclipsi una vegada i una altra.
   const shownFreshUrls = [...approvedStories, ...pendingStories]
     .filter((story) => freshUrlSet.has(story.url))
     .map((story) => story.url)

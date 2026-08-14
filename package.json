@@ -13,8 +13,8 @@
     "check:worker": "wrangler deploy --dry-run --env=\"\" --outdir .wrangler/dry-run/production",
     "check:worker:staging": "wrangler deploy --dry-run --env staging --outdir .wrangler/dry-run/staging",
     "build": "vite build && node scripts/generate-sitemap.mjs",
-    "deploy": "npm run build && wrangler deploy --env=\"\"",
-    "deploy:staging": "npm run build && wrangler deploy --env staging",
+    "deploy": "npm run verify && wrangler deploy --env=\"\"",
+    "deploy:staging": "npm run verify && wrangler deploy --env staging",
     "lint": "eslint .",
     "verify": "npm run lint && npm test && npm run check:articles && npm run build && npm run check:worker && npm run check:worker:staging",
     "preview": "vite preview",
@@ -28,9 +28,7 @@
     "types:worker": "wrangler types worker-configuration.d.ts",
     "ios:assets": "capacitor-assets generate --ios",
     "ios:sync": "cap sync ios",
-    "ios:open": "cap open ios",
-    "predeploy": "npm run verify",
-    "predeploy:staging": "npm run verify"
+    "ios:open": "cap open ios"
   },
   "dependencies": {
     "@capacitor/core": "^7.0.0",

@@ -242,13 +242,22 @@ function upsertHeadMeta(html, page) {
   return nextHtml
 }
 
+// NOMÉS A `dist` (14-08-2026).
+//
+// Abans s'escrivia també a `public/`, que sí que està versionat: cada `npm run
+// build` deixava `public/feed.xml` i `public/sitemap.xml` modificats, encara
+// que l'únic canvi fos la data de generació. Això obligava a fer `git checkout
+// --` abans de cada commit i, quan algú se n'oblidava, entrava soroll al
+// repositori. Codex ho ha hagut de recordar tres vegades.
+//
+// El que es publica és `dist`, així que escriure-hi és suficient. La còpia de
+// `public/` es manté com estava per si algun dia es fa servir en desenvolupament,
+// però ja no la reescriu el build.
 async function writeBoth(relativePath, content) {
-  for (const baseDir of [publicDir, distDir]) {
-    if (!existsSync(baseDir)) continue
-    const target = resolve(baseDir, relativePath)
-    await mkdir(dirname(target), { recursive: true })
-    await writeFile(target, content, 'utf-8')
-  }
+  if (!existsSync(distDir)) return
+  const target = resolve(distDir, relativePath)
+  await mkdir(dirname(target), { recursive: true })
+  await writeFile(target, content, 'utf-8')
 }
 
 async function writeRouteHtml(page, indexHtml) {

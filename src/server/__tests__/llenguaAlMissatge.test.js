@@ -62,6 +62,22 @@ describe('la llengua de sortida arriba al model', () => {
     expect(env.enviats.join('\n')).toContain('[escriu en castellà;')
   })
 
+  it('la FONT arriba al model, i se li prohibeix apropiar-se’n la feina', async () => {
+    // Regressió: una peça del MIT Technology Review va sortir dient "Quan vam
+    // preguntar als joves…", com si l'entrevista l'haguéssim feta nosaltres.
+    // És atribuir-se el treball de camp d'un altre mitjà.
+    const env = envQueCaptura()
+    await applyOwnContent(
+      [peca({ language: 'en', outputLanguage: 'ca', source: 'MIT Technology Review' })],
+      env,
+    )
+    expect(env.enviats.join('\n')).toContain('font: MIT Technology Review')
+    const sistema = env.AI.run.mock.calls[0][1].messages.find((m) => m.role === 'system')
+      .content
+    expect(sistema).toContain('tercera persona')
+    expect(sistema).toContain('vam preguntar')
+  })
+
   it('el context de la font hi va sencer: és el suport factual', async () => {
     const env = envQueCaptura()
     await applyOwnContent([peca({ language: 'en', outputLanguage: 'ca' })], env)

@@ -107,6 +107,20 @@ const REWRITE_SYSTEM = [
   // Per això va al final (és l'última cosa que llegeix) i amb un exemple
   // d'entrada anglesa i sortida catalana, que és el senyal que de debò
   // convenç un model petit.
+  // DE QUI ÉS LA FEINA (14-08-2026).
+  //
+  // Una peça del MIT Technology Review va sortir dient "Quan vam preguntar als
+  // joves…", com si l'entrevista l'haguéssim feta nosaltres. No és un detall
+  // d'estil: és atribuir-se el treball de camp d'un altre mitjà, i va
+  // directament contra el Circuit B, que exigeix peça pròpia amb la font ben
+  // acreditada.
+  'DE QUI ÉS LA FEINA: la investigació, les entrevistes i el treball de camp',
+  'SÓN DE LA FONT que es marca a cada peça, no nostres. Escriu SEMPRE en',
+  'tercera persona i atribueix-los-hi de manera explícita: "MIT Technology',
+  'Review va preguntar a…", "segons l’estudi publicat a…", "l’equip de…".',
+  'MAI escriguis "vam preguntar", "hem parlat amb", "la nostra enquesta" ni cap',
+  'altra forma que faci semblar que la feina és nostra. Nosaltres expliquem el',
+  'que ha trobat una altra persona; no ho hem trobat nosaltres.',
   'REGLA MÉS IMPORTANT DE TOTES, per damunt de qualsevol altra:',
   'el titular, el cos i l’impacte s’han d’escriure EN LA LLENGUA marcada entre',
   'claudàtors a cada peça. Gairebé sempre serà [català]. El titular original i',
@@ -259,9 +273,13 @@ async function aiOwnContentBatch(env, items) {
       const context = String(it.sourceContext || it.summary || '')
         .replace(/\s+/g, ' ')
         .slice(0, 1400)
+      const font = String(it.source || '').replace(/\s+/g, ' ').trim()
+      const marca = font
+        ? `[${lang}; ${type}; font: ${font}]`
+        : `[${lang}; ${type}]`
       return context
-        ? `${i + 1}. [${lang}; ${type}] ${title}\n   context: ${context}`
-        : `${i + 1}. [${lang}; ${type}] ${title}`
+        ? `${i + 1}. ${marca} ${title}\n   context: ${context}`
+        : `${i + 1}. ${marca} ${title}`
     })
     .join('\n')
   const out = await runTextModel(env, {
@@ -432,6 +450,12 @@ export async function applyOwnContent(stories, env) {
             editorialFormat: e.story.editorialFormat,
             summary: e.story.summary,
             sourceContext: e.story.sourceContext,
+            // La FONT i el CIRCUIT també, o el redactor no sap de qui és la
+            // feina que explica. Sense això, una peça del MIT Technology
+            // Review va sortir dient "Quan vam preguntar als joves…", com si
+            // l'entrevista l'haguéssim feta nosaltres.
+            source: e.story.source,
+            circuit: e.story.circuit || e.story.sourceCircuit,
           })),
         )
         await Promise.all(

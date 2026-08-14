@@ -386,6 +386,20 @@ export const EDITORIAL_TOPIC_TIEBREAK_ORDER = [
   'Tecnologia',
 ]
 
+// Temes el vocabulari dels quals és massa comú fora del seu camp: només
+// s'assignen per contingut si la peça ja ve d'un context humanístic.
+const TOPICS_ONLY_IN_HUMANITIES = new Set(['Filosofia', 'Literatura'])
+
+// Categories d'ingesta que sí que fan de context humanístic.
+const HUMANITIES_CATEGORIES = new Set(['Cultura', 'Idees', 'Literatura', 'Pensament'])
+
+function isHumanitiesContext(story) {
+  const category = String(story?.category || '').trim()
+  if (HUMANITIES_CATEGORIES.has(category)) return true
+  const source = sourceText(story)
+  return HUMANITIES_CIRCUIT_B_SOURCES.some((rule) => rule.pattern.test(source))
+}
+
 function isCircuitA(story) {
   return story?.circuit === 'A' || story?.sourceCircuit === 'A'
 }
@@ -449,7 +463,20 @@ export function assignEditorialTopic(story) {
   if (sourceTopic) return sourceTopic
 
   const text = textForTopicAssignment(story)
+  const humanistic = isHumanitiesContext(story)
   for (const topic of EDITORIAL_TOPIC_TIEBREAK_ORDER) {
+    // Filosofia i Literatura NOMÉS per context humanístic (14-08-2026).
+    //
+    // Les seves paraules clau són massa comunes en textos científics i
+    // sanitaris, i produïen classificacions falses de manual:
+    //   · "novel drug class" → Literatura, perquè "novel" hi és com a adjectiu
+    //     anglès i la regla el llegia com a "novel·la".
+    //   · "medical ethics" dins d'una peça sanitària → Filosofia, per "ethics".
+    //
+    // Les fonts humanístiques (Psyche, Aeon, Literary Hub, Public Domain
+    // Review) NO passen per aquí: ja les resol `sourceAssignedTopic` més
+    // amunt, i aquell mapatge queda intacte.
+    if (TOPICS_ONLY_IN_HUMANITIES.has(topic) && !humanistic) continue
     const rule = ALLOWED_TOPIC_CONTENT_RULES.find((item) => item.topic === topic)
     if (rule?.rx.test(text)) return topic
   }
