@@ -64,6 +64,7 @@ async function main() {
   // no ha acabat.
   const ESPERA_MAXIMA_MS = 3 * 60 * 1000
   let lot
+  let resultat = null
   try {
     const r = await fetch(`${BASE}/api/refresh-news`, {
       method: 'POST',
@@ -81,8 +82,10 @@ async function main() {
         })
         if (!e.ok) throw new Error(`estat HTTP ${e.status}`)
         const feina = await e.json()
-        if (feina.status === 'completed') acabada = true
-        else if (feina.status === 'failed') {
+        if (feina.status === 'completed') {
+          acabada = true
+          resultat = feina.result || null
+        } else if (feina.status === 'failed') {
           throw new Error(`la feina ha fallat: ${feina.error || 'sense detall'}`)
         }
       }
@@ -92,7 +95,22 @@ async function main() {
         )
       }
     }
+    // KV és eventualment coherent: la feina pot constar acabada i el lot
+    // trigar a ser visible. S'espera que la data arribi a la que diu la feina.
     lot = await llegeixLot()
+    if (resultat?.updatedAt) {
+      const limitVis = Date.now() + 60 * 1000
+      while (
+        Date.now() < limitVis
+        && !(lot.updatedAt && new Date(lot.updatedAt) >= new Date(resultat.updatedAt))
+      ) {
+        await new Promise((res) => setTimeout(res, 2000))
+        lot = await llegeixLot()
+      }
+    }
+    if (resultat?.cache === 'transient') {
+      console.warn("⚠ El lot públic NO s'ha pogut desar (transient): les dades de sota poden ser les d'abans.")
+    }
     console.log(`✓ Radar refrescat: ${(lot.stories || []).length} notícies al lot.`)
   } catch (e) {
     console.error('✗ No s\'ha pogut refrescar el radar:', e.message)

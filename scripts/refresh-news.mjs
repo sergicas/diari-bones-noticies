@@ -41,6 +41,20 @@ async function llegeixLot() {
 const ESPERA_MAXIMA_MS = 3 * 60 * 1000
 const INTERVAL_MS = 3000
 
+async function esperaLotVisible(updatedAtEsperat) {
+  const lot = await llegeixLot()
+  if (!updatedAtEsperat) return lot
+  const limit = Date.now() + 60 * 1000
+  let ara = lot
+  while (Date.now() < limit) {
+    if (ara.updatedAt && new Date(ara.updatedAt) >= new Date(updatedAtEsperat)) return ara
+    await new Promise((r) => setTimeout(r, 2000))
+    process.stdout.write('·')
+    ara = await llegeixLot()
+  }
+  return ara
+}
+
 async function esperaFeina(statusUrl) {
   const limit = Date.now() + ESPERA_MAXIMA_MS
   while (Date.now() < limit) {
@@ -87,8 +101,10 @@ async function refresh() {
       )
     }
   }
-  // Només ara té sentit llegir el lot.
-  const live = await llegeixLot()
+  // I encara: la feina pot constar acabada i el lot trigar a ser visible, perquè
+  // KV és eventualment coherent. Esperem que la data del lot arribi a la que la
+  // feina diu que ha escrit.
+  const live = await esperaLotVisible(feina?.result?.updatedAt)
 
   const elapsedMs = Date.now() - startedAt
   console.log(`✓ Refresc completat en ${(elapsedMs / 1000).toFixed(1)} s`)
@@ -99,6 +115,12 @@ async function refresh() {
     // Amb 'stale' o 'stale-incomplete' la feina ha anat bé però el radar no ha
     // pogut renovar res: la data d'abans es conserva a propòsit.
     console.log(`  Com ha acabat el radar: ${feina.result.cache}`)
+    if (feina.result.cache === 'transient') {
+      console.warn(
+        '  ⚠ El lot públic NO s\'ha pogut desar (transient): el que es veu al web'
+          + ' pot ser el d\'abans.',
+      )
+    }
   }
 
   const stories = live.stories || []

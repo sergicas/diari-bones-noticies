@@ -473,18 +473,50 @@ export async function completePipelineJob(env, idempotencyKey, result) {
     .run()
 }
 
-export async function failPipelineJob(env, idempotencyKey, error) {
+/**
+ * Un intent fallit NO és una feina fallida.
+ *
+ * Cloudflare Queues reparteix com a mínim una vegada i reintenta fins a
+ * `max_retries`. Marcar 'failed' al primer error feia que qui esperava la
+ * feina l'abandonés mentre la cua encara l'havia de tornar a executar: l'estat
+ * mentia. Ara només és terminal quan de debò s'han esgotat els intents; fins
+ * llavors es queda a 'processing' amb l'últim error apuntat, que és la
+ * veritat: s'està intentant, i el darrer intent va anar malament.
+ *
+ * (Es manté a 'processing' i no s'inventa cap estat nou perquè l'esquema de
+ * `pipeline_jobs` té un CHECK amb els tres valors i no cal migrar-lo.)
+ */
+export async function failPipelineJob(
+  env,
+  idempotencyKey,
+  error,
+  { terminal = true, attempts = null } = {},
+) {
   const db = database(env)
   if (!db) return
+  const missatge = error instanceof Error ? error.message : String(error)
+  const timestamp = nowIso()
+  if (terminal) {
+    await db
+      .prepare(
+        `UPDATE pipeline_jobs
+        SET status = 'failed', last_error = ?, updated_at = ?
+        WHERE idempotency_key = ?`,
+      )
+      .bind(missatge, timestamp, idempotencyKey)
+      .run()
+    return
+  }
   await db
     .prepare(
       `UPDATE pipeline_jobs
-      SET status = 'failed', last_error = ?, updated_at = ?
+      SET status = 'processing', last_error = ?, attempts = ?, updated_at = ?
       WHERE idempotency_key = ?`,
     )
     .bind(
-      error instanceof Error ? error.message : String(error),
-      nowIso(),
+      missatge,
+      Number(attempts || 1),
+      timestamp,
       idempotencyKey,
     )
     .run()
