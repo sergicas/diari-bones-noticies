@@ -16,6 +16,7 @@
 
 import {
   countPendingCandidates,
+  countPendingLive,
   decideCandidate,
   expireStaleCandidates,
   listPendingCandidates,
@@ -110,6 +111,11 @@ const STYLES = `
   .publica { background: #146356; color: #fff; }
   .descarta { background: #efe9e2; color: #6a2b1f; }
   .buit { background: #fff; border: 1px solid #e2ddd2; border-radius: 10px; padding: 2rem 1rem; text-align: center; }
+  .cua {
+    font-family: system-ui, sans-serif; font-size: .9rem;
+    background: #ecefe8; color: #3d5245; border-radius: 8px;
+    padding: .6rem .8rem; margin: 0 0 1.25rem;
+  }
   label { display: block; font-family: system-ui, sans-serif; margin-bottom: .5rem; }
   input[type=password] {
     width: 100%; padding: .7rem; font-size: 1rem; border-radius: 8px;
@@ -122,6 +128,7 @@ const STYLES = `
     .compte, .font { color: #a5a29b; }
     .marca { background: #26332c; color: #b8ccbe; }
     .marca.b { background: #35291f; color: #d8b48d; }
+    .cua { background: #26332c; color: #b8ccbe; }
     input[type=password] { background: #14171a; color: #e8e4dc; border-color: #3a4046; }
     .descarta { background: #33292a; color: #e6b3a6; }
   }
@@ -192,20 +199,35 @@ function storyCard(story) {
   <p class="font">Font: ${escapeHtml(story.source || 'sense font')} · <a href="${escapeHtml(story.url || '#')}" target="_blank" rel="noopener noreferrer nofollow">obre l'original</a>${story.imageCredit ? `<br>Imatge: ${escapeHtml(story.imageCredit)}` : ''}</p>
   <form method="post" action="/revisio/decidir" class="botons">
     <input type="hidden" name="id" value="${escapeHtml(story.id)}">
-    <button class="publica" type="submit" name="decisio" value="approve">Publica</button>
+    <!-- "Aprova" i no "Publica": aprovar registra la decisió; qui publica és
+         el radar, a la pròxima passada. El botó ha de dir el que fa. -->
+    <button class="publica" type="submit" name="decisio" value="approve">Aprova</button>
     <button class="descarta" type="submit" name="decisio" value="reject">Descarta</button>
   </form>
 </article>`
 }
 
 async function listPage(env, { missatge = '' } = {}) {
-  const pending = await listPendingCandidates(env)
+  const [pending, esperantSortir] = await Promise.all([
+    listPendingCandidates(env),
+    countPendingLive(env),
+  ])
   const compte =
     pending.length === 0
       ? 'Res per revisar. El diari està al dia.'
       : pending.length === 1
       ? '1 peça espera que la llegeixis.'
       : `${pending.length} peces esperen que les llegeixis.`
+  // Rastre PERMANENT del que s'ha aprovat i encara no ha sortit. Sense això,
+  // qui revisa aprova una peça, no la veu al diari i no sap si s'ha perdut.
+  const enCua =
+    esperantSortir === 0
+      ? ''
+      : `<p class="cua">${
+          esperantSortir === 1
+            ? '1 peça aprovada espera sortir al web'
+            : `${esperantSortir} peces aprovades esperen sortir al web`
+        } · surten a la pròxima passada del radar</p>`
   const cos =
     pending.length === 0
       ? '<div class="buit"><p>Cap peça pendent.</p></div>'
@@ -214,6 +236,7 @@ async function listPage(env, { missatge = '' } = {}) {
     'Sala de revisió',
     `<h1>Sala de revisió</h1>
 <p class="compte">${escapeHtml(compte)}${missatge ? ` · ${escapeHtml(missatge)}` : ''}</p>
+${enCua}
 ${cos}`,
   )
 }
@@ -281,11 +304,7 @@ export async function handleReviewRoutes(request, env) {
     // d'haver publicat una cosa que no hi era.
     const missatge = outcome.ok
       ? decisio === 'approve'
-        ? outcome.live
-          ? 'Publicada.'
-          : // L'aprovació queda feta; només falta que arribi al web. Ho diem
-            // en lloc d'assegurar una cosa que encara no s'ha pogut confirmar.
-            'Aprovada, pendent de sincronitzar amb el web.'
+        ? 'Aprovada. Sortirà al web a la pròxima passada del radar.'
         : 'Descartada.'
       : outcome.error === 'not-pending'
       ? 'Aquesta peça ja estava decidida.'

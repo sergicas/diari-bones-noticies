@@ -43,6 +43,7 @@ import {
   candidateId,
   markStoriesLive,
   pendingLiveStories,
+  persistStoryDetails,
   readDecisions,
   recordPendingCandidates,
   splitByReviewDecision,
@@ -2200,6 +2201,66 @@ export async function getLiveNewsPayload(
     }
   }
 
+  // SINCRONITZACIÓ DE LES APROVADES — ABANS DE RES MÉS.
+  //
+  // Va aquí, i no més avall, perquè el radar té diverses sortides anticipades
+  // (cap font no respon, cap peça no arriba a tenir contingut propi...). Si la
+  // sincronització quedava després, una passada que sortís per qualsevol
+  // d'aquelles portes deixava les peces aprovades sense publicar fins vés a
+  // saber quan.
+  //
+  // Aquest és també l'ÚNIC lloc del programa que escriu el lot públic quan
+  // s'aprova una peça: la sala de revisió només registra decisions a D1. Tenir
+  // dos escriptors era el que feia perdre aprovacions simultànies.
+  const cachedStories = Array.isArray(cached?.stories) ? cached.stories : []
+  const perSincronitzar = await pendingLiveStories(env)
+  if (perSincronitzar.length > 0) {
+    const jaAlLot = new Set(cachedStories.map((story) => story.url))
+    const recuperades = perSincronitzar.filter((story) => !jaAlLot.has(story.url))
+    const lot = recuperades.length > 0 ? [...recuperades, ...cachedStories] : cachedStories
+    let escrit = recuperades.length === 0
+    if (recuperades.length > 0) {
+      try {
+        await kv.put(
+          cacheKey,
+          JSON.stringify({
+            ...(cached || {}),
+            updatedAt: cached?.updatedAt || new Date().toISOString(),
+            stories: lot,
+          }),
+        )
+        await persistStoryDetails(kv, recuperades)
+        escrit = true
+        // El lot de memòria també, perquè les sortides anticipades i
+        // l'arrossegament de sota les incloguin.
+        cached = { ...(cached || {}), stories: lot }
+      } catch (error) {
+        console.error(
+          JSON.stringify({
+            event: 'review.sync.failed',
+            error: error instanceof Error ? error.message : String(error),
+          }),
+        )
+      }
+    }
+    // Es marquen com a publicades NOMÉS les que de debò han quedat al lot.
+    if (escrit) {
+      const alLot = new Set(lot.map((story) => story.url))
+      const sincronitzades = perSincronitzar
+        .filter((story) => alLot.has(story.url))
+        .map((story) => candidateId(story))
+      if (sincronitzades.length > 0) {
+        await markStoriesLive(env, sincronitzades)
+        console.log(
+          JSON.stringify({
+            event: 'review.sync.done',
+            sincronitzades: sincronitzades.length,
+          }),
+        )
+      }
+    }
+  }
+
   // Les ja publicades es llegeixen ABANS de recollir, perquè la recollida les
   // pugui apartar abans de retallar la reserva (vegeu collectLivePositiveNews).
   const seenEntries = await loadSeenEntries(kv)
@@ -2358,27 +2419,6 @@ export async function getLiveNewsPayload(
       }),
     )
   }
-
-  // EL REINTENT DE PUBLICACIÓ.
-  //
-  // Una aprovació humana no es desfà mai (vegeu reviewGate.decideCandidate). Si
-  // en el moment d'aprovar-la la peça no es va poder confirmar al web, queda
-  // marcada com a pendent de sincronitzar i la recollim aquí: el radar ja és
-  // l'únic que reescriu el lot públic, així que és el lloc natural per
-  // reintentar-ho, sense cap cua nova i sense dos escriptors barallant-se.
-  const perSincronitzar = await pendingLiveStories(env)
-  const jaAlLot = new Set(approvedStories.map((story) => story.url))
-  const recuperades = perSincronitzar.filter((story) => !jaAlLot.has(story.url))
-  if (recuperades.length > 0) {
-    approvedStories.unshift(...recuperades)
-    console.log(
-      JSON.stringify({
-        event: 'review.gate.resynced',
-        recuperades: recuperades.length,
-      }),
-    )
-  }
-
   // Marquem com a "vistes" NOMÉS les noves que de debò entren al lot. Una
   // notícia acceptada que avui queda fora (pel sostre d'una altra llengua o per
   // diversitat de font) segueix sent elegible al pròxim refresc en lloc de
@@ -2415,13 +2455,6 @@ export async function getLiveNewsPayload(
       return { ...cached, cache: 'stale-awaiting-review' }
     }
     const payload = await setCachedPayload(kv, approvedStories)
-    // El lot s'ha escrit: les que esperaven sincronitzar-se ja són al web.
-    if (perSincronitzar.length > 0) {
-      await markStoriesLive(
-        env,
-        perSincronitzar.map((story) => candidateId(story)),
-      )
-    }
     // Persistim sota story:<id> només les peces que entren per primer cop.
     // Les peces arrossegades ja tenen aquesta còpia i reescriure fins a 50 claus
     // a cada refresc consumia quota de KV sense canviar-ne el contingut.

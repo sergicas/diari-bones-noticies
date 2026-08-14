@@ -158,26 +158,29 @@ describe('porta d’aprovació humana', () => {
     expect(insert.query).toContain("'captured'")
   })
 
-  it('aprovar una peça la publica i la posa de seguida al lot en viu', async () => {
+  it('aprovar NO toca el lot públic: només registra la decisió a D1', async () => {
+    // La sala de revisió no ha d'escriure mai a KV. Mentre ho feia, hi havia
+    // dos escriptors del lot públic i dues aprovacions alhora en perdien una.
     const peca = story()
     const db = fakeDb({ first: { payload_json: JSON.stringify(peca) } })
     const kv = fakeKv({ updatedAt: '2026-08-13T06:00:00Z', stories: [] })
+    const escriptures = []
+    kv.put = async (key) => escriptures.push(key)
+
     const outcome = await decideCandidate(
       { EDITORIAL_DB: db, LIVE_NEWS_KV: kv },
       'peca-1',
       'approve',
     )
     expect(outcome.ok).toBe(true)
-    expect(outcome.live).toBe(true)
+    expect(escriptures, 'aprovar no ha de tocar KV').toEqual([])
+
     const update = db.calls.find((call) => call.query.includes('UPDATE'))
     expect(update.values[0]).toBe('published')
-    // Deixa rastre que ho ha decidit una PERSONA: sense això seria
-    // indistingible d'una peça publicada per l'automatisme antic.
     expect(update.query).toContain('human_decision')
     expect(update.values).toContain('approve')
-    const lot = JSON.parse(kv.store.get('latest'))
-    expect(lot.stories.map((s) => s.url)).toContain(peca.url)
-    expect(kv.store.has('story:peca-1')).toBe(true)
+    // I queda a la cua de sortida, perquè el radar la publiqui.
+    expect(update.values).toContain('pending')
   })
 
   it('descartar una peça no la publica enlloc', async () => {
@@ -238,27 +241,28 @@ describe('porta d’aprovació humana', () => {
     expect(reserva.values).toContain('pending')
   })
 
-  it('dues peces aprovades alhora hi són totes dues, no només l’última', async () => {
-    // Reproduït per Codex: totes dues deien ok/live, D1 les tenia publicades i
-    // la portada només en contenia una. El get + put perdia una actualització.
+  it('dues aprovacions alhora deixen DUES peces a la cua, sense perdre’n cap', async () => {
+    // El cas que Codex va reproduir. Ara no es perd res perquè cap de les dues
+    // no escriu al lot: totes dues només apunten la seva decisió a D1.
     const a = story({ id: 'peca-a', url: 'https://example.com/a' })
     const b = story({ id: 'peca-b', url: 'https://example.com/b' })
+    const dbA = fakeDb({ first: { payload_json: JSON.stringify(a) } })
+    const dbB = fakeDb({ first: { payload_json: JSON.stringify(b) } })
     const kv = fakeKv({ stories: [] })
-    const env = (peca) => ({
-      EDITORIAL_DB: fakeDb({ first: { payload_json: JSON.stringify(peca) } }),
-      LIVE_NEWS_KV: kv,
-    })
+    const escriptures = []
+    kv.put = async (key) => escriptures.push(key)
+
     const [ra, rb] = await Promise.all([
-      decideCandidate(env(a), 'peca-a', 'approve'),
-      decideCandidate(env(b), 'peca-b', 'approve'),
+      decideCandidate({ EDITORIAL_DB: dbA, LIVE_NEWS_KV: kv }, 'peca-a', 'approve'),
+      decideCandidate({ EDITORIAL_DB: dbB, LIVE_NEWS_KV: kv }, 'peca-b', 'approve'),
     ])
     expect(ra.ok).toBe(true)
     expect(rb.ok).toBe(true)
-    const lot = JSON.parse(kv.store.get('latest'))
-    expect(lot.stories.map((s) => s.url).sort()).toEqual([
-      'https://example.com/a',
-      'https://example.com/b',
-    ])
+    expect(escriptures, 'cap de les dues no ha de tocar KV').toEqual([])
+    for (const [db, nom] of [[dbA, 'peca-a'], [dbB, 'peca-b']]) {
+      const update = db.calls.find((c) => c.query.includes('UPDATE'))
+      expect(update.values, `${nom} ha de quedar a la cua`).toContain('pending')
+    }
   })
 
   it('no accepta cap decisió que no sigui publicar o descartar', async () => {

@@ -250,67 +250,50 @@ export async function countPendingCandidates(env) {
  * detall. Sense això, aprovar-la no es notaria fins al pròxim refresc (fins a
  * dotze hores després) i la revisió semblaria que no fa res.
  */
-const LIVE_EDITION_ATTEMPTS = 3
-
 /**
- * Afegeix la peça al lot públic i CONFIRMA que hi ha quedat.
+ * Desa la còpia de detall de cada peça (la pàgina /noticia/:id).
  *
- * El `get` + `put` de sempre perdia actualitzacions: dues peces aprovades
- * alhora llegien la mateixa edició, cadascuna hi afegia la seva i la segona
- * escriptura esborrava la primera. Les dues deien "publicada" i a la portada
- * només n'hi havia una.
- *
- * Rellegint i reintentant, el cas convergeix: qui es troba que no hi és, hi
- * torna a entrar sobre l'edició ja actualitzada. KV té consistència eventual,
- * així que una relectura pot sortir endarrerida; per això es reintenta unes
- * quantes vegades i, si tot i així no es confirma, es prefereix dir que NO
- * s'ha publicat (la peça torna a la sala) abans que dir que sí sense saber-ho.
+ * Viu aquí perquè el RADAR la cridi: la sala de revisió no escriu mai a KV.
+ * Vegeu decideCandidate.
  */
-async function addToLiveEdition(kv, story) {
-  for (let attempt = 0; attempt < LIVE_EDITION_ATTEMPTS; attempt += 1) {
-    const cached = await kv.get('latest', 'json')
-    const stories = Array.isArray(cached?.stories) ? cached.stories : []
-    if (stories.some((item) => item.url === story.url)) return true
-    await kv.put(
-      'latest',
-      JSON.stringify({
-        ...(cached || {}),
-        updatedAt: cached?.updatedAt || nowIso(),
-        stories: [story, ...stories],
-      }),
-    )
-    const after = await kv.get('latest', 'json')
-    if ((after?.stories || []).some((item) => item.url === story.url)) return true
+export async function persistStoryDetails(kv, stories) {
+  if (!kv || !Array.isArray(stories) || stories.length === 0) return { written: 0 }
+  let written = 0
+  for (const story of stories) {
+    const id = candidateId(story)
+    if (!id) continue
+    try {
+      await kv.put(`story:${id}`, JSON.stringify(story), {
+        expirationTtl: STORY_DETAIL_TTL_SECONDS,
+      })
+      written += 1
+    } catch (error) {
+      console.warn(
+        JSON.stringify({
+          event: 'review.detail.write-failed',
+          id,
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      )
+    }
   }
-  return false
+  return { written }
 }
 
-/**
- * Escriu la peça al web. NO desfà res si falla: vegeu decideCandidate.
- *
- * Torna true només si s'ha pogut CONFIRMAR. Amb KV, "no confirmat" no vol dir
- * "no publicat" —les lectures són eventualment coherents i una relectura pot
- * sortir endarrerida—, per això el que no es confirma es deixa pendent de
- * sincronitzar i ho recull el radar, en lloc de treure-ho.
- */
-async function pushApprovedStoryLive(env, story) {
-  const kv = env?.LIVE_NEWS_KV
-  const id = candidateId(story)
-  if (!kv || !story?.url || !id) return false
+/** Quantes aprovades esperen sortir al web (per ensenyar-ho a la sala). */
+export async function countPendingLive(env) {
+  const db = database(env)
+  if (!db) return 0
   try {
-    await kv.put(`story:${id}`, JSON.stringify(story), {
-      expirationTtl: STORY_DETAIL_TTL_SECONDS,
-    })
-    return await addToLiveEdition(kv, story)
-  } catch (error) {
-    console.warn(
-      JSON.stringify({
-        event: 'review.publish.not-confirmed',
-        id,
-        error: error instanceof Error ? error.message : String(error),
-      }),
-    )
-    return false
+    const row = await db
+      .prepare(
+        `SELECT COUNT(*) AS total FROM stories
+          WHERE human_decision = 'approve' AND live_state = 'pending'`,
+      )
+      .first()
+    return Number(row?.total || 0)
+  } catch {
+    return 0
   }
 }
 
@@ -433,20 +416,14 @@ export async function decideCandidate(env, id, decision) {
       return { ok: false, error: 'not-pending' }
     }
 
-    if (decision !== 'approve') return { ok: true, id, decision, live: false }
-
-    const story = parsePayload(row.payload_json)
-    const live = story
-      ? await pushApprovedStoryLive(env, {
-          ...story,
-          id,
-          publishedAt: story.publishedAt || timestamp,
-        })
-      : false
-    if (live) await markStoriesLive(env, [id])
-    // Publicada o no, l'aprovació es queda feta. `live: false` només vol dir
-    // que encara no s'ha confirmat; el radar ho reintentarà.
-    return { ok: true, id, decision, live }
+    // I AQUÍ S'ACABA. Aprovar només toca D1.
+    //
+    // Abans, aprovar escrivia també al lot públic per fer-ho aparèixer de
+    // seguida. Semblava una comoditat i era un segon escriptor: dues
+    // aprovacions alhora llegien la mateixa edició i una es perdia, tot i que
+    // totes dues deien que s'havien publicat. El radar és l'ÚNIC que escriu el
+    // lot; la sala només registra decisions.
+    return { ok: true, id, decision, live: false }
   } catch (error) {
     console.error(
       JSON.stringify({
