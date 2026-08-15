@@ -63,18 +63,23 @@ async function runGemini(env, { system, user, maxTokens }) {
   const text = (data?.candidates?.[0]?.content?.parts || [])
     .map((part) => part?.text || '')
     .join('')
-  return { response: text }
+  // QUI HO HA ESCRIT, DE DEBÒ. No es pot deduir després: enmig d'un lot,
+  // Gemini pot fallar en una sola crida i el recanvi respondre-la. Preguntant
+  // el proveïdor "actual" en acabar, aquell veredicte quedava etiquetat amb el
+  // model equivocat, i la comparació d'ombra mesurava el model que no era.
+  return { response: text, provider: 'gemini', model }
 }
 
 // Crida al model de Cloudflare, tal com es feia fins ara.
 async function runCloudflare(env, { system, user, maxTokens }) {
-  return env.AI.run(CLOUDFLARE_TEXT_MODEL, {
+  const out = await env.AI.run(CLOUDFLARE_TEXT_MODEL, {
     max_tokens: maxTokens,
     messages: [
       { role: 'system', content: system },
       { role: 'user', content: user },
     ],
   })
+  return { ...out, provider: 'cloudflare', model: CLOUDFLARE_TEXT_MODEL }
 }
 
 // RECANVI QUAN GEMINI DIU PROU (14-08-2026).

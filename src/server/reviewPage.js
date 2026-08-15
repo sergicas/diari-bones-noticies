@@ -23,6 +23,7 @@ import {
   decideCandidate,
   expireStaleCandidates,
   listPendingCandidates,
+  listPendingWithdrawals,
   shadowAgreement,
 } from './reviewGate.js'
 
@@ -248,28 +249,47 @@ function storyCard(story, relacionadaAmb = null) {
 }
 
 async function listPage(env, { missatge = '' } = {}) {
-  const [pending, esperantSortir, decididesSoles, concordanca] = await Promise.all([
-    listPendingCandidates(env),
-    countPendingLive(env),
-    listAssistantDecisions(env),
-    shadowAgreement(env),
-  ])
+  const [pending, esperantSortir, decididesSoles, concordanca, retiradesPendents] =
+    await Promise.all([
+      listPendingCandidates(env),
+      countPendingLive(env),
+      listAssistantDecisions(env),
+      shadowAgreement(env),
+      listPendingWithdrawals(env),
+    ])
+  // LES RETIRADES QUE ENCARA NO S'HAN FET, SEMPRE A LA VISTA.
+  //
+  // Abans això només es deia al missatge de després de clicar: en recarregar,
+  // la peça ja no sortia enlloc i semblava resolta mentre encara era al web.
+  const enRetirada =
+    retiradesPendents.length === 0
+      ? ''
+      : `<p class="cua">${
+          retiradesPendents.length === 1
+            ? '1 peça descartada encara és al web'
+            : `${retiradesPendents.length} peces descartades encara són al web`
+        } · es retiren a la pròxima passada del radar:<br>${retiradesPendents
+          .map((r) => escapeHtml(r.title || r.id))
+          .join('<br>')}</p>`
   // COM HO ESTÀ FENT L'AJUDANT MENTRE MIRA SENSE TOCAR RES.
   //
   // No es diu enlloc QUÈ opina d'una peça concreta abans que la decideixis: si
   // ho digués, el número mesuraria fins a quin punt et deixes convèncer, no si
-  // encerta. Aquest recompte és l'única cosa que se n'ensenya, i és el que ha
-  // de decidir si algun dia se li dona la mà.
+  // encerta. I diu també el que no sap: quantes en va deixar per a tu. Una
+  // xifra d'encert sense la de dubtes és una mentida per omissió.
+  const actual = concordanca.versions[0]
   const provaAjudant =
-    concordanca.total < 5
+    !actual || actual.contrastables < 5
       ? ''
-      : `<p class="cua">L'ajudant, mentre mira: coincidiria amb tu en ${Math.round(
-          (concordanca.concorden / concordanca.total) * 100,
-        )} de cada 100 (${concordanca.total} peces). Hauria publicat ${
-          concordanca.hauriaPublicatIVaDescartar
-        } que vas descartar i hauria descartat ${
-          concordanca.hauriaDescartatIVaPublicar
-        } que vas publicar.</p>`
+      : `<p class="cua">L'ajudant, mentre mira: de ${actual.contrastables} peces que has decidit, ` +
+        `en va decidir ${actual.decidides} i en va deixar ${actual.dubtes} per a tu. ` +
+        (actual.decidides === 0
+          ? 'Encara no n’ha decidit cap: no hi ha res a comparar.'
+          : `De les ${actual.decidides}, coincidiria amb tu en ${actual.concorden}. ` +
+            `Hauria publicat ${actual.hauriaPublicatIVaDescartar} que vas descartar i ` +
+            `hauria descartat ${actual.hauriaDescartatIVaPublicar} que vas publicar.`) +
+        `<br><small>${escapeHtml(actual.versio)}</small></p>`
+
   const compte =
     pending.length === 0
       ? 'Res per revisar. El diari està al dia.'
@@ -358,6 +378,7 @@ ${llista
     `<h1>Sala de revisió</h1>
 <p class="compte">${escapeHtml(compte)}${missatge ? ` · ${escapeHtml(missatge)}` : ''}</p>
 ${enCua}
+${enRetirada}
 ${provaAjudant}
 ${seccioAuto(publicadesSoles, "L'ajudant ha publicat sol", 'reject', 'Retira-la del diari')}
 ${seccioAuto(descartadesSoles, "L'ajudant ha descartat sol", 'approve', 'Publica-la igualment')}

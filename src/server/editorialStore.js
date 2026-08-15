@@ -412,6 +412,29 @@ export async function findStoryInEditorialStore(env, id) {
   return editorialSeedStories.find((story) => story.id === id) || null
 }
 
+/**
+ * LES PECES D'UNA EDICIÓ, PER A REPARTIR-LES, dient si l'edició existeix.
+ *
+ * ZERO PECES ÉS UNA RESPOSTA VÀLIDA, i vol dir "no enviïs res". Abans, una
+ * edició que es quedava buida després de treure'n les retirades es confonia
+ * amb una edició inexistent, i el repartiment queia a `latest`: enviava peces
+ * velles o d'una altra edició, justament al pas que no es pot desfer. El
+ * recanvi només val quan de debò no hi ha edició.
+ */
+export async function readEditionForDistribution(env, editionId, limit = 30) {
+  const db = database(env)
+  if (!db || !editionId) return { stories: [], edicioTrobada: false }
+  const existeix = await db
+    .prepare(`SELECT id FROM editions WHERE id = ? LIMIT 1`)
+    .bind(editionId)
+    .first()
+  if (!existeix) return { stories: [], edicioTrobada: false }
+  return {
+    stories: await readEditionStories(env, editionId, limit),
+    edicioTrobada: true,
+  }
+}
+
 export async function readEditionStories(env, editionId, limit = 30) {
   const db = database(env)
   if (!db || !editionId) return []

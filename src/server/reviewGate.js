@@ -364,7 +364,9 @@ export async function listAssistantDecisions(env, { limit = 60 } = {}) {
  */
 export async function pendingWithdrawals(env) {
   const db = database(env)
-  if (!db) return []
+  // Sense sala no es pot saber si hi ha res per retirar. Qui ho crida ha de
+  // decidir explícitament què fa; aquí no es diu mai "no n'hi ha cap".
+  if (!db) throw avariaDeVeto('no hi ha sala on llegir les ordres de retirada')
   try {
     const { results } = await db
       .prepare(
@@ -384,6 +386,36 @@ export async function pendingWithdrawals(env) {
       }),
     )
     throw avariaDeVeto('no es poden llegir les ordres de retirada', error)
+  }
+}
+
+/**
+ * LES RETIRADES QUE ENCARA NO S'HAN FET EFECTIVES.
+ *
+ * La sala ho deia només al missatge de després de clicar: en recarregar la
+ * pàgina, la peça ja no sortia enlloc —perquè ja tenia decisió humana— i
+ * semblava resolta mentre encara era al web. Això ha de ser visible fins que
+ * el radar ho confirmi.
+ */
+export async function listPendingWithdrawals(env) {
+  const db = database(env)
+  if (!db) return []
+  try {
+    const { results } = await db
+      .prepare(
+        `SELECT id, title, updated_at FROM stories
+          WHERE withdrawal = 'pending' ORDER BY updated_at DESC LIMIT 20`,
+      )
+      .all()
+    return results || []
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        event: 'review.withdrawals.list-failed',
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    )
+    return []
   }
 }
 
@@ -457,7 +489,15 @@ export async function recordShadowVerdicts(env, verdicts, { version = '' } = {})
                   shadow_version = ?
             WHERE id = ?`,
         )
-        .bind(v.decision, String(v.reason || '').slice(0, 300), timestamp, version, v.id),
+        .bind(
+        v.decision,
+        String(v.reason || '').slice(0, 300),
+        timestamp,
+        // La versió de CADA veredicte mana sobre la del lot: dins d'una mateixa
+        // passada hi pot haver dos models diferents.
+        String(v.version || version || '').slice(0, 120),
+        v.id,
+      ),
     )
     const outcome = await db.batch(statements)
     for (const item of outcome || []) recorded += Number(item?.meta?.changes || 0)
@@ -518,37 +558,57 @@ export async function senseVetades(env, stories) {
 /**
  * COM HO ESTÀ FENT L'AJUDANT, comparat amb les decisions reals d'en Sergi.
  *
- * Només compta les peces on hi ha totes dues coses: el que ell va decidir i el
- * que la màquina hauria fet. És el número que ha de decidir si algun dia se li
- * dona la mà, i sense ell el mode de proves no serveix de res.
+ * DIU TAMBÉ EL QUE NO SAP. La primera versió comptava només les peces on la
+ * màquina s'havia mullat: amb 95 dubtes i 5 encerts hauria dit "100 de cada
+ * 100", que és una mentida per omissió de les grosses. Ara la unitat és la
+ * peça CONTRASTABLE —una que una persona ha decidit i sobre la qual l'ajudant
+ * va deixar constància, dubte inclòs— i es diu quantes en va decidir.
+ *
+ * I no barreja versions: cada canvi de criteri o de model és un ajudant
+ * diferent, i ajuntar-los amaga si el d'ara va millor o pitjor que el d'abans.
  *
  * La comparació és CEGA: la sala no ensenya mai el veredicte de la màquina
- * abans que ell decideixi, perquè si no, el número mesuraria la seva
- * suggestió, no el criteri de l'ajudant.
+ * abans que ell decideixi, perquè si no, el número mesuraria la seva suggestió
+ * i no el criteri de l'ajudant.
  */
-export async function shadowAgreement(env, { dies = 30 } = {}) {
+export async function shadowAgreement(env, { dies = 30, limit = 500 } = {}) {
   const db = database(env)
-  const buit = { total: 0, concorden: 0, hauriaPublicatIVaDescartar: 0, hauriaDescartatIVaPublicar: 0 }
-  if (!db) return buit
+  if (!db) return { versions: [], total: buidaConcordanca('') }
   try {
     const desDe = new Date(Date.now() - dies * 24 * 60 * 60 * 1000).toISOString()
     const { results } = await db
       .prepare(
-        `SELECT shadow_decision, human_decision FROM stories
-          WHERE shadow_decision IN ('approve', 'reject')
+        `SELECT shadow_decision, shadow_version, human_decision, shadow_at
+           FROM stories
+          WHERE shadow_decision IS NOT NULL
             AND human_decision IN ('approve', 'reject')
-            AND human_reviewed_at >= ?`,
+            AND human_reviewed_at >= ?
+          ORDER BY shadow_at DESC
+          LIMIT ?`,
       )
-      .bind(desDe)
+      .bind(desDe, Math.max(1, Math.min(2000, Number(limit) || 500)))
       .all()
-    const comptes = { ...buit }
+
+    const perVersio = new Map()
+    const total = buidaConcordanca('totes les versions')
     for (const row of results || []) {
-      comptes.total += 1
-      if (row.shadow_decision === row.human_decision) comptes.concorden += 1
-      else if (row.shadow_decision === 'approve') comptes.hauriaPublicatIVaDescartar += 1
-      else comptes.hauriaDescartatIVaPublicar += 1
+      const clau = row.shadow_version || '(sense versió)'
+      if (!perVersio.has(clau)) perVersio.set(clau, buidaConcordanca(clau))
+      for (const comptes of [perVersio.get(clau), total]) {
+        comptes.contrastables += 1
+        if (row.shadow_decision === 'doubt') {
+          comptes.dubtes += 1
+          continue
+        }
+        comptes.decidides += 1
+        if (row.shadow_decision === row.human_decision) comptes.concorden += 1
+        else if (row.shadow_decision === 'approve') comptes.hauriaPublicatIVaDescartar += 1
+        else comptes.hauriaDescartatIVaPublicar += 1
+      }
     }
-    return comptes
+    // Les files venen ordenades de la més recent a la més antiga, o sigui que
+    // la versió que fa servir ara és la primera que apareix.
+    return { versions: [...perVersio.values()], total }
   } catch (error) {
     console.error(
       JSON.stringify({
@@ -556,7 +616,19 @@ export async function shadowAgreement(env, { dies = 30 } = {}) {
         error: error instanceof Error ? error.message : String(error),
       }),
     )
-    return buit
+    return { versions: [], total: buidaConcordanca('') }
+  }
+}
+
+function buidaConcordanca(versio) {
+  return {
+    versio,
+    contrastables: 0,
+    decidides: 0,
+    dubtes: 0,
+    concorden: 0,
+    hauriaPublicatIVaDescartar: 0,
+    hauriaDescartatIVaPublicar: 0,
   }
 }
 

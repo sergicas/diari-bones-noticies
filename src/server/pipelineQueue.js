@@ -14,7 +14,7 @@ import {
   completePipelineJob,
   failPipelineJob,
   persistEditorialEdition,
-  readEditionStories,
+  readEditionForDistribution,
   recordDeliveryRun,
 } from './editorialStore.js'
 
@@ -165,9 +165,18 @@ async function processRefreshMessage(env, message) {
 async function processDailyDistribution(env, message) {
   const claim = await beginPipelineJob(env, message)
   if (!claim.shouldRun) return { skipped: 'already-completed' }
-  const storedStories = await readEditionStories(env, message.editionId, 6)
-  const stories =
-    storedStories.length > 0 ? storedStories : await latestStoriesFromKv(env)
+  const edicio = await readEditionForDistribution(env, message.editionId, 6)
+  // Si l'edició existeix, mana el que hi ha: encara que hagi quedat a zero
+  // perquè se n'han retirat les peces. Caure a `latest` en aquest cas enviava
+  // notícies d'una altra edició.
+  const stories = edicio.edicioTrobada
+    ? edicio.stories
+    : await latestStoriesFromKv(env)
+  if (stories.length === 0) {
+    const buida = { skipped: 'no-stories', edicioTrobada: edicio.edicioTrobada }
+    await completePipelineJob(env, message.idempotencyKey, buida)
+    return buida
+  }
   // Les mateixes peces que ja s'han comprovat contra la sala, no una lectura
   // nova de `latest`: si no, el correu i la notificació podien anar per camins
   // diferents i enviar coses distintes.
@@ -230,9 +239,18 @@ async function processNewsletterBackfill(env, message) {
 async function processSocialDistribution(env, message) {
   const claim = await beginPipelineJob(env, message)
   if (!claim.shouldRun) return { skipped: 'already-completed' }
-  const storedStories = await readEditionStories(env, message.editionId, 30)
-  const stories =
-    storedStories.length > 0 ? storedStories : await latestStoriesFromKv(env)
+  const edicio = await readEditionForDistribution(env, message.editionId, 30)
+  // Si l'edició existeix, mana el que hi ha: encara que hagi quedat a zero
+  // perquè se n'han retirat les peces. Caure a `latest` en aquest cas enviava
+  // notícies d'una altra edició.
+  const stories = edicio.edicioTrobada
+    ? edicio.stories
+    : await latestStoriesFromKv(env)
+  if (stories.length === 0) {
+    const buida = { skipped: 'no-stories', edicioTrobada: edicio.edicioTrobada }
+    await completePipelineJob(env, message.idempotencyKey, buida)
+    return buida
+  }
   const result = await announceFreshStories(env, stories)
   await recordDeliveryRun(env, {
     idempotencyKey: message.idempotencyKey,

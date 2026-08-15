@@ -1,4 +1,3 @@
-import { activeTextProvider } from './ai/textModel.js'
 import { revisaCandidata, SHADOW_VERSION } from './editorAssistant.js'
 import {
   candidateId,
@@ -75,6 +74,9 @@ export async function passadaDeLAjudant(env, candidates = []) {
         decision,
         reason: r.guardia ? `[${r.guardia}] ${r.motiu}` : r.motiu,
         story,
+        // Per candidata, no per lot: el que ho ha decidit de debò. Quan atura
+        // una guàrdia no hi ha model, i es diu així.
+        version: `${SHADOW_VERSION}·${r.model || `guardia:${r.guardia || 'cap'}`}`,
       })
     }
 
@@ -86,12 +88,10 @@ export async function passadaDeLAjudant(env, candidates = []) {
       // Es desa el veredicte de CADA candidata, dubtes inclosos, i no cinc
       // exemples al registre: sense això, passats uns dies no hi ha manera de
       // comparar el criteri de la màquina amb el d'ell, i la prova no serveix.
-      // Es desa també QUIN model ho ha dit. La versió sola era una constant
-      // escrita a mà: si el proveïdor canvia (Gemini sense quota → Llama), els
-      // veredictes es barregen i la comparació deixa de voler dir res.
-      await recordShadowVerdicts(env, tots, {
-        version: `${SHADOW_VERSION}·${activeTextProvider(env)}`,
-      })
+      // Cada veredicte porta la seva versió i el seu model (vegeu més amunt):
+      // preguntar quin proveïdor s'està fent servir en acabar el lot etiquetava
+      // malament els veredictes quan Gemini havia fallat a mig camí.
+      await recordShadowVerdicts(env, tots, { version: SHADOW_VERSION })
       console.log(
         JSON.stringify({
           event: 'assistant.shadow',

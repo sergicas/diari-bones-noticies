@@ -248,7 +248,13 @@ export async function revisaCandidata(env, story, { exemples = [] } = {}) {
       user: retallaPerAlPrompt(story),
       maxTokens: 200,
     })
-    return { ...llegeixVeredicte(out?.response), guardia: null }
+    // El model que ha respost AQUESTA candidata viatja amb el veredicte. Vegeu
+    // `runTextModel`: enmig d'un lot es pot canviar de proveïdor.
+    return {
+      ...llegeixVeredicte(out?.response),
+      guardia: null,
+      model: out?.provider ? `${out.provider}:${out.model}` : null,
+    }
   } catch (error) {
     // Si l'ajudant no pot pensar, no decideix: ho deixa per a una persona.
     console.warn(

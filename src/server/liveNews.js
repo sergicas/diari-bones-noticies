@@ -2247,7 +2247,10 @@ export async function getLiveNewsPayload(
   // ORDRES DE RETIRADA. El radar és l'únic que escriu el lot públic, així que
   // és ell qui les compleix: treu la peça del lot i la seva pàgina de detall,
   // i només llavors la marca com a retirada.
-  const aRetirar = await pendingWithdrawals(env)
+  // Sense sala configurada no hi ha ni ordres ni aprovacions: el radar no pot
+  // publicar res de nou igualment. Es diu aquí, explícitament, en lloc de
+  // deixar que la consulta respongui "cap" i sembli que tot va bé.
+  const aRetirar = env?.EDITORIAL_DB ? await pendingWithdrawals(env) : []
   const urlsRetirades = new Set(aRetirar.map((r) => r.url))
 
   async function tancaEdicio(
