@@ -158,6 +158,25 @@ describe('porta d’aprovació humana', () => {
     expect(insert.query).toContain("'captured'")
   })
 
+  it('mai desa cap marca d’agrupació, encara que li’n passin una', async () => {
+    // La garantia és AQUÍ, al punt d'escriptura, i no en qui crida: deixar-ho
+    // en mans del cridador ja va fallar una vegada i una peça pendent va
+    // desaparèixer de la sala.
+    const db = fakeDb()
+    await recordPendingCandidates({ EDITORIAL_DB: db }, [
+      { ...story(), possibleDuplicateOf: 'una-altra-peca' },
+    ])
+    const insert = db.calls.find((c) => c.query.includes('INSERT'))
+    const desat = insert.values.find(
+      (v) => typeof v === 'string' && v.startsWith('{'),
+    )
+    expect(desat).toBeTruthy()
+    expect(desat).not.toContain('possibleDuplicateOf')
+    expect(JSON.parse(desat).possibleDuplicateOf).toBeUndefined()
+    // I la resta de la peça es desa sencera.
+    expect(JSON.parse(desat).title).toBe(story().title)
+  })
+
   it('sense base de dades i AMB candidates, també llança', async () => {
     // L'últim racó on encara s'incomplia "el que no es desa, no es marca":
     // sense binding es tornava { recorded: 0 } i el radar continuava fins a

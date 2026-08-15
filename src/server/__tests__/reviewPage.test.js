@@ -110,8 +110,12 @@ describe('sala de revisió', () => {
     )
     const body = await response.text()
     expect(body).toContain('Titular que encara no ha de ser públic')
-    expect(body).toContain('Publica')
-    expect(body).toContain('Descarta')
+    // El TEXT REAL dels botons, no una paraula solta: "Publica" apareix també
+    // dins d'un comentari de l'HTML, i l'assercció passava per accident tot i
+    // que el botó ja deia "Aprova".
+    expect(body).toContain('>Aprova</button>')
+    expect(body).toContain('>Descarta</button>')
+    expect(body).not.toContain('>Publica</button>')
   })
 
   it('demana als cercadors que no la indexin', async () => {

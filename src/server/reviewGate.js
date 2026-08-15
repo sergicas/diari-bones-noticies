@@ -55,6 +55,13 @@ export function candidateId(story) {
   return story?.id || feedStoryId(story?.url || story?.title || '')
 }
 
+/** Treu qualsevol marca d'agrupació abans de desar una candidata. */
+function senseMarcaDeGrup(story) {
+  if (!story || story.possibleDuplicateOf === undefined) return story
+  const { possibleDuplicateOf: _fora, ...net } = story
+  return net
+}
+
 function parsePayload(value) {
   if (!value) return null
   if (typeof value === 'object') return value
@@ -182,7 +189,12 @@ export async function recordPendingCandidates(env, stories) {
             story.source || null,
             story.category || null,
             story.language || 'ca',
-            JSON.stringify(story),
+            // L'AGRUPACIÓ NO ES DESA MAI, i es garanteix AQUÍ, al punt
+            // d'escriptura. Deixar-ho en mans de qui crida ja va fallar una
+            // vegada: el radar li passava les peces amb la marca posada i, quan
+            // la representant sortia de la sala, la seguidora apuntava a algú
+            // que ja no hi era i desapareixia. Els grups es calculen en llegir.
+            JSON.stringify(senseMarcaDeGrup(story)),
             story.firstSeenAt || timestamp,
             timestamp,
           ),

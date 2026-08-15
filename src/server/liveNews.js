@@ -2474,11 +2474,10 @@ export async function getLiveNewsPayload(
     await recordPendingCandidates(env, pendingStories)
   }
 
-  // Es marquen `pendingStories` SENCERES, incloses les que s'han descartat per
-  // repetides. És a propòsit: l'esdeveniment ja queda representat per la peça
-  // que ha entrat a la sala, i no marcar-les faria que el radar les tornés a
-  // recollir i a fer escriure a cada passada, cremant quota per ensenyar el
-  // mateix eclipsi una vegada i una altra.
+  // Es marquen `pendingStories` SENCERES: totes han quedat desades a la sala i
+  // no se n'ha descartat cap per semblar repetida. Si no es marquessin, el
+  // radar les tornaria a recollir i a fer escriure a cada passada, cremant
+  // quota per proposar el que ja espera que algú el llegeixi.
   const shownFreshUrls = [...approvedStories, ...pendingStories]
     .filter((story) => freshUrlSet.has(story.url))
     .map((story) => story.url)
