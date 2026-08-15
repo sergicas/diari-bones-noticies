@@ -45,7 +45,9 @@ import {
   humanDecisionExamples,
   recordAssistantDecisions,
   markStoriesLive,
+  markWithdrawn,
   pendingLiveStories,
+  pendingWithdrawals,
   persistStoryDetails,
   readDecisions,
   recordPendingCandidates,
@@ -2243,13 +2245,31 @@ export async function getLiveNewsPayload(
    * compleixen totes dues condicions. Tenir-ho escampat per les sortides feia
    * que una peça pogués constar com a publicada sense ser-hi.
    */
+  // ORDRES DE RETIRADA. El radar és l'únic que escriu el lot públic, així que
+  // és ell qui les compleix: treu la peça del lot i la seva pàgina de detall,
+  // i només llavors la marca com a retirada.
+  const aRetirar = await pendingWithdrawals(env)
+  const urlsRetirades = new Set(aRetirar.map((r) => r.url))
+
   async function tancaEdicio(
-    stories,
+    storiesEntrada,
     { detallDe = [], etiqueta, nomesSiCanvia = false } = {},
   ) {
+    let stories = storiesEntrada
     // 1) Les pàgines de detall. Torna QUINES s'han desat de debò.
     //    Les aprovades que es recuperen hi van sempre: sense pàgina pròpia,
     //    una peça al lot donaria 404 en obrir-la.
+    // Les retirades surten del lot abans d'escriure'l.
+    if (urlsRetirades.size > 0) {
+      stories = stories.filter((story) => !urlsRetirades.has(story.url))
+      for (const r of aRetirar) {
+        try {
+          await kv.delete(`story:${r.id}`)
+        } catch {
+          // Si no es pot esborrar ara, l'ordre segueix pendent i es reintenta.
+        }
+      }
+    }
     const desades = await persistStoryDetails(kv, [...perSincronitzar, ...detallDe])
     // 2) El lot definitiu — però NOMÉS si de debò ha canviat res.
     //
@@ -2267,9 +2287,13 @@ export async function getLiveNewsPayload(
       cachedStories.length === stories.length &&
       cachedStories.every((story, i) => story.url === stories[i]?.url)
     const payload =
-      nomesSiCanvia && mateixLot && cached?.updatedAt
+      nomesSiCanvia && mateixLot && urlsRetirades.size === 0 && cached?.updatedAt
         ? { ...cached }
         : await setCachedPayload(kv, stories)
+    // Només ara: el lot escrit ja no les conté.
+    if (aRetirar.length > 0) {
+      await markWithdrawn(env, aRetirar.map((r) => r.id))
+    }
     // 3) I només ara, marcar. Dues condicions, totes dues obligatòries:
     //    ser al lot escrit i tenir la pàgina de detall desada.
     if (perSincronitzar.length > 0) {
@@ -2488,7 +2512,8 @@ export async function getLiveNewsPayload(
   // queda desat amb el motiu i visible a la sala; el que dubta espera una
   // persona. Res del que fa desapareix sense rastre, i mai s'escriu a
   // `human_decision`: sempre se sabrà qui va deixar passar cada peça.
-  if (pendingStories.length > 0 && env) {
+  const modeAjudant = (env?.ASSISTANT_MODE || 'shadow').trim()
+  if (pendingStories.length > 0 && env && modeAjudant !== 'off') {
     try {
       const exemples = await humanDecisionExamples(env)
       const veredictes = []
@@ -2502,10 +2527,34 @@ export async function getLiveNewsPayload(
           story,
         })
       }
+      // MODE OMBRA: l'ajudant pensa i deixa constància, però NO toca res. És
+      // el mode per defecte, i és amb el que ha de començar: primer es
+      // comprova durant uns dies que encerta el que hauria decidit una
+      // persona, i només llavors se li dona la mà.
+      if (modeAjudant === 'shadow') {
+        console.log(
+          JSON.stringify({
+            event: 'assistant.shadow',
+            hauriaPublicat: veredictes.filter((v) => v.decision === 'approve').length,
+            hauriaDescartat: veredictes.filter((v) => v.decision === 'reject').length,
+            enDubte: pendingStories.length - veredictes.length,
+            exemples: veredictes.slice(0, 5).map((v) => ({
+              decisio: v.decision,
+              titular: String(v.story?.title || '').slice(0, 70),
+              motiu: v.reason,
+            })),
+          }),
+        )
+        veredictes.length = 0
+      }
       if (veredictes.length > 0) {
         const outcome = await recordAssistantDecisions(env, veredictes)
+        // NOMÉS les que D1 ha acceptat de debò. Publicant les proposades, una
+        // peça que una persona acabava de rebutjar entrava igualment al lot:
+        // l'UPDATE no canviava res i ningú no ho mirava.
+        const acceptades = new Set(outcome.aplicats || [])
         const aprovades = veredictes
-          .filter((v) => v.decision === 'approve')
+          .filter((v) => v.decision === 'approve' && acceptades.has(v.id))
           .map((v) => v.story)
         // Entren al lot d'ara i a la llista de sincronització, per la mateixa
         // porta que les aprovades a mà: `tancaEdicio` les marcarà com a

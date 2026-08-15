@@ -32,7 +32,13 @@
     // a 150 paraules i entregava menys de 45, així que TOTES les peces queien
     // a la barrera de qualitat i no arribava res a la sala de revisió.
     // Es pot tornar enrere canviant només aquesta línia.
-    "GEMINI_MODEL": "gemini-flash-latest"
+    "GEMINI_MODEL": "gemini-flash-latest",
+    // L'AJUDANT DE REDACCIÓ: off | shadow | auto.
+    //
+    // Comença en OMBRA: pensa, deixa escrit què hauria fet, i no toca res.
+    // Així es pot comparar el seu criteri amb el de Sergi durant uns dies
+    // abans de deixar-lo publicar. Es passa a "auto" canviant aquesta línia.
+    "ASSISTANT_MODE": "shadow"
   },
   "kv_namespaces": [
     { "binding": "LIVE_NEWS_KV", "id": "8dccac0ffa434f75b13ba6a7890646af" },
@@ -99,7 +105,8 @@
         // Les vars d'entorn de Wrangler NO s'hereten: sense declarar-lo aquí,
         // staging cauria al valor per defecte del codi (flash-lite) i no
         // reproduiria el comportament de producció.
-        "GEMINI_MODEL": "gemini-flash-latest"
+        "GEMINI_MODEL": "gemini-flash-latest",
+        "ASSISTANT_MODE": "shadow"
       },
       "kv_namespaces": [
         { "binding": "LIVE_NEWS_KV", "id": "3763eba40f604b528c8c968ba2280131" },

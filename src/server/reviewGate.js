@@ -55,10 +55,19 @@ export function candidateId(story) {
   return story?.id || feedStoryId(story?.url || story?.title || '')
 }
 
-/** Treu qualsevol marca d'agrupació abans de desar una candidata. */
-function senseMarcaDeGrup(story) {
-  if (!story || story.possibleDuplicateOf === undefined) return story
-  const { possibleDuplicateOf: _fora, ...net } = story
+/**
+ * Treu de la peça tot el que és material de treball intern i no s'ha de desar
+ * ni publicar: la marca d'agrupació (es recalcula en llegir) i la còpia de la
+ * font que fa servir l'ajudant per comprovar els fets.
+ */
+export function senseMaterialDeTreball(story) {
+  if (!story) return story
+  const {
+    possibleDuplicateOf: _grup,
+    reviewSourceContext: _font,
+    reviewSourceTitle: _titolFont,
+    ...net
+  } = story
   return net
 }
 
@@ -201,7 +210,7 @@ export async function recordPendingCandidates(env, stories) {
             // vegada: el radar li passava les peces amb la marca posada i, quan
             // la representant sortia de la sala, la seguidora apuntava a algú
             // que ja no hi era i desapareixia. Els grups es calculen en llegir.
-            JSON.stringify(senseMarcaDeGrup(story)),
+            JSON.stringify(senseMaterialDeTreball(story)),
             story.firstSeenAt || timestamp,
             timestamp,
           ),
@@ -246,6 +255,10 @@ export async function recordAssistantDecisions(env, decisions) {
   const timestamp = nowIso()
   let approved = 0
   let rejected = 0
+  // Els IDs que D1 ha acceptat DE DEBÒ. Publicar els proposats i no aquests
+  // permetia que una peça que una persona acabava de rebutjar entrés igualment
+  // al lot: l'UPDATE no canviava res (changes = 0) i ningú ho mirava.
+  const aplicats = []
   for (const group of chunks(llista)) {
     const statements = group.map((d) => {
       const publica = d.decision === 'approve'
@@ -271,11 +284,12 @@ export async function recordAssistantDecisions(env, decisions) {
     const outcome = await db.batch(statements)
     outcome.forEach((item, i) => {
       if (Number(item?.meta?.changes || 0) === 0) return
+      aplicats.push(group[i].id)
       if (group[i].decision === 'approve') approved += 1
       else rejected += 1
     })
   }
-  return { approved, rejected }
+  return { approved, rejected, aplicats }
 }
 
 /** El que ha decidit l'ajudant i encara no ha revisat cap persona. */
@@ -317,33 +331,75 @@ export async function listAssistantDecisions(env, { limit = 60 } = {}) {
 }
 
 /**
- * Treu una peça del web. NOMÉS per a quan una persona esmena l'ajudant.
+ * Peces que una persona ha manat retirar i que el radar encara no ha tret.
  *
- * A tot arreu s'ha evitat despublicar, perquè trenca enllaços que Google ja té
- * indexats. Però si la màquina ha publicat una cosa que no tocava, qui dirigeix
- * el diari ha de poder-la retirar; si no, l'automatisme seria irreversible.
+ * És una ORDRE DURABLE, no una escriptura. La sala no toca mai KV: si ho fes,
+ * hi hauria dos escriptors del lot públic —el radar i cada petició HTTP de
+ * revisió— i es trepitjarien, perquè KV no té operacions atòmiques de
+ * llegir-modificar-escriure i `max_concurrency: 1` només serialitza la cua.
  */
-async function retiraDelWeb(env, id, url) {
-  const kv = env?.LIVE_NEWS_KV
-  if (!kv) return
+export async function pendingWithdrawals(env) {
+  const db = database(env)
+  if (!db) return []
   try {
-    await kv.delete(`story:${id}`)
-    const cached = await kv.get('latest', 'json')
-    const stories = Array.isArray(cached?.stories) ? cached.stories : []
-    if (stories.some((s) => s.url === url)) {
-      await kv.put(
-        'latest',
-        JSON.stringify({ ...cached, stories: stories.filter((s) => s.url !== url) }),
+    const { results } = await db
+      .prepare(
+        `SELECT id, url FROM stories WHERE withdrawal = 'pending' LIMIT 100`,
       )
-    }
+      .all()
+    return results || []
   } catch (error) {
     console.error(
       JSON.stringify({
-        event: 'review.unpublish.failed',
-        id,
+        event: 'review.withdrawals.read-failed',
         error: error instanceof Error ? error.message : String(error),
       }),
     )
+    return []
+  }
+}
+
+/** Marca com a retirades les que el radar ja ha tret del web de debò. */
+export async function markWithdrawn(env, ids) {
+  const db = database(env)
+  const llista = [...new Set((ids || []).filter(Boolean))]
+  if (!db || llista.length === 0) return { marked: 0 }
+  let marked = 0
+  for (const group of chunks(llista)) {
+    const placeholders = group.map(() => '?').join(', ')
+    const outcome = await db
+      .prepare(
+        `UPDATE stories SET withdrawal = 'withdrawn', updated_at = ?
+          WHERE id IN (${placeholders}) AND withdrawal = 'pending'`,
+      )
+      .bind(nowIso(), ...group)
+      .run()
+    marked += Number(outcome?.meta?.changes || 0)
+  }
+  return { marked }
+}
+
+/**
+ * VETO DURABLE: peces que no s'han de servir encara que siguin a KV.
+ *
+ * `findStory` mira KV abans que D1. Sense aquest veto, una peça retirada que
+ * encara tingués la còpia `story:<id>` seguiria sent pública fins que el radar
+ * la tragués, i les lectures no en sabrien res.
+ */
+export async function isWithdrawn(env, id) {
+  const db = database(env)
+  if (!db || !id) return false
+  try {
+    const row = await db
+      .prepare(
+        `SELECT 1 AS hi FROM stories
+          WHERE id = ? AND withdrawal IN ('pending', 'withdrawn') LIMIT 1`,
+      )
+      .bind(id)
+      .first()
+    return Boolean(row?.hi)
+  } catch {
+    return false
   }
 }
 
@@ -485,8 +541,16 @@ export async function pendingLiveStories(env) {
   try {
     const { results } = await db
       .prepare(
+        // Les aprovacions de l'AJUDANT també. Si una falla en escriure el
+        // detall o el lot, quedava amb live_state='pending' i marcada com a
+        // vista, i cap passada futura no la recollia: pèrdua silenciosa.
+        // La precedència humana es manté: una peça que una persona hagi
+        // rebutjat ja no és 'published' i per tant no entra aquí.
         `SELECT id, payload_json FROM stories
-          WHERE human_decision = 'approve' AND live_state = 'pending'
+          WHERE live_state = 'pending'
+            AND editorial_status = '${APPROVED_STATUS}'
+            AND (human_decision = 'approve' OR auto_decision = 'approve')
+            AND (human_decision IS NULL OR human_decision <> 'reject')
           ORDER BY published_at ASC LIMIT 50`,
       )
       .all()
@@ -603,11 +667,15 @@ export async function decideCandidate(env, id, decision) {
       return { ok: false, error: 'not-pending' }
     }
 
-    // Si una persona ESMENA una peça que l'ajudant havia publicat, s'ha de
-    // treure del web de debò. És l'única despublicació del sistema, i és
-    // deliberada: sense ella, el que fa la màquina no es podria desfer.
+    // Si una persona ESMENA una peça que l'ajudant havia publicat, es grava
+    // l'ORDRE de retirar-la. Qui la compleix és el radar, que és l'únic que
+    // escriu el lot públic. Fins que no ho faci, el veto de D1 impedeix que es
+    // pugui llegir (vegeu isWithdrawn i storyMeta.findStory).
     if (esmenaAjudant && decision === 'reject') {
-      await retiraDelWeb(env, id, row.url)
+      await db
+        .prepare(`UPDATE stories SET withdrawal = 'pending' WHERE id = ?`)
+        .bind(id)
+        .run()
     }
 
     // I AQUÍ S'ACABA. Aprovar només toca D1.

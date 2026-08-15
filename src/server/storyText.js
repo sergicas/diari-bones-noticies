@@ -535,6 +535,20 @@ export async function applyOwnContent(stories, env) {
       ...publicStory,
       title,
       summary: '',
+      // ...PERÒ L'AJUDANT EL NECESSITA (15-08-2026).
+      //
+      // Esborrant la font aquí, la guàrdia de fets es quedava sense res amb
+      // què comparar i deixava passar qualsevol cosa: una peça que atribuïa
+      // una missió conjunta a "NASA i Nintendo" no aixecava cap sospita,
+      // perquè només es comparava el text amb ell mateix.
+      //
+      // Es conserva en un camp propi que NO es publica (l'esborra
+      // `senseMaterialDeTreball` abans de desar la peça i abans del lot
+      // públic). Serveix només per decidir.
+      reviewSourceContext: String(
+        e.story.sourceContext || e.story.summary || '',
+      ).slice(0, 2000),
+      reviewSourceTitle: e.story.title || '',
       body,
       impact: own.impact || '',
       // Només Circuit A pot conservar la imatge institucional. Sempre passa

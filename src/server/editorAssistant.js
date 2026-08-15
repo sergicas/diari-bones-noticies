@@ -33,10 +33,59 @@ export const PUBLICAR = 'publicar'
 export const DESCARTAR = 'descartar'
 export const DUBTE = 'dubte'
 
-// Mots que, si apareixen a una peça, la treuen de l'automatisme. No és una
-// llista de temes prohibits: és on un error de la màquina fa mal de debò.
-const SENSIBLES =
-  /\b(salut|medic|m[eè]dic|f[aà]rmac|medicament|tractament|di[aà]gnosi|diagn[oò]stic|malalt|c[aà]ncer|tumor|leuc[eè]mi|miel[oò]ma|vacun|assaig cl[íi]nic|pacient|terap|psiqui[aà]tr|suïcid|mortalitat|epid[eè]mi|virus|infecci)/i
+// QUÈ ES POT AUTOMATITZAR: llista POSITIVA, no de prohibicions.
+//
+// La primera versió era una regex de temes vetats i era massa estreta: no
+// atrapava «Longevitat», ni «ketamina i depressió», ni una peça sobre menors
+// amb dades escolars. Una llista de prohibicions sempre va per darrere del
+// món; una d'autoritzacions falla cap al costat segur.
+//
+// Només aquests àmbits poden decidir-se sols. Longevitat en queda fora sencer:
+// és clínic per definició.
+const AMBITS_AUTOMATITZABLES = new Set([
+  'Astronomia',
+  'Ciència',
+  'Tecnologia',
+  'IA',
+  'Literatura',
+  'Filosofia',
+  'Biotecnologia',
+])
+
+// I dins d'aquests àmbits, encara hi ha matèries que no. Són els terrenys on
+// una equivocació de la màquina no és un error editorial sinó un dany: a la
+// salut d'algú, a la seva intimitat o a la seva reputació.
+const MATERIES_DELICADES = [
+  ['salut', /\b(salut|medic|m[eè]dic|f[aà]rmac|medicament|tractament|dosi|di[aà]gnosi|diagn[oò]stic|malalt|c[aà]ncer|tumor|leuc[eè]mi|miel[oò]ma|vacun|assaig cl[íi]nic|pacient|terap|cl[íi]nic|s[íi]mptom|longevitat|envelliment|mortalitat|epid[eè]mi|virus|infecci)/i],
+  ['salut mental', /\b(depressi|ansietat|psiqui[aà]tr|psic[oò]leg|psicol[oò]gic|suïcid|autol[eè]si|addicci|ketamina|antidepressiu)/i],
+  ['menors i dades', /\b(menors|infants|nens|adolescents|escolar|alumn|dades personals|privacitat|ciberseguretat|filtraci[óo] de dades|contrasenya)/i],
+  ['violència i desgràcies', /\b(viol[eè]nci|guerra|atemptat|assassin|mort[s]?\b|v[íi]ctim|cat[aà]strof|terratr[eè]mol|inundaci|incendi|accident)/i],
+  ['justícia i reputació', /\b(delict|crim|acusaci|denúnci|jutj|judici|fiscal|sent[eè]nci|conden|frau|corrupci)/i],
+  ['política i diners', /\b(elecci|partit pol[íi]tic|govern|parlament|ministr|president|llei\b|dret[s]? legal|borsa|accions|inversi[óo]|beneficis|facturaci[óo])/i],
+]
+
+/**
+ * Pot decidir-se sola?
+ *
+ * Torna el MOTIU quan no, perquè quedi escrit a la sala per què una peça ha
+ * anat a mans d'una persona.
+ */
+export function potDecidirSol(story) {
+  const ambit = story?.topic || ''
+  if (!AMBITS_AUTOMATITZABLES.has(ambit)) {
+    return { pot: false, motiu: `l’àmbit «${ambit || 'sense àmbit'}» no es decideix sol` }
+  }
+  const text = `${story?.title || ''} ${(story?.body || []).join(' ')} ${story?.impact || ''} ${story?.category || ''}`
+  for (const [nom, patro] of MATERIES_DELICADES) {
+    if (patro.test(text)) return { pot: false, motiu: `toca ${nom}: ho ha de mirar una persona` }
+  }
+  return { pot: true, motiu: '' }
+}
+
+/** Compatibilitat: la pregunta antiga, expressada amb la llista nova. */
+export function esSensible(story) {
+  return !potDecidirSol(story).pot
+}
 
 function normalitza(text) {
   return String(text || '')
@@ -61,9 +110,15 @@ function normalitza(text) {
  * frase— es demana a l'IA dins de la revisió, i per als temes on un error és
  * greu hi ha la guàrdia d'àmbits sensibles, que no depèn de cap model.
  */
+export function materialDeFont(story) {
+  return `${story?.reviewSourceContext || story?.sourceContext || ''} ${story?.reviewSourceTitle || story?.sourceTitle || ''} ${story?.summary || ''}`.trim()
+}
+
 export function dadesSenseSuport(story) {
-  const font = `${story?.sourceContext || ''} ${story?.summary || ''} ${story?.sourceTitle || ''}`
-  if (!font.trim()) return [] // Sense material per comparar, no s'inventa res.
+  const font = materialDeFont(story)
+  // Sense material amb què comparar no es pot afirmar res. Qui crida ha de
+  // tractar-ho com a DUBTE, no com a permís: vegeu revisaCandidata.
+  if (!font.trim()) return []
   const fontNorm = normalitza(font)
   const titular = String(story?.title || '')
   const sospitoses = []
@@ -85,18 +140,18 @@ export function dadesSenseSuport(story) {
   return [...new Set(sospitoses)]
 }
 
-/** Si toca salut o medicina, no s'aprova mai sola. */
-export function esSensible(story) {
-  const text = `${story?.title || ''} ${(story?.body || []).join(' ')} ${story?.topic || ''} ${story?.category || ''}`
-  return SENSIBLES.test(text)
-}
-
 function retallaPerAlPrompt(story) {
   const cos = Array.isArray(story?.body) ? story.body.join(' ') : ''
+  // El material ORIGINAL hi ha d'anar. Sense ell, el model comparava la nostra
+  // peça amb ella mateixa i la comprovació semàntica que se li demanava no es
+  // podia fer de cap manera.
   return [
-    `TITULAR: ${String(story?.title || '').slice(0, 160)}`,
+    `TITULAR NOSTRE: ${String(story?.title || '').slice(0, 160)}`,
     `ÀMBIT: ${story?.topic || '—'} · FONT: ${story?.source || '—'} · CIRCUIT: ${story?.circuit || '—'}`,
-    `COS: ${cos.slice(0, 700)}`,
+    `COS NOSTRE: ${cos.slice(0, 700)}`,
+    '',
+    `MATERIAL ORIGINAL DE LA FONT (això és el que s’ha de comparar):`,
+    materialDeFont(story).slice(0, 1200) || '(no n’hi ha)',
   ].join('\n')
 }
 
@@ -161,6 +216,15 @@ function llegeixVeredicte(text) {
  * El veredicte per a una peça. Les guàrdies manen sobre l'IA.
  */
 export async function revisaCandidata(env, story, { exemples = [] } = {}) {
+  // SENSE FONT NO ES DECIDEIX. Que no hi hagi material amb què comparar no és
+  // un permís: és precisament el cas en què no es pot comprovar res.
+  if (!materialDeFont(story)) {
+    return {
+      veredicte: DUBTE,
+      motiu: 'no hi ha material de la font amb què comparar la peça',
+      guardia: 'sense-font',
+    }
+  }
   const sospitoses = dadesSenseSuport(story)
   if (sospitoses.length > 0) {
     return {
@@ -169,12 +233,9 @@ export async function revisaCandidata(env, story, { exemples = [] } = {}) {
       guardia: 'fets',
     }
   }
-  if (esSensible(story)) {
-    return {
-      veredicte: DUBTE,
-      motiu: 'toca salut o medicina: ho ha de mirar una persona',
-      guardia: 'sensible',
-    }
+  const permes = potDecidirSol(story)
+  if (!permes.pot) {
+    return { veredicte: DUBTE, motiu: permes.motiu, guardia: 'sensible' }
   }
   try {
     const out = await runTextModel(env, {

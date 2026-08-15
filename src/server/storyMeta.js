@@ -6,6 +6,7 @@
 
 import { seedArticles } from '../data/articles.js'
 import { feedStoryId } from '../lib/story-id.js'
+import { isWithdrawn } from './reviewGate.js'
 import { findStoryInEditorialStore } from './editorialStore.js'
 import { sanitizeStoryPhoto } from './storyPhoto.js'
 
@@ -34,6 +35,16 @@ function decodeId(rawId) {
 // peces que ja han sortit de la portada, així els enllaços no fan 404) i, per
 // últim, als articles editorials estàtics.
 export async function findStory(id, env) {
+  // VETO DURABLE PRIMER. Aquesta funció mira KV abans que D1, i una peça que
+  // una persona ha manat retirar pot tenir encara la seva còpia story:<id>
+  // fins que el radar la tregui. Sense aquesta comprovació seguiria sent
+  // pública durant hores.
+  try {
+    if (await isWithdrawn(env, id)) return null
+  } catch {
+    // Si D1 no respon, se segueix el camí normal: val més servir una peça de
+    // més que deixar el diari sense pàgines de detall.
+  }
   try {
     const cached = await env.LIVE_NEWS_KV.get('latest', 'json')
     const liveStory = (cached?.stories || []).find(
