@@ -31,15 +31,21 @@ function pendingRow(overrides = {}) {
   }
 }
 
-function fakeEnv({ rows = [pendingRow()], password = PASSWORD } = {}) {
+function fakeEnv({ rows = [pendingRow()], auto = [], password = PASSWORD } = {}) {
   return {
     BONDIARI_REVIEW_PASSWORD: password,
     EDITORIAL_DB: {
-      prepare: () => ({
+      // La base de dades de mentida ha de saber què li pregunten: la sala fa
+      // ara dues consultes diferents (les pendents i les que ha decidit
+      // l'ajudant) i tornar-hi les mateixes files barrejava les seccions.
+      prepare: (query = '') => ({
         bind() {
           return this
         },
         async all() {
+          if (String(query).includes('auto_decision IS NOT NULL')) {
+            return { results: auto }
+          }
           return { results: rows }
         },
         async first() {

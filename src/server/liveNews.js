@@ -39,8 +39,11 @@ import {
   normalizeIdescatUpdate,
   collectIdescatUpdates,
 } from './rss/serviceFeeds.js'
+import { revisaCandidata } from './editorAssistant.js'
 import {
   candidateId,
+  humanDecisionExamples,
+  recordAssistantDecisions,
   markStoriesLive,
   pendingLiveStories,
   persistStoryDetails,
@@ -2472,6 +2475,62 @@ export async function getLiveNewsPayload(
   // com a vist: la cua reintentarà i no es perdrà cap candidata.
   if (pendingStories.length > 0) {
     await recordPendingCandidates(env, pendingStories)
+  }
+
+  // L'AJUDANT DE REDACCIÓ DECIDEIX (15-08-2026).
+  //
+  // Sergi va demanar que el diari es publiqués sol. L'ajudant revisa cada
+  // candidata amb el seu criteri —amb les seves decisions reals com a
+  // exemples— i amb dues guàrdies que manen sobre qualsevol veredicte: cap
+  // xifra ni nom propi que no sigui a la font, i res de salut ni medicina.
+  //
+  // El que aprova entra al lot d'aquesta mateixa passada; el que descarta
+  // queda desat amb el motiu i visible a la sala; el que dubta espera una
+  // persona. Res del que fa desapareix sense rastre, i mai s'escriu a
+  // `human_decision`: sempre se sabrà qui va deixar passar cada peça.
+  if (pendingStories.length > 0 && env) {
+    try {
+      const exemples = await humanDecisionExamples(env)
+      const veredictes = []
+      for (const story of pendingStories) {
+        const r = await revisaCandidata(env, story, { exemples })
+        if (r.veredicte === 'dubte') continue
+        veredictes.push({
+          id: candidateId(story),
+          decision: r.veredicte === 'publicar' ? 'approve' : 'reject',
+          reason: r.guardia ? `[${r.guardia}] ${r.motiu}` : r.motiu,
+          story,
+        })
+      }
+      if (veredictes.length > 0) {
+        const outcome = await recordAssistantDecisions(env, veredictes)
+        const aprovades = veredictes
+          .filter((v) => v.decision === 'approve')
+          .map((v) => v.story)
+        // Entren al lot d'ara i a la llista de sincronització, per la mateixa
+        // porta que les aprovades a mà: `tancaEdicio` les marcarà com a
+        // publicades només si de debò acaben al lot escrit.
+        approvedStories.push(...aprovades)
+        perSincronitzar.push(...aprovades)
+        console.log(
+          JSON.stringify({
+            event: 'assistant.decided',
+            aprovades: outcome.approved,
+            descartades: outcome.rejected,
+            enDubte: pendingStories.length - veredictes.length,
+          }),
+        )
+      }
+    } catch (error) {
+      // Si l'ajudant falla, no passa res greu: les peces es queden esperant
+      // una persona, que és el comportament d'abans.
+      console.warn(
+        JSON.stringify({
+          event: 'assistant.failed',
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      )
+    }
   }
 
   // Es marquen `pendingStories` SENCERES: totes han quedat desades a la sala i

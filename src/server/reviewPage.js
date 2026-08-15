@@ -18,6 +18,7 @@ import { agrupaPerEsdeveniment } from '../lib/event-dedupe.js'
 import {
   countPendingCandidates,
   countPendingLive,
+  listAssistantDecisions,
   decideCandidate,
   expireStaleCandidates,
   listPendingCandidates,
@@ -117,6 +118,21 @@ const STYLES = `
     background: #ecefe8; color: #3d5245; border-radius: 8px;
     padding: .6rem .8rem; margin: 0 0 1.25rem;
   }
+  .auto {
+    background: #fff; border: 1px solid #e2ddd2; border-radius: 10px;
+    padding: .8rem 1rem; margin-bottom: 1.25rem;
+  }
+  .auto summary {
+    font-family: system-ui, sans-serif; font-size: .9rem; font-weight: 600;
+    cursor: pointer; color: #3d5245;
+  }
+  .autoitem { border-top: 1px solid #eee7db; padding: .8rem 0 .4rem; }
+  .autotitol { margin: 0 0 .2rem; font-size: 1rem; }
+  .automotiu {
+    font-family: system-ui, sans-serif; font-size: .8rem; color: #5a5a5a;
+    margin: 0 0 .5rem;
+  }
+  .autoitem button { flex: 0 0 auto; font-size: .85rem; padding: .45rem .9rem; }
   .peca--repetida { border-left: 4px solid #c9a227; }
   .repetida {
     font-family: system-ui, sans-serif; font-size: .85rem;
@@ -137,6 +153,10 @@ const STYLES = `
     .marca.b { background: #35291f; color: #d8b48d; }
     .cua { background: #26332c; color: #b8ccbe; }
     .repetida { background: #33301f; color: #e2ce8f; }
+    .auto { background: #1f2225; border-color: #33383c; }
+    .auto summary { color: #b8ccbe; }
+    .autoitem { border-color: #2b3033; }
+    .automotiu { color: #a5a29b; }
     input[type=password] { background: #14171a; color: #e8e4dc; border-color: #3a4046; }
     .descarta { background: #33292a; color: #e6b3a6; }
   }
@@ -226,9 +246,10 @@ function storyCard(story, relacionadaAmb = null) {
 }
 
 async function listPage(env, { missatge = '' } = {}) {
-  const [pending, esperantSortir] = await Promise.all([
+  const [pending, esperantSortir, decididesSoles] = await Promise.all([
     listPendingCandidates(env),
     countPendingLive(env),
+    listAssistantDecisions(env),
   ])
   const compte =
     pending.length === 0
@@ -289,11 +310,37 @@ async function listPage(env, { missatge = '' } = {}) {
     pending.length === 0
       ? '<div class="buit"><p>Cap peça pendent.</p></div>'
       : ordenades.map(([s, relacionada]) => storyCard(s, relacionada)).join('')
+  // EL QUE HA DECIDIT L'AJUDANT, sempre a la vista i sempre reversible.
+  //
+  // Si la màquina publica sola, el mínim és poder mirar-li les mans: què ha
+  // deixat passar, què ha descartat i amb quin motiu. I esmenar-ho amb un clic.
+  const publicadesSoles = decididesSoles.filter((s) => s.autoDecision === 'approve')
+  const descartadesSoles = decididesSoles.filter((s) => s.autoDecision !== 'approve')
+  const seccioAuto = (llista, titol, accio, etiquetaAccio) =>
+    llista.length === 0
+      ? ''
+      : `<details class="auto"><summary>${escapeHtml(titol)} (${llista.length})</summary>
+${llista
+  .map(
+    (s) => `<div class="autoitem">
+  <p class="autotitol">${escapeHtml(s.title)}</p>
+  <p class="automotiu">${escapeHtml(s.source || '')}${s.autoReason ? ` · ${escapeHtml(s.autoReason)}` : ''}</p>
+  <form method="post" action="/revisio/decidir">
+    <input type="hidden" name="id" value="${escapeHtml(s.id)}">
+    <button class="${accio === 'reject' ? 'descarta' : 'publica'}" type="submit" name="decisio" value="${accio}">${escapeHtml(etiquetaAccio)}</button>
+  </form>
+</div>`,
+  )
+  .join('')}
+</details>`
+
   return page(
     'Sala de revisió',
     `<h1>Sala de revisió</h1>
 <p class="compte">${escapeHtml(compte)}${missatge ? ` · ${escapeHtml(missatge)}` : ''}</p>
 ${enCua}
+${seccioAuto(publicadesSoles, "L'ajudant ha publicat sol", 'reject', 'Retira-la del diari')}
+${seccioAuto(descartadesSoles, "L'ajudant ha descartat sol", 'approve', 'Publica-la igualment')}
 ${cos}`,
   )
 }

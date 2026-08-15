@@ -87,7 +87,7 @@ export async function readDecisions(env, ids) {
       const placeholders = group.map(() => '?').join(', ')
       const { results } = await db
         .prepare(
-          `SELECT id, editorial_status, human_decision
+          `SELECT id, editorial_status, human_decision, auto_decision
              FROM stories WHERE id IN (${placeholders})`,
         )
         .bind(...group)
@@ -96,6 +96,7 @@ export async function readDecisions(env, ids) {
         decisions.set(row.id, {
           status: row.editorial_status,
           humanDecision: row.human_decision || null,
+          autoDecision: row.auto_decision || null,
         })
       }
     }
@@ -143,7 +144,13 @@ export function splitByReviewDecision(
     // Ara cal la marca explícita. Les peces velles tenen human_decision a NULL
     // i, per tant, tornen a revisió si mai reapareixen. Val més fer llegir dues
     // vegades una peça bona que publicar-ne una que ningú no ha llegit mai.
-    if (PUBLIC_STATUSES.has(status) && decision?.humanDecision === 'approve') {
+    // Una aprovació val si l'ha donada una PERSONA o l'AJUDANT. Es guarden
+    // separades a la base de dades (human_decision / auto_decision) perquè en
+    // qualsevol moment se sàpiga qui va deixar passar què; però totes dues
+    // publiquen. Sergi va triar que el diari sortís sol.
+    const aprovada =
+      decision?.humanDecision === 'approve' || decision?.autoDecision === 'approve'
+    if (PUBLIC_STATUSES.has(status) && aprovada) {
       approved.push(story)
     } else if (status === REJECTED_STATUS) {
       rejected.push(story)
@@ -221,6 +228,145 @@ export async function recordPendingCandidates(env, stories) {
     throw error
   }
   return { recorded }
+}
+
+/**
+ * Desa les decisions de l'AJUDANT, mai com si fossin d'una persona.
+ *
+ * `human_decision` no es toca des d'aquí: si un dia cal saber què va publicar
+ * la màquina tota sola —per auditar-ho, per revisar-ho o per desfer-ho—, la
+ * consulta és immediata. Només actua sobre peces que encara esperen: una
+ * decisió humana ja presa no la pot trepitjar cap automatisme.
+ */
+export async function recordAssistantDecisions(env, decisions) {
+  const db = database(env)
+  const llista = (decisions || []).filter((d) => d?.id && d?.decision)
+  if (llista.length === 0) return { approved: 0, rejected: 0 }
+  if (!db) throw new Error('no hi ha base de dades per desar les decisions')
+  const timestamp = nowIso()
+  let approved = 0
+  let rejected = 0
+  for (const group of chunks(llista)) {
+    const statements = group.map((d) => {
+      const publica = d.decision === 'approve'
+      return db
+        .prepare(
+          `UPDATE stories
+              SET editorial_status = ?, published_at = ?, updated_at = ?,
+                  auto_decision = ?, auto_reason = ?, auto_decided_at = ?,
+                  live_state = ?
+            WHERE id = ? AND editorial_status = '${PENDING_STATUS}'`,
+        )
+        .bind(
+          publica ? APPROVED_STATUS : REJECTED_STATUS,
+          publica ? timestamp : null,
+          timestamp,
+          d.decision,
+          String(d.reason || '').slice(0, 300),
+          timestamp,
+          publica ? 'pending' : null,
+          d.id,
+        )
+    })
+    const outcome = await db.batch(statements)
+    outcome.forEach((item, i) => {
+      if (Number(item?.meta?.changes || 0) === 0) return
+      if (group[i].decision === 'approve') approved += 1
+      else rejected += 1
+    })
+  }
+  return { approved, rejected }
+}
+
+/** El que ha decidit l'ajudant i encara no ha revisat cap persona. */
+export async function listAssistantDecisions(env, { limit = 60 } = {}) {
+  const db = database(env)
+  if (!db) return []
+  try {
+    const { results } = await db
+      .prepare(
+        `SELECT id, payload_json, auto_decision, auto_reason, auto_decided_at
+           FROM stories
+          WHERE auto_decision IS NOT NULL AND human_decision IS NULL
+          ORDER BY auto_decided_at DESC LIMIT ?`,
+      )
+      .bind(Math.max(1, Math.min(200, Number(limit) || 60)))
+      .all()
+    return (results || [])
+      .map((row) => {
+        const story = parsePayload(row.payload_json)
+        if (!story) return null
+        return {
+          ...story,
+          id: row.id,
+          autoDecision: row.auto_decision,
+          autoReason: row.auto_reason || '',
+          autoDecidedAt: row.auto_decided_at,
+        }
+      })
+      .filter(Boolean)
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        event: 'review.assistant-list.failed',
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    )
+    return []
+  }
+}
+
+/**
+ * Treu una peça del web. NOMÉS per a quan una persona esmena l'ajudant.
+ *
+ * A tot arreu s'ha evitat despublicar, perquè trenca enllaços que Google ja té
+ * indexats. Però si la màquina ha publicat una cosa que no tocava, qui dirigeix
+ * el diari ha de poder-la retirar; si no, l'automatisme seria irreversible.
+ */
+async function retiraDelWeb(env, id, url) {
+  const kv = env?.LIVE_NEWS_KV
+  if (!kv) return
+  try {
+    await kv.delete(`story:${id}`)
+    const cached = await kv.get('latest', 'json')
+    const stories = Array.isArray(cached?.stories) ? cached.stories : []
+    if (stories.some((s) => s.url === url)) {
+      await kv.put(
+        'latest',
+        JSON.stringify({ ...cached, stories: stories.filter((s) => s.url !== url) }),
+      )
+    }
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        event: 'review.unpublish.failed',
+        id,
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    )
+  }
+}
+
+/** Les decisions que ha pres una PERSONA, per ensenyar-li'n el criteri a l'ajudant. */
+export async function humanDecisionExamples(env, { limit = 40 } = {}) {
+  const db = database(env)
+  if (!db) return []
+  try {
+    const { results } = await db
+      .prepare(
+        `SELECT title, human_decision FROM stories
+          WHERE human_decision IN ('approve', 'reject')
+          ORDER BY human_reviewed_at DESC LIMIT ?`,
+      )
+      .bind(Math.max(1, Math.min(100, Number(limit) || 40)))
+      .all()
+    return (results || []).map((row) => ({
+      title: row.title,
+      decision: row.human_decision,
+    }))
+  } catch {
+    return []
+  }
 }
 
 /** Les peces que esperen ser llegides, de la més nova a la més vella. */
@@ -415,13 +561,21 @@ export async function decideCandidate(env, id, decision) {
   const timestamp = nowIso()
   const status = decision === 'approve' ? APPROVED_STATUS : REJECTED_STATUS
   try {
+    // Una persona pot decidir sobre una peça que espera, i TAMBÉ esmenar el
+    // que hagi decidit l'ajudant mentre cap persona no hi hagi dit la seva.
+    // Sense això, l'automatisme seria irreversible.
     const row = await db
       .prepare(
-        `SELECT payload_json FROM stories WHERE id = ? AND editorial_status = '${PENDING_STATUS}'`,
+        `SELECT payload_json, url, auto_decision FROM stories
+          WHERE id = ? AND (
+            editorial_status = '${PENDING_STATUS}'
+            OR (auto_decision IS NOT NULL AND human_decision IS NULL)
+          )`,
       )
       .bind(id)
       .first()
     if (!row) return { ok: false, error: 'not-pending' }
+    const esmenaAjudant = Boolean(row.auto_decision)
 
     // La condició fa d'exclusió mútua entre dues decisions simultànies sobre
     // la MATEIXA peça: només una canvia la fila, i l'altra veu changes = 0.
@@ -430,7 +584,10 @@ export async function decideCandidate(env, id, decision) {
         `UPDATE stories
             SET editorial_status = ?, published_at = ?, updated_at = ?,
                 human_reviewed_at = ?, human_decision = ?, live_state = ?
-          WHERE id = ? AND editorial_status = '${PENDING_STATUS}'`,
+          WHERE id = ? AND (
+            editorial_status = '${PENDING_STATUS}'
+            OR (auto_decision IS NOT NULL AND human_decision IS NULL)
+          )`,
       )
       .bind(
         status,
@@ -444,6 +601,13 @@ export async function decideCandidate(env, id, decision) {
       .run()
     if (Number(reserva?.meta?.changes || 0) === 0) {
       return { ok: false, error: 'not-pending' }
+    }
+
+    // Si una persona ESMENA una peça que l'ajudant havia publicat, s'ha de
+    // treure del web de debò. És l'única despublicació del sistema, i és
+    // deliberada: sense ella, el que fa la màquina no es podria desfer.
+    if (esmenaAjudant && decision === 'reject') {
+      await retiraDelWeb(env, id, row.url)
     }
 
     // I AQUÍ S'ACABA. Aprovar només toca D1.

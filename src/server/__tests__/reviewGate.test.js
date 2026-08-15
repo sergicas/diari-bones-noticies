@@ -6,6 +6,7 @@ import {
   markStoriesLive,
   pendingLiveStories,
   readDecisions,
+  recordAssistantDecisions,
   recordPendingCandidates,
   splitByReviewDecision,
 } from '../reviewGate.js'
@@ -376,5 +377,59 @@ describe('porta d’aprovació humana', () => {
   it('dona el mateix identificador que fa servir la resta del diari', () => {
     expect(candidateId({ id: 'explicit' })).toBe('explicit')
     expect(candidateId({ url: 'https://example.com/x' })).toEqual(expect.any(String))
+  })
+})
+
+// ---------------------------------------------------------------------------
+
+describe('les decisions de la màquina no es confonen amb les d’una persona', () => {
+  it('l’ajudant escriu a auto_decision, MAI a human_decision', async () => {
+    const db = fakeDb()
+    await recordAssistantDecisions({ EDITORIAL_DB: db }, [
+      { id: 'peca-1', decision: 'approve', reason: 'explica una troballa' },
+    ])
+    const update = db.calls.find((c) => c.query.includes('UPDATE'))
+    expect(update.query).toContain('auto_decision')
+    expect(update.query, 'no pot tocar la columna de les persones').not.toContain(
+      'human_decision',
+    )
+    expect(update.values).toContain('approve')
+    expect(update.values).toContain('explica una troballa')
+  })
+
+  it('només actua sobre peces que encara esperen', async () => {
+    const db = fakeDb()
+    await recordAssistantDecisions({ EDITORIAL_DB: db }, [
+      { id: 'peca-1', decision: 'reject', reason: 'soroll' },
+    ])
+    const update = db.calls.find((c) => c.query.includes('UPDATE'))
+    // Una decisió humana ja presa no la pot trepitjar cap automatisme.
+    expect(update.query).toContain("editorial_status = 'captured'")
+  })
+
+  it('una aprovació de l’ajudant també publica', () => {
+    const { approved, pending } = splitByReviewDecision([story()], {
+      decisions: new Map([
+        ['peca-1', { status: 'published', humanDecision: null, autoDecision: 'approve' }],
+      ]),
+    })
+    expect(approved).toHaveLength(1)
+    expect(pending).toHaveLength(0)
+  })
+
+  it('però una peça SENSE cap decisió segueix sense publicar-se', () => {
+    const { approved, pending } = splitByReviewDecision([story()], {
+      decisions: new Map([
+        ['peca-1', { status: 'published', humanDecision: null, autoDecision: null }],
+      ]),
+    })
+    expect(approved).toHaveLength(0)
+    expect(pending).toHaveLength(1)
+  })
+
+  it('sense base de dades, l’ajudant no pot decidir res', async () => {
+    await expect(
+      recordAssistantDecisions({}, [{ id: 'x', decision: 'approve' }]),
+    ).rejects.toThrow(/base de dades/)
   })
 })
