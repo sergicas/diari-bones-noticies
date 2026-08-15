@@ -18,15 +18,20 @@
   //
   // Estava configurat només al tauler de Cloudflare, i el dia que va deixar de
   // servir no hi havia manera de veure-ho ni de restaurar-ho des del codi.
-  // Declarat aquí, cada desplegament el torna a lligar i queda escrit qui ha
-  // de respondre a bondiari.com.
+  // Declarat aquí, cada desplegament torna a lligar les rutes i queda escrit
+  // qui ha de respondre a bondiari.com.
+  //
+  // No es fan servir Custom Domains de Workers: el 15-08-2026 el rang IP que
+  // aquests registres assignaven era inaccessible des de Telefónica. Els
+  // CNAME DNS-only cap a workers.dev i aquestes rutes donen el mateix servei,
+  // però eviten aquella assignació de xarxa.
   // Declarar rutes desactiva l'adreça workers.dev per defecte, i aquesta és
   // la que fan servir els scripts (refresc, comprovacions) i l'única que va
   // seguir funcionant el dia que bondiari.com va caure. Es manté explícitament.
   "workers_dev": true,
   "routes": [
-    { "pattern": "bondiari.com", "custom_domain": true },
-    { "pattern": "www.bondiari.com", "custom_domain": true }
+    { "pattern": "bondiari.com/*", "zone_name": "bondiari.com" },
+    { "pattern": "www.bondiari.com/*", "zone_name": "bondiari.com" }
   ],
   "observability": {
     "enabled": true,
@@ -111,6 +116,9 @@
     // Staging té dades i cues pròpies, i deliberadament no té cap cron.
     "staging": {
       "name": "bondiari-staging",
+      // Les rutes de producció s'hereten si no es buiden explícitament. Sense
+      // això un desplegament de staging podria desviar el domini públic.
+      "routes": [],
       "triggers": {
         "crons": []
       },
