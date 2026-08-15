@@ -398,9 +398,46 @@ export async function isWithdrawn(env, id) {
       .bind(id)
       .first()
     return Boolean(row?.hi)
-  } catch {
-    return false
+  } catch (error) {
+    // FALLA TANCAT. Tornar `false` quan D1 no respon deixava reaparèixer
+    // justament la peça que algú havia manat retirar: el veto ha de valer
+    // sobretot quan les coses van malament. Qui crida ha de respondre que la
+    // pàgina no està disponible, no servir la còpia de KV.
+    const avaria = new Error('no es pot comprovar si la peça està retirada')
+    avaria.name = 'WithdrawalCheckUnavailable'
+    avaria.cause = error
+    throw avaria
   }
+}
+
+/**
+ * Desa el que l'ajudant HAURIA fet, sense fer-ho.
+ *
+ * En ombra no decideix res, però l'opinió s'ha de poder contrastar després amb
+ * la decisió humana de la mateixa peça. Amb recomptes al registre no n'hi ha
+ * prou: passats uns dies no hi hauria manera d'avaluar si encerta.
+ */
+export async function recordShadowVerdicts(env, verdicts, { version = '' } = {}) {
+  const db = database(env)
+  const llista = (verdicts || []).filter((v) => v?.id && v?.decision)
+  if (!db || llista.length === 0) return { recorded: 0 }
+  const timestamp = nowIso()
+  let recorded = 0
+  for (const group of chunks(llista)) {
+    const statements = group.map((v) =>
+      db
+        .prepare(
+          `UPDATE stories
+              SET shadow_decision = ?, shadow_reason = ?, shadow_at = ?,
+                  shadow_version = ?
+            WHERE id = ?`,
+        )
+        .bind(v.decision, String(v.reason || '').slice(0, 300), timestamp, version, v.id),
+    )
+    const outcome = await db.batch(statements)
+    for (const item of outcome || []) recorded += Number(item?.meta?.changes || 0)
+  }
+  return { recorded }
 }
 
 /** Les decisions que ha pres una PERSONA, per ensenyar-li'n el criteri a l'ajudant. */
@@ -519,8 +556,12 @@ export async function countPendingLive(env) {
   try {
     const row = await db
       .prepare(
+        // També les de l'ajudant: si no, la sala amagaria aprovacions
+        // automàtiques que encara esperen sortir.
         `SELECT COUNT(*) AS total FROM stories
-          WHERE human_decision = 'approve' AND live_state = 'pending'`,
+          WHERE live_state = 'pending'
+            AND editorial_status = '${APPROVED_STATUS}'
+            AND (human_decision = 'approve' OR auto_decision = 'approve')`,
       )
       .first()
     return Number(row?.total || 0)
@@ -643,11 +684,19 @@ export async function decideCandidate(env, id, decision) {
 
     // La condició fa d'exclusió mútua entre dues decisions simultànies sobre
     // la MATEIXA peça: només una canvia la fila, i l'altra veu changes = 0.
+    // LA DECISIÓ I L'ORDRE DE RETIRADA VAN JUNTES, en un sol UPDATE.
+    //
+    // Fer-ho en dues consultes deixava un forat: si la segona fallava, la peça
+    // quedava rebutjada però sense ordre de retirar-la, i un segon intent ja no
+    // la podia recuperar perquè `human_decision` ja estava informat. La peça es
+    // quedava rebutjada i pública alhora.
+    const calRetirar = esmenaAjudant && decision === 'reject'
     const reserva = await db
       .prepare(
         `UPDATE stories
             SET editorial_status = ?, published_at = ?, updated_at = ?,
-                human_reviewed_at = ?, human_decision = ?, live_state = ?
+                human_reviewed_at = ?, human_decision = ?, live_state = ?,
+                withdrawal = ?
           WHERE id = ? AND (
             editorial_status = '${PENDING_STATUS}'
             OR (auto_decision IS NOT NULL AND human_decision IS NULL)
@@ -660,6 +709,7 @@ export async function decideCandidate(env, id, decision) {
         timestamp,
         decision,
         decision === 'approve' ? 'pending' : null,
+        calRetirar ? 'pending' : null,
         id,
       )
       .run()
@@ -667,16 +717,6 @@ export async function decideCandidate(env, id, decision) {
       return { ok: false, error: 'not-pending' }
     }
 
-    // Si una persona ESMENA una peça que l'ajudant havia publicat, es grava
-    // l'ORDRE de retirar-la. Qui la compleix és el radar, que és l'únic que
-    // escriu el lot públic. Fins que no ho faci, el veto de D1 impedeix que es
-    // pugui llegir (vegeu isWithdrawn i storyMeta.findStory).
-    if (esmenaAjudant && decision === 'reject') {
-      await db
-        .prepare(`UPDATE stories SET withdrawal = 'pending' WHERE id = ?`)
-        .bind(id)
-        .run()
-    }
 
     // I AQUÍ S'ACABA. Aprovar només toca D1.
     //

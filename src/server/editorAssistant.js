@@ -33,6 +33,11 @@ export const PUBLICAR = 'publicar'
 export const DESCARTAR = 'descartar'
 export const DUBTE = 'dubte'
 
+// Versió del criteri. Es desa amb cada veredicte d'ombra perquè, quan es
+// comparin amb les decisions humanes, se sàpiga quin ajudant les va emetre.
+// Puja-la sempre que canviï el prompt o les llistes.
+export const SHADOW_VERSION = 'ajudant-2026-08-15.1'
+
 // QUÈ ES POT AUTOMATITZAR: llista POSITIVA, no de prohibicions.
 //
 // La primera versió era una regex de temes vetats i era massa estreta: no

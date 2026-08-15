@@ -39,12 +39,9 @@ export async function findStory(id, env) {
   // una persona ha manat retirar pot tenir encara la seva còpia story:<id>
   // fins que el radar la tregui. Sense aquesta comprovació seguiria sent
   // pública durant hores.
-  try {
-    if (await isWithdrawn(env, id)) return null
-  } catch {
-    // Si D1 no respon, se segueix el camí normal: val més servir una peça de
-    // més que deixar el diari sense pàgines de detall.
-  }
+  // Si no es pot comprovar, NO es serveix. Continuar cap a KV deixava
+  // reaparèixer justament la peça que algú havia manat retirar.
+  if (await isWithdrawn(env, id)) return null
   try {
     const cached = await env.LIVE_NEWS_KV.get('latest', 'json')
     const liveStory = (cached?.stories || []).find(
@@ -263,7 +260,32 @@ export async function renderStoryPage(request, env) {
   if (!match) return null
 
   const id = decodeId(match[1])
-  const story = await findStory(id, env)
+  let story
+  try {
+    story = await findStory(id, env)
+  } catch (error) {
+    // No es pot comprovar si la peça està retirada. NO és un 404 —la peça pot
+    // existir perfectament— i tampoc es pot servir. Es diu que ara no es pot
+    // atendre, sense indexar-ho, i el cercador hi tornarà.
+    if (error?.name === 'WithdrawalCheckUnavailable') {
+      return new Response(
+        '<!doctype html><html lang="ca"><head><meta name="robots" content="noindex">'
+          + '<title>Ara mateix no es pot obrir</title></head><body>'
+          + '<p>Aquesta pàgina no es pot obrir en aquest moment. Torna-ho a provar d’aquí una estona.</p>'
+          + '</body></html>',
+        {
+          status: 503,
+          headers: {
+            'content-type': 'text/html; charset=utf-8',
+            'cache-control': 'no-store',
+            'retry-after': '120',
+            'x-robots-tag': 'noindex',
+          },
+        },
+      )
+    }
+    throw error
+  }
   if (!story) return renderStoryNotFound(request, url, env)
 
   const assetResponse = await env.ASSETS.fetch(new Request(`${url.origin}/`, request))
