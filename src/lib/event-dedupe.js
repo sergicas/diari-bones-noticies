@@ -103,7 +103,11 @@ export function agrupaPerEsdeveniment(stories, { idDe = (s) => s?.id, ...opcions
     )
     if (!igual) {
       representants.push(story)
-      return story
+      // La marca s'esborra SEMPRE, també a les representants. Si en quedava
+      // una d'antiga —desada quan la peça va entrar— podia apuntar a una
+      // representant que ja hagi sortit de la sala, i llavors la peça es
+      // considerava seguidora d'algú que no hi és i no es dibuixava enlloc.
+      return { ...story, possibleDuplicateOf: null }
     }
     return { ...story, possibleDuplicateOf: idDe(igual) || null }
   })

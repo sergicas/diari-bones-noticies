@@ -265,12 +265,25 @@ async function listPage(env, { missatge = '' } = {}) {
   // La representant primer i les relacionades tot seguit, perquè es puguin
   // comparar sense buscar-les per la pàgina.
   const ordenades = []
+  const dibuixades = new Set()
   for (const s of agrupades) {
     if (s.possibleDuplicateOf) continue
     ordenades.push([s, null])
+    dibuixades.add(s.id)
     for (const seguidora of seguidores.get(s.id) || []) {
       ordenades.push([seguidora, perId.get(s.id) || s])
+      dibuixades.add(seguidora.id)
     }
+  }
+  // XARXA DE SEGURETAT: cada pendent ha de sortir EXACTAMENT una vegada.
+  //
+  // Si per qualsevol motiu una peça queda apuntant a una representant que no
+  // és a la llista, ha de sortir igualment —sola i sense avís— en lloc de
+  // desaparèixer. Cap camí d'aquesta pàgina no pot amagar una peça pendent.
+  for (const s of agrupades) {
+    if (dibuixades.has(s.id)) continue
+    ordenades.push([s, null])
+    dibuixades.add(s.id)
   }
   const cos =
     pending.length === 0

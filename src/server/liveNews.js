@@ -39,7 +39,6 @@ import {
   normalizeIdescatUpdate,
   collectIdescatUpdates,
 } from './rss/serviceFeeds.js'
-import { agrupaPerEsdeveniment } from '../lib/event-dedupe.js'
 import {
   candidateId,
   markStoriesLive,
@@ -2455,32 +2454,24 @@ export async function getLiveNewsPayload(
     )
   }
 
-  // Les que semblen el mateix fet s'AGRUPEN, no es descarten (15-08-2026).
+  // LES CANDIDATES ES DESEN TAL COM SÓN, sense cap marca d'agrupació.
   //
-  // La primera versió en suprimia les repetides, i era un camí de pèrdua
-  // silenciosa: la peça descartada no arribava a la sala, es marcava com a
-  // vista i desapareixia sense que ningú l'hagués llegida. Amb un criteri que
-  // confonia l'eclipsi del 2026 amb el del 2027, això és perdre notícies.
+  // Res no es descarta per semblar repetit: aquella primera versió era un camí
+  // de pèrdua silenciosa, i el criteri arribava a confondre l'eclipsi del 2026
+  // amb el del 2027. Però l'agrupació tampoc no es DESA aquí.
   //
-  // Ara totes hi arriben; les sospitoses porten `possibleDuplicateOf` i la
-  // sala les ensenya agrupades. El programa suggereix, decideix una persona.
-  const pendentsAgrupades = agrupaPerEsdeveniment(pendingStories, {
-    idDe: (story) => candidateId(story),
-  })
-  const agrupades = pendentsAgrupades.filter((story) => story.possibleDuplicateOf)
-  if (agrupades.length > 0) {
-    console.log(
-      JSON.stringify({
-        event: 'review.dedupe.grouped',
-        agrupades: agrupades.length,
-        exemple: agrupades[0]?.title?.slice(0, 80) || null,
-      }),
-    )
-  }
+  // Persistir-la la deixava congelada: quan la representant sortia de la sala
+  // —aprovada o descartada—, la seguidora es quedava amb una marca que
+  // apuntava a algú que ja no hi era, i deixava de dibuixar-se. Dues fonts de
+  // veritat per a la mateixa cosa, i la desada era la dolenta.
+  //
+  // L'agrupació es calcula en LLEGIR la sala (vegeu reviewPage.listPage), que
+  // és l'únic moment en què se sap quines peces hi ha de debò.
+  //
   // Si D1 no ho pot desar, això llança i el radar s'atura ABANS de marcar res
   // com a vist: la cua reintentarà i no es perdrà cap candidata.
-  if (pendentsAgrupades.length > 0) {
-    await recordPendingCandidates(env, pendentsAgrupades)
+  if (pendingStories.length > 0) {
+    await recordPendingCandidates(env, pendingStories)
   }
 
   // Es marquen `pendingStories` SENCERES, incloses les que s'han descartat per

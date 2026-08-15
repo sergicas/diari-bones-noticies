@@ -181,3 +181,84 @@ describe('la sala ensenya juntes les peces del mateix fet', () => {
     expect(await res.text()).not.toContain('Sembla que explica el mateix fet')
   })
 })
+
+// ---------------------------------------------------------------------------
+
+describe('cap peça pendent no pot desaparèixer de la sala', () => {
+  function ambMarcaAntiga(id, title, apuntantA) {
+    return {
+      id,
+      first_seen_at: '2026-08-15T06:00:00.000Z',
+      payload_json: JSON.stringify({
+        id,
+        title,
+        url: `https://x/${id}`,
+        body: [],
+        // Marca DESADA d'una agrupació anterior. Ja no se'n desa cap, però
+        // n'hi pot haver de velles a la base de dades.
+        possibleDuplicateOf: apuntantA,
+      }),
+    }
+  }
+
+  it('una marca antiga que apunta a una peça que ja no hi és no l’amaga', async () => {
+    // El cas que va reproduir Codex: la representant surt de la sala (aprovada
+    // o descartada) i la seguidora es queda apuntant a algú que ja no hi és.
+    // Amb la marca desada, deixava de dibuixar-se i desapareixia.
+    const res = await handleReviewRoutes(
+      get('/revisio', { cookie: `bondiari_revisio=${await cookieValue()}` }),
+      fakeEnv({
+        rows: [
+          ambMarcaAntiga(
+            'orfe',
+            'Una notícia que apuntava a una peça ja decidida',
+            'ja-no-hi-es',
+          ),
+        ],
+      }),
+    )
+    const body = await res.text()
+    expect(body).toContain('Una notícia que apuntava a una peça ja decidida')
+    // I com que ara està sola, no ha de portar cap avís de repetida.
+    expect(body).not.toContain('Sembla que explica el mateix fet')
+  })
+
+  it('amb l’ordre invers de la base de dades, totes hi són igualment', async () => {
+    const files = [
+      pendingRowSimple('b', 'Un eclipsi solar total fotografiat des de Groenlàndia'),
+      pendingRowSimple('a', "Un eclipsi solar total visible des d'Espanya"),
+    ]
+    const res = await handleReviewRoutes(
+      get('/revisio', { cookie: `bondiari_revisio=${await cookieValue()}` }),
+      fakeEnv({ rows: files }),
+    )
+    const body = await res.text()
+    expect(body).toContain('Groenlàndia')
+    expect(body).toContain('Espanya')
+    // Exactament dues targetes: ni se n'amaga cap ni se'n duplica cap.
+    expect(body.match(/<article class="peca/g) || []).toHaveLength(2)
+  })
+
+  it('cada pendent surt exactament una vegada, hi hagi grups o no', async () => {
+    const files = [
+      pendingRowSimple('a', "Un eclipsi solar total visible des d'Espanya"),
+      pendingRowSimple('b', 'Un eclipsi solar total fotografiat des de Groenlàndia'),
+      pendingRowSimple('c', 'Un eclipsi solar total vist des de Kenya aquest matí'),
+      pendingRowSimple('d', 'Una biblioteca del Prat obre els diumenges a la tarda'),
+    ]
+    const res = await handleReviewRoutes(
+      get('/revisio', { cookie: `bondiari_revisio=${await cookieValue()}` }),
+      fakeEnv({ rows: files }),
+    )
+    const body = await res.text()
+    expect(body.match(/<article class="peca/g) || []).toHaveLength(4)
+  })
+})
+
+function pendingRowSimple(id, title) {
+  return {
+    id,
+    first_seen_at: '2026-08-15T06:00:00.000Z',
+    payload_json: JSON.stringify({ id, title, url: `https://x/${id}`, body: [] }),
+  }
+}

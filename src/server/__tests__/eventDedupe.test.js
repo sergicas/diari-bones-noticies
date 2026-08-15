@@ -27,7 +27,9 @@ describe('agrupació per esdeveniment', () => {
 
   it('marca les sospitoses amb la representant, sense amagar-les', () => {
     const out = agrupaPerEsdeveniment(eclipsi)
-    expect(out[0].possibleDuplicateOf).toBeUndefined()
+    // La representant no en té cap: el camp es NETEJA sempre, també per a
+    // ella, perquè cap marca antiga no sobrevisqui a una reagrupació.
+    expect(out[0].possibleDuplicateOf).toBeFalsy()
     expect(out[1].possibleDuplicateOf).toBe('a')
     expect(out[2].possibleDuplicateOf).toBe('a')
   })
@@ -40,7 +42,7 @@ describe('agrupació per esdeveniment', () => {
     const b = { id: '2027', title: 'Un eclipsi solar total serà visible a Espanya el 2027' }
     expect(mateixEsdeveniment(a, b)).toBe(false)
     const out = agrupaPerEsdeveniment([a, b])
-    expect(out[1].possibleDuplicateOf).toBeUndefined()
+    expect(out[1].possibleDuplicateOf).toBeFalsy()
   })
 
   it('xifres diferents en general separen fets', () => {
@@ -66,7 +68,7 @@ describe('agrupació per esdeveniment', () => {
       { id: 'x', title: 'Un observatori a Nou Mèxic permet veure el cel de fa mil·lennis' },
       { id: 'y', title: 'Webb detecta aigua i pols prop del forat negre central' },
     ])
-    expect(out[1].possibleDuplicateOf).toBeUndefined()
+    expect(out[1].possibleDuplicateOf).toBeFalsy()
   })
 
   it('no ajunta dos titulars llargs amb tres mots comuns per casualitat', () => {
@@ -94,5 +96,38 @@ describe('agrupació per esdeveniment', () => {
 
   it('no peta amb titulars buits', () => {
     expect(agrupaPerEsdeveniment([{ title: '' }, { title: null }, {}])).toHaveLength(3)
+  })
+})
+
+describe('cap marca antiga no sobreviu a una reagrupació', () => {
+  it('esborra el que hi hagués desat, també a les representants', () => {
+    // Persistir l'agrupació la deixava congelada: si la representant sortia de
+    // la sala, la seguidora es quedava apuntant a algú que ja no hi era i
+    // desapareixia del render. Ara el camp es recalcula sempre de zero.
+    const out = agrupaPerEsdeveniment([
+      {
+        id: 'a',
+        title: 'Una biblioteca del Prat obre els diumenges a la tarda',
+        possibleDuplicateOf: 'fantasma',
+      },
+      {
+        id: 'b',
+        title: 'Webb detecta aigua i pols prop del forat negre central',
+        possibleDuplicateOf: 'fantasma',
+      },
+    ])
+    expect(out[0].possibleDuplicateOf).toBeFalsy()
+    expect(out[1].possibleDuplicateOf).toBeFalsy()
+  })
+
+  it('no deixa mai una marca que apunti a algú que no és a la llista', () => {
+    const out = agrupaPerEsdeveniment([
+      { id: 'a', title: "Un eclipsi solar total visible des d'Espanya" },
+      { id: 'b', title: 'Un eclipsi solar total fotografiat des de Groenlàndia', possibleDuplicateOf: 'fantasma' },
+    ])
+    const ids = new Set(out.map((s) => s.id))
+    for (const s of out) {
+      if (s.possibleDuplicateOf) expect(ids.has(s.possibleDuplicateOf)).toBe(true)
+    }
   })
 })
