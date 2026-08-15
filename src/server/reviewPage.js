@@ -15,6 +15,7 @@
 //   les hagi llegides.
 
 import { agrupaPerEsdeveniment } from '../lib/event-dedupe.js'
+import { buildManualRefreshQueueMessage } from './pipelineQueue.js'
 import {
   countPendingCandidates,
   countPendingLive,
@@ -22,6 +23,7 @@ import {
   decideCandidate,
   expireStaleCandidates,
   listPendingCandidates,
+  shadowAgreement,
 } from './reviewGate.js'
 
 const COOKIE_NAME = 'bondiari_revisio'
@@ -246,11 +248,28 @@ function storyCard(story, relacionadaAmb = null) {
 }
 
 async function listPage(env, { missatge = '' } = {}) {
-  const [pending, esperantSortir, decididesSoles] = await Promise.all([
+  const [pending, esperantSortir, decididesSoles, concordanca] = await Promise.all([
     listPendingCandidates(env),
     countPendingLive(env),
     listAssistantDecisions(env),
+    shadowAgreement(env),
   ])
+  // COM HO ESTÀ FENT L'AJUDANT MENTRE MIRA SENSE TOCAR RES.
+  //
+  // No es diu enlloc QUÈ opina d'una peça concreta abans que la decideixis: si
+  // ho digués, el número mesuraria fins a quin punt et deixes convèncer, no si
+  // encerta. Aquest recompte és l'única cosa que se n'ensenya, i és el que ha
+  // de decidir si algun dia se li dona la mà.
+  const provaAjudant =
+    concordanca.total < 5
+      ? ''
+      : `<p class="cua">L'ajudant, mentre mira: coincidiria amb tu en ${Math.round(
+          (concordanca.concorden / concordanca.total) * 100,
+        )} de cada 100 (${concordanca.total} peces). Hauria publicat ${
+          concordanca.hauriaPublicatIVaDescartar
+        } que vas descartar i hauria descartat ${
+          concordanca.hauriaDescartatIVaPublicar
+        } que vas publicar.</p>`
   const compte =
     pending.length === 0
       ? 'Res per revisar. El diari està al dia.'
@@ -339,6 +358,7 @@ ${llista
     `<h1>Sala de revisió</h1>
 <p class="compte">${escapeHtml(compte)}${missatge ? ` · ${escapeHtml(missatge)}` : ''}</p>
 ${enCua}
+${provaAjudant}
 ${seccioAuto(publicadesSoles, "L'ajudant ha publicat sol", 'reject', 'Retira-la del diari')}
 ${seccioAuto(descartadesSoles, "L'ajudant ha descartat sol", 'approve', 'Publica-la igualment')}
 ${cos}`,
@@ -403,12 +423,44 @@ export async function handleReviewRoutes(request, env) {
     const id = String(form.get('id') || '')
     const decisio = String(form.get('decisio') || '')
     const outcome = await decideCandidate(env, id, decisio)
+    // UNA RETIRADA S'HA DE DEMANAR DE SEGUIDA.
+    //
+    // La sala només grava l'ordre; qui la compleix és el radar, que és l'únic
+    // que pot escriure el lot públic. Sense demanar-li una passada, la targeta
+    // es quedava a portada, a l'API i al sitemap fins al pròxim cron: podien
+    // ser hores. S'encola sense distribució: ha de treure la peça, no enviar
+    // res a ningú.
+    let refrescDemanat = false
+    if (outcome.ok && outcome.retirada && env.INGEST_QUEUE) {
+      try {
+        await env.INGEST_QUEUE.send(
+          buildManualRefreshQueueMessage({
+            distribution: 'none',
+            idempotencyKey: `refresh:retirada:${id}`,
+          }),
+          { contentType: 'json' },
+        )
+        refrescDemanat = true
+      } catch (error) {
+        console.error(
+          JSON.stringify({
+            event: 'review.withdrawal.refresh-failed',
+            id,
+            error: error instanceof Error ? error.message : String(error),
+          }),
+        )
+      }
+    }
     // El missatge ha de dir la veritat. Abans deia "Publicada" encara que la
     // peça no hagués arribat al web, i qui revisava es quedava convençut
     // d'haver publicat una cosa que no hi era.
     const missatge = outcome.ok
       ? decisio === 'approve'
         ? 'Aprovada. Sortirà al web a la pròxima passada del radar.'
+        : outcome.retirada
+        ? refrescDemanat
+          ? 'Descartada. Retirada del web pendent: ja he demanat la passada que la traurà.'
+          : 'Descartada. Retirada del web pendent: es farà a la pròxima passada del radar.'
         : 'Descartada.'
       : outcome.error === 'not-pending'
       ? 'Aquesta peça ja estava decidida.'

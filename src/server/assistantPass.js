@@ -1,5 +1,7 @@
+import { activeTextProvider } from './ai/textModel.js'
 import { revisaCandidata, SHADOW_VERSION } from './editorAssistant.js'
 import {
+  candidateId,
   humanDecisionExamples,
   recordAssistantDecisions,
   recordShadowVerdicts,
@@ -41,7 +43,14 @@ export function resolMode(env) {
   return 'shadow'
 }
 
-const idDe = (story) => story?.id || story?.url
+// L'IDENTIFICADOR ÉS EL DE LA SALA, SEMPRE.
+//
+// Aquest mòdul en calculava un de propi (`story.id || story.url`). Les peces
+// reals dels feeds NO porten `id`, i la sala les desa amb `candidateId`, que
+// en fabrica un de la forma `feed-…`. Resultat: tots els UPDATE apuntaven a
+// una fila inexistent, no es desava cap veredicte i, en automàtic, no
+// s'aprovava mai res —mentre el registre deia que sí. Les proves no ho veien
+// perquè hi posaven l'`id` a mà.
 
 /**
  * Revisa les candidates d'aquesta passada.
@@ -62,7 +71,7 @@ export async function passadaDeLAjudant(env, candidates = []) {
       const decision =
         r.veredicte === 'publicar' ? 'approve' : r.veredicte === 'descartar' ? 'reject' : 'doubt'
       tots.push({
-        id: idDe(story),
+        id: candidateId(story),
         decision,
         reason: r.guardia ? `[${r.guardia}] ${r.motiu}` : r.motiu,
         story,
@@ -77,7 +86,12 @@ export async function passadaDeLAjudant(env, candidates = []) {
       // Es desa el veredicte de CADA candidata, dubtes inclosos, i no cinc
       // exemples al registre: sense això, passats uns dies no hi ha manera de
       // comparar el criteri de la màquina amb el d'ell, i la prova no serveix.
-      await recordShadowVerdicts(env, tots, { version: SHADOW_VERSION })
+      // Es desa també QUIN model ho ha dit. La versió sola era una constant
+      // escrita a mà: si el proveïdor canvia (Gemini sense quota → Llama), els
+      // veredictes es barregen i la comparació deixa de voler dir res.
+      await recordShadowVerdicts(env, tots, {
+        version: `${SHADOW_VERSION}·${activeTextProvider(env)}`,
+      })
       console.log(
         JSON.stringify({
           event: 'assistant.shadow',

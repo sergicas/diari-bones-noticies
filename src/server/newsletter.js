@@ -12,7 +12,7 @@ import {
   deleteNewsletterSubscriberMirror,
   mirrorNewsletterSubscriber,
 } from './editorialStore.js'
-import { countPendingCandidates } from './reviewGate.js'
+import { countPendingCandidates, senseVetades } from './reviewGate.js'
 
 const subscriberPrefix = 'subscriber:'
 const actionTokenPrefix = 'newsletter-action:'
@@ -785,9 +785,20 @@ export async function sendReviewReminder(env) {
   return { sent: result.ok ? 1 : 0, failed: result.ok ? 0 : 1, pending }
 }
 
-export async function sendDailyDigest(env) {
-  const cache = await env.LIVE_NEWS_KV.get('latest', 'json')
-  const stories = Array.isArray(cache?.stories) ? cache.stories.slice(0, 6) : []
+export async function sendDailyDigest(env, { stories: entrada = null } = {}) {
+  // EL BUTLLETÍ JA NO LLEGEIX `latest` A CEGUES.
+  //
+  // Qui el crida li passa les peces que ja ha comprovat contra la sala. Si no
+  // n'hi passa, les llegeix ell mateix i les comprova igualment: un correu
+  // enviat no es pot desfer, i KV va endarrerit respecte de les retirades.
+  let stories
+  if (Array.isArray(entrada)) {
+    stories = entrada.slice(0, 6)
+  } else {
+    const cache = await env.LIVE_NEWS_KV.get('latest', 'json')
+    const totes = Array.isArray(cache?.stories) ? cache.stories : []
+    stories = (await senseVetades(env, totes)).slice(0, 6)
+  }
   if (stories.length === 0) {
     console.warn('[newsletter] No hi ha notícies al cache; saltem el digest.')
     return { sent: 0, skipped: true }

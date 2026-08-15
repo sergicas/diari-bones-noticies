@@ -5,7 +5,7 @@ import {
   sendDailyDigest,
   sendReviewReminder,
 } from './newsletter.js'
-import { expireStaleCandidates } from './reviewGate.js'
+import { expireStaleCandidates, senseVetades } from './reviewGate.js'
 import { sendPushToAll } from './push.js'
 import { sendApnsToAll } from './apns.js'
 import { announceFreshStories } from './social.js'
@@ -84,7 +84,13 @@ function isPipelineMessage(value) {
 
 async function latestStoriesFromKv(env) {
   const cached = await env.LIVE_NEWS_KV.get('latest', 'json')
-  return Array.isArray(cached?.stories) ? cached.stories : []
+  const stories = Array.isArray(cached?.stories) ? cached.stories : []
+  // KV va endarrerit: el lot públic encara pot contenir una peça que algú
+  // acaba de retirar. Distribuir és irreversible —un correu enviat no torna—,
+  // així que abans de sortir es consulta el veto a la sala. Si la sala no
+  // respon, `senseVetades` llança i la cua ho reintenta: val més el butlletí
+  // tard que amb una peça retirada.
+  return senseVetades(env, stories)
 }
 
 async function queueDistribution(env, refreshMessage, edition) {
@@ -162,7 +168,10 @@ async function processDailyDistribution(env, message) {
   const storedStories = await readEditionStories(env, message.editionId, 6)
   const stories =
     storedStories.length > 0 ? storedStories : await latestStoriesFromKv(env)
-  const digest = await sendDailyDigest(env)
+  // Les mateixes peces que ja s'han comprovat contra la sala, no una lectura
+  // nova de `latest`: si no, el correu i la notificació podien anar per camins
+  // diferents i enviar coses distintes.
+  const digest = await sendDailyDigest(env, { stories })
   const top = stories[0]
   let push = { skipped: 'no-story' }
   let apns = { skipped: 'no-story' }

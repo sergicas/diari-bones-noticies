@@ -335,7 +335,16 @@ export async function persistEditorialEdition(
             editorial_status = 'published',
             published_at = excluded.published_at,
             payload_json = excluded.payload_json,
-            updated_at = excluded.updated_at`,
+            updated_at = excluded.updated_at
+          -- L'ARXIU NO POT DESFER UNA DECISIÓ HUMANA (15-08-2026).
+          --
+          -- Aquest upsert forçava l'estat de publicada sempre. Si
+          -- s'executava just després que una persona rebutgés una peça que
+          -- l'ajudant havia aprovat —el radar tancant l'edició mentre ell
+          -- decideix a la sala—, la tornava a deixar publicada. La condició fa
+          -- que la fila d'una peça rebutjada o retirada no es toqui gens.
+          WHERE COALESCE(stories.human_decision, '') <> 'reject'
+            AND COALESCE(stories.withdrawal, '') = ''`,
         )
         .bind(
           id,
@@ -408,10 +417,16 @@ export async function readEditionStories(env, editionId, limit = 30) {
   if (!db || !editionId) return []
   const result = await db
     .prepare(
+      // Ni retirades ni rebutjades. Sense aquest filtre, una edició d'ahir
+      // encara podia enviar per correu, notificació o xarxes una peça que
+      // algú havia tret del diari aquest matí.
       `SELECT stories.payload_json
       FROM edition_stories
       INNER JOIN stories ON stories.id = edition_stories.story_id
       WHERE edition_stories.edition_id = ?
+        AND COALESCE(stories.human_decision, '') <> 'reject'
+        AND COALESCE(stories.withdrawal, '') = ''
+        AND stories.editorial_status NOT IN ('rejected', 'captured')
       ORDER BY edition_stories.position ASC
       LIMIT ?`,
     )

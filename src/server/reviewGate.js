@@ -51,6 +51,18 @@ function chunks(items, size = MAX_STATEMENTS_PER_BATCH) {
   return result
 }
 
+/**
+ * L'avaria que aixequen totes les comprovacions de veto quan la sala no
+ * respon. Qui la rep ha de respondre que la peça no està disponible, mai
+ * servir-la: el veto ha de valer sobretot quan les coses van malament.
+ */
+export function avariaDeVeto(missatge, cause) {
+  const avaria = new Error(missatge)
+  avaria.name = 'WithdrawalCheckUnavailable'
+  avaria.cause = cause
+  return avaria
+}
+
 export function candidateId(story) {
   return story?.id || feedStoryId(story?.url || story?.title || '')
 }
@@ -96,7 +108,7 @@ export async function readDecisions(env, ids) {
       const placeholders = group.map(() => '?').join(', ')
       const { results } = await db
         .prepare(
-          `SELECT id, editorial_status, human_decision, auto_decision
+          `SELECT id, editorial_status, human_decision, auto_decision, withdrawal
              FROM stories WHERE id IN (${placeholders})`,
         )
         .bind(...group)
@@ -106,6 +118,7 @@ export async function readDecisions(env, ids) {
           status: row.editorial_status,
           humanDecision: row.human_decision || null,
           autoDecision: row.auto_decision || null,
+          withdrawal: row.withdrawal || null,
         })
       }
     }
@@ -137,12 +150,22 @@ export function splitByReviewDecision(
   const pending = []
   const rejected = []
   for (const story of stories || []) {
+    const decision = decisions.get(candidateId(story))
+    const status = decision?.status
+    // EL REBUIG D'UNA PERSONA MANA SOBRE TOT LA RESTA (15-08-2026).
+    //
+    // Va abans que la drecera de "ja era pública" i abans de qualsevol
+    // aprovació de l'ajudant. Sense això, una peça que l'ajudant havia aprovat
+    // i que després una persona rebutjava tornava al diari: la màquina hi
+    // tenia l'última paraula. Ha de ser al revés, sempre.
+    if (decision?.humanDecision === 'reject' || decision?.withdrawal) {
+      rejected.push(story)
+      continue
+    }
     if (publicUrls.has(story?.url)) {
       approved.push(story)
       continue
     }
-    const decision = decisions.get(candidateId(story))
-    const status = decision?.status
     // NO N'HI HA PROU AMB L'ESTAT PÚBLIC (14-08-2026).
     //
     // D1 porta 209 peces publicades per l'automatisme ANTERIOR, d'abans que
@@ -158,7 +181,8 @@ export function splitByReviewDecision(
     // qualsevol moment se sàpiga qui va deixar passar què; però totes dues
     // publiquen. Sergi va triar que el diari sortís sol.
     const aprovada =
-      decision?.humanDecision === 'approve' || decision?.autoDecision === 'approve'
+      decision?.humanDecision === 'approve' ||
+      (decision?.autoDecision === 'approve' && decision?.humanDecision !== 'reject')
     if (PUBLIC_STATUSES.has(status) && aprovada) {
       approved.push(story)
     } else if (status === REJECTED_STATUS) {
@@ -349,13 +373,17 @@ export async function pendingWithdrawals(env) {
       .all()
     return results || []
   } catch (error) {
+    // FALLA TANCAT. Tornar una llista buida feia que la passada continués i
+    // reescrivís el lot públic AMB la peça que algú havia manat retirar, i que
+    // ho fes en silenci. Millor que la passada s'aturi i la cua la reintenti:
+    // el diari es queda com estava, que és un estat conegut.
     console.error(
       JSON.stringify({
         event: 'review.withdrawals.read-failed',
         error: error instanceof Error ? error.message : String(error),
       }),
     )
-    return []
+    throw avariaDeVeto('no es poden llegir les ordres de retirada', error)
   }
 }
 
@@ -403,10 +431,7 @@ export async function isWithdrawn(env, id) {
     // justament la peça que algú havia manat retirar: el veto ha de valer
     // sobretot quan les coses van malament. Qui crida ha de respondre que la
     // pàgina no està disponible, no servir la còpia de KV.
-    const avaria = new Error('no es pot comprovar si la peça està retirada')
-    avaria.name = 'WithdrawalCheckUnavailable'
-    avaria.cause = error
-    throw avaria
+    throw avariaDeVeto('no es pot comprovar si la peça està retirada', error)
   }
 }
 
@@ -438,6 +463,101 @@ export async function recordShadowVerdicts(env, verdicts, { version = '' } = {})
     for (const item of outcome || []) recorded += Number(item?.meta?.changes || 0)
   }
   return { recorded }
+}
+
+/**
+ * QUINES D'AQUESTES PECES TENEN VETO: rebutjades per una persona o amb ordre
+ * de retirada.
+ *
+ * Falla TANCAT a propòsit: si la sala no respon, llança. Qui ho crida són els
+ * camins de distribució —correu, notificacions, xarxes—, i tots són
+ * irreversibles: val més no enviar el butlletí d'avui que enviar una peça que
+ * algú ha retirat. La cua ho reintentarà.
+ */
+export async function vetadesEntre(env, ids) {
+  const db = database(env)
+  const unique = [...new Set((ids || []).filter(Boolean))]
+  const vetades = new Set()
+  if (unique.length === 0) return vetades
+  if (!db) throw avariaDeVeto('no hi ha sala on comprovar les retirades')
+  try {
+    for (const group of chunks(unique)) {
+      const placeholders = group.map(() => '?').join(', ')
+      const { results } = await db
+        .prepare(
+          `SELECT id FROM stories
+            WHERE id IN (${placeholders})
+              AND (human_decision = 'reject' OR withdrawal IS NOT NULL)`,
+        )
+        .bind(...group)
+        .all()
+      for (const row of results || []) vetades.add(row.id)
+    }
+  } catch (error) {
+    throw avariaDeVeto('no es poden comprovar les retirades', error)
+  }
+  return vetades
+}
+
+/** El mateix, però tornant la llista neta de peces. */
+export async function senseVetades(env, stories) {
+  const llista = (stories || []).filter(Boolean)
+  if (llista.length === 0) return llista
+  const vetades = await vetadesEntre(env, llista.map(candidateId))
+  if (vetades.size === 0) return llista
+  const netes = llista.filter((story) => !vetades.has(candidateId(story)))
+  console.warn(
+    JSON.stringify({
+      event: 'distribucio.vetades.excloses',
+      quantes: llista.length - netes.length,
+    }),
+  )
+  return netes
+}
+
+/**
+ * COM HO ESTÀ FENT L'AJUDANT, comparat amb les decisions reals d'en Sergi.
+ *
+ * Només compta les peces on hi ha totes dues coses: el que ell va decidir i el
+ * que la màquina hauria fet. És el número que ha de decidir si algun dia se li
+ * dona la mà, i sense ell el mode de proves no serveix de res.
+ *
+ * La comparació és CEGA: la sala no ensenya mai el veredicte de la màquina
+ * abans que ell decideixi, perquè si no, el número mesuraria la seva
+ * suggestió, no el criteri de l'ajudant.
+ */
+export async function shadowAgreement(env, { dies = 30 } = {}) {
+  const db = database(env)
+  const buit = { total: 0, concorden: 0, hauriaPublicatIVaDescartar: 0, hauriaDescartatIVaPublicar: 0 }
+  if (!db) return buit
+  try {
+    const desDe = new Date(Date.now() - dies * 24 * 60 * 60 * 1000).toISOString()
+    const { results } = await db
+      .prepare(
+        `SELECT shadow_decision, human_decision FROM stories
+          WHERE shadow_decision IN ('approve', 'reject')
+            AND human_decision IN ('approve', 'reject')
+            AND human_reviewed_at >= ?`,
+      )
+      .bind(desDe)
+      .all()
+    const comptes = { ...buit }
+    for (const row of results || []) {
+      comptes.total += 1
+      if (row.shadow_decision === row.human_decision) comptes.concorden += 1
+      else if (row.shadow_decision === 'approve') comptes.hauriaPublicatIVaDescartar += 1
+      else comptes.hauriaDescartatIVaPublicar += 1
+    }
+    return comptes
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        event: 'review.shadow-agreement.failed',
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    )
+    return buit
+  }
 }
 
 /** Les decisions que ha pres una PERSONA, per ensenyar-li'n el criteri a l'ajudant. */
@@ -725,7 +845,7 @@ export async function decideCandidate(env, id, decision) {
     // aprovacions alhora llegien la mateixa edició i una es perdia, tot i que
     // totes dues deien que s'havien publicat. El radar és l'ÚNIC que escriu el
     // lot; la sala només registra decisions.
-    return { ok: true, id, decision, live: false }
+    return { ok: true, id, decision, live: false, retirada: calRetirar }
   } catch (error) {
     console.error(
       JSON.stringify({
