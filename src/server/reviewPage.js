@@ -14,6 +14,7 @@
 //   enllaços sols per previsualitzar-los i aprovarien peces sense que ningú
 //   les hagi llegides.
 
+import { agrupaPerEsdeveniment } from '../lib/event-dedupe.js'
 import {
   countPendingCandidates,
   countPendingLive,
@@ -183,7 +184,7 @@ function loginPage({ error = '' } = {}) {
   )
 }
 
-function storyCard(story) {
+function storyCard(story, relacionadaAmb = null) {
   const circuit = story.circuit || story.sourceCircuit || ''
   const cos = Array.isArray(story.body) ? story.body : []
   const marques = [
@@ -197,11 +198,16 @@ function storyCard(story) {
   ]
     .filter(Boolean)
     .join('')
-  // No s'amaga cap peça per semblar repetida: s'avisa i decideix qui llegeix.
-  const avisRepetida = story.possibleDuplicateOf
-    ? '<p class="repetida">Sembla que explica el mateix fet que una altra peça d’aquesta llista. Mira-les totes dues abans de decidir.</p>'
+  // No s'amaga cap peça per semblar repetida: s'avisa, es diu AMB QUINA i
+  // s'ensenyen juntes. Decideix qui llegeix.
+  const avisRepetida = relacionadaAmb
+    ? `<p class="repetida">Sembla que explica el mateix fet que <strong>${escapeHtml(
+        relacionadaAmb.title,
+      )}</strong>${
+        relacionadaAmb.source ? ` (${escapeHtml(relacionadaAmb.source)})` : ''
+      }, just aquí sobre. Mira-les totes dues abans de decidir.</p>`
     : ''
-  return `<article class="peca${story.possibleDuplicateOf ? ' peca--repetida' : ''}">
+  return `<article class="peca${relacionadaAmb ? ' peca--repetida' : ''}">
   ${avisRepetida}
   ${story.imageUrl ? `<img src="${escapeHtml(story.imageUrl)}" alt="${escapeHtml(story.imageAlt || '')}">` : ''}
   <div class="marques">${marques}</div>
@@ -240,10 +246,36 @@ async function listPage(env, { missatge = '' } = {}) {
             ? '1 peça aprovada espera sortir al web'
             : `${esperantSortir} peces aprovades esperen sortir al web`
         } · surten a la pròxima passada del radar</p>`
+  // L'AGRUPACIÓ ES CALCULA AQUÍ, en llegir.
+  //
+  // Fer-ho només en inserir deixava fora les peces que ja eren a la base de
+  // dades (l'INSERT OR IGNORE no actualitza res del que ja hi ha), i les tres
+  // peces del mateix eclipsi que ja hi havia no s'haurien ajuntat mai.
+  // Calculant-ho en llegir, la sala sempre ensenya els grups al dia i no cal
+  // recuperar res enrere.
+  const agrupades = agrupaPerEsdeveniment(pending, { idDe: (s) => s.id })
+  const perId = new Map(pending.map((s) => [s.id, s]))
+  const seguidores = new Map()
+  for (const s of agrupades) {
+    if (!s.possibleDuplicateOf) continue
+    const llista = seguidores.get(s.possibleDuplicateOf) || []
+    llista.push(s)
+    seguidores.set(s.possibleDuplicateOf, llista)
+  }
+  // La representant primer i les relacionades tot seguit, perquè es puguin
+  // comparar sense buscar-les per la pàgina.
+  const ordenades = []
+  for (const s of agrupades) {
+    if (s.possibleDuplicateOf) continue
+    ordenades.push([s, null])
+    for (const seguidora of seguidores.get(s.id) || []) {
+      ordenades.push([seguidora, perId.get(s.id) || s])
+    }
+  }
   const cos =
     pending.length === 0
       ? '<div class="buit"><p>Cap peça pendent.</p></div>'
-      : pending.map(storyCard).join('')
+      : ordenades.map(([s, relacionada]) => storyCard(s, relacionada)).join('')
   return page(
     'Sala de revisió',
     `<h1>Sala de revisió</h1>

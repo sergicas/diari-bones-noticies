@@ -59,12 +59,16 @@ function xifresIncompatibles(a, b) {
   const xa = xifres(a)
   const xb = xifres(b)
   if (xa.size === 0 || xb.size === 0) return false
-  // Si totes dues porten números i no coincideixen, parlen de fets diferents.
+  // Si totes dues porten números, han de portar EXACTAMENT els mateixos.
+  //
   // "Un eclipsi visible a Espanya el 2026" i el mateix titular amb 2027 només
-  // es diferencien en l'any, i la resta de mots són idèntics: sense aquesta
-  // regla es prenien per la mateixa notícia.
-  for (const n of xa) if (xb.has(n)) return false
-  return true
+  // es diferencien en l'any. I "missió 2026 a 300 km" i "missió 2026 a 900 km"
+  // comparteixen l'any però parlen de coses diferents: no n'hi ha prou que en
+  // coincideixi una. Com que ara no es descarta res, ser conservador només vol
+  // dir suggerir menys agrupacions, que és el costat bo per equivocar-se.
+  if (xa.size !== xb.size) return true
+  for (const n of xa) if (!xb.has(n)) return true
+  return false
 }
 
 export function mateixEsdeveniment(a, b, { minComuns = 3, minProporcio = 0.5 } = {}) {

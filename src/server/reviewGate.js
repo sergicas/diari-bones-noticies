@@ -155,7 +155,14 @@ export function splitByReviewDecision(
 export async function recordPendingCandidates(env, stories) {
   const db = database(env)
   const list = (stories || []).filter((story) => story?.url && story?.title)
-  if (!db || list.length === 0) return { recorded: 0 }
+  if (list.length === 0) return { recorded: 0 }
+  // Sense base de dades i AMB candidates a desar, això és una avaria, no un
+  // cas normal: tornar zero deixava el radar continuar fins a marcar-les com a
+  // vistes, i les candidates es perdien sense que ningú les hagués vistes. És
+  // l'últim racó on encara s'incomplia "el que no es desa, no es marca".
+  if (!db) {
+    throw new Error('no hi ha base de dades per desar les candidates')
+  }
   const timestamp = nowIso()
   let recorded = 0
   try {

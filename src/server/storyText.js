@@ -114,6 +114,16 @@ const REWRITE_SYSTEM = [
   // d'estil: és atribuir-se el treball de camp d'un altre mitjà, i va
   // directament contra el Circuit B, que exigeix peça pròpia amb la font ben
   // acreditada.
+  // Què vol dir cada circuit. La marca sola no aplica cap regla: el model no
+  // sap què és un "circuit B" si no li diem.
+  'QUÈ VOL DIR EL CIRCUIT de cada peça:',
+  'circuit A és una font institucional d’accés obert (agències espacials,',
+  'revistes científiques amb llicència lliure): se’n poden adaptar els fets amb',
+  'fidelitat i citant-la.',
+  'circuit B és qualsevol altre mitjà: NO se’n pot republicar ni traduir el',
+  'text. La peça ha de ser teva, escrita a partir dels FETS, amb la font ben',
+  'acreditada i com a molt una citació curta i entrecomillada.',
+  'En tots dos casos, mai copiïs frases senceres del context.',
   'DE QUI ÉS LA FEINA: la investigació, les entrevistes i el treball de camp',
   'SÓN DE LA FONT que es marca a cada peça, no nostres. Escriu SEMPRE en',
   'tercera persona i atribueix-los-hi de manera explícita: "MIT Technology',

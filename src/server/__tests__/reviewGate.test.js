@@ -158,6 +158,19 @@ describe('porta d’aprovació humana', () => {
     expect(insert.query).toContain("'captured'")
   })
 
+  it('sense base de dades i AMB candidates, també llança', async () => {
+    // L'últim racó on encara s'incomplia "el que no es desa, no es marca":
+    // sense binding es tornava { recorded: 0 } i el radar continuava fins a
+    // marcar-les com a vistes.
+    await expect(recordPendingCandidates({}, [story()])).rejects.toThrow(
+      /base de dades/,
+    )
+  })
+
+  it('sense candidates a desar, no es queixa de res', async () => {
+    await expect(recordPendingCandidates({}, [])).resolves.toEqual({ recorded: 0 })
+  })
+
   it('si D1 no pot desar les candidates, LLANÇA en lloc de continuar', async () => {
     // Abans s'empassava l'error i tornava { recorded: 0 }; el radar ho ignorava
     // i marcava igualment totes les peces com a vistes, de manera que una

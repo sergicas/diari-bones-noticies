@@ -131,3 +131,53 @@ describe('sala de revisió', () => {
     expect(await response.text()).toContain('Contrasenya')
   })
 })
+
+// ---------------------------------------------------------------------------
+
+describe('la sala ensenya juntes les peces del mateix fet', () => {
+  function pendent(id, title, source) {
+    return {
+      id,
+      first_seen_at: '2026-08-15T06:00:00.000Z',
+      payload_json: JSON.stringify({ id, title, source, url: `https://x/${id}`, body: [] }),
+    }
+  }
+
+  it('les agrupa en LLEGIR, encara que ja fossin a la base de dades', async () => {
+    // L'agrupació es calculava només en inserir, i l'INSERT OR IGNORE no toca
+    // el que ja hi ha: les tres peces del mateix eclipsi que ja eren a la sala
+    // no s'haurien ajuntat mai. Calculant-ho en llegir, no cal recuperar res.
+    const files = [
+      pendent('a', "Un eclipsi solar total visible des d'Espanya", 'Phys.org'),
+      pendent('z', 'Un observatori nou obre a Nou Mèxic aquesta tardor', 'Aeon'),
+      pendent('b', 'Un eclipsi solar total fotografiat des de Groenlàndia', 'NASA'),
+    ]
+    const res = await handleReviewRoutes(
+      get('/revisio', { cookie: `bondiari_revisio=${await cookieValue()}` }),
+      fakeEnv({ rows: files }),
+    )
+    const body = await res.text()
+
+    // Totes tres hi són: no se n'amaga cap.
+    for (const t of ['Espanya', 'Groenlàndia', 'Nou Mèxic']) {
+      expect(body).toContain(t)
+    }
+    // La relacionada diu AMB QUINA s'assembla i de qui és.
+    expect(body).toContain('Sembla que explica el mateix fet que')
+    expect(body).toContain('Phys.org')
+    // I va just després de la seva representant, no escampada per la pàgina.
+    const posA = body.indexOf('Espanya')
+    const posB = body.indexOf('Groenlàndia')
+    const posZ = body.indexOf('Nou Mèxic')
+    expect(posA).toBeLessThan(posB)
+    expect(posB).toBeLessThan(posZ)
+  })
+
+  it('una peça sola no porta cap avís', async () => {
+    const res = await handleReviewRoutes(
+      get('/revisio', { cookie: `bondiari_revisio=${await cookieValue()}` }),
+      fakeEnv({ rows: [pendent('u', 'Una notícia qualsevol i ben diferent', 'Quanta')] }),
+    )
+    expect(await res.text()).not.toContain('Sembla que explica el mateix fet')
+  })
+})
