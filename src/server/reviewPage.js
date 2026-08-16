@@ -16,6 +16,7 @@
 
 import { agrupaPerEsdeveniment } from '../lib/event-dedupe.js'
 import { buildManualRefreshQueueMessage } from './pipelineQueue.js'
+import { reescriuCandidata } from './rewriteCandidate.js'
 import {
   countPendingCandidates,
   countPendingLive,
@@ -25,6 +26,7 @@ import {
   listPendingCandidates,
   listPendingWithdrawals,
   shadowAgreement,
+  updateCandidateText,
 } from './reviewGate.js'
 
 const COOKIE_NAME = 'bondiari_revisio'
@@ -115,6 +117,7 @@ const STYLES = `
   }
   .publica { background: #146356; color: #fff; }
   .descarta { background: #efe9e2; color: #6a2b1f; }
+  .reescriu { background: #fbf3d9; color: #6b5310; font-weight: 600; }
   .buit { background: #fff; border: 1px solid #e2ddd2; border-radius: 10px; padding: 2rem 1rem; text-align: center; }
   .cua {
     font-family: system-ui, sans-serif; font-size: .9rem;
@@ -162,6 +165,7 @@ const STYLES = `
     .automotiu { color: #a5a29b; }
     input[type=password] { background: #14171a; color: #e8e4dc; border-color: #3a4046; }
     .descarta { background: #33292a; color: #e6b3a6; }
+    .reescriu { background: #33301f; color: #e2ce8f; }
   }
 `
 
@@ -245,6 +249,14 @@ function storyCard(story, relacionadaAmb = null) {
     <button class="publica" type="submit" name="decisio" value="approve">Aprova</button>
     <button class="descarta" type="submit" name="decisio" value="reject">Descarta</button>
   </form>
+  <!-- LA TERCERA SORTIDA. Amb només dos botons, una peça bona amb el català
+       espatllat només es podia aprovar amb la falta o descartar. Descartar-la
+       és castigar la peça per un defecte de la nostra fàbrica. -->
+  <form method="post" action="/revisio/reescriure" class="botons">
+    <input type="hidden" name="id" value="${escapeHtml(story.id)}">
+    <button class="reescriu" type="submit">Torna-la a escriure</button>
+  </form>
+  ${story.rewrittenAt ? '<p class="automotiu">Aquest text ja s’ha reescrit un cop.</p>' : ''}
 </article>`
 }
 
@@ -436,6 +448,39 @@ export async function handleReviewRoutes(request, env) {
 
   if (!authorized) {
     return htmlResponse(loginPage(), { status: path === '/revisio' ? 200 : 401 })
+  }
+
+  // TORNAR-LA A ESCRIURE, la tercera sortida.
+  //
+  // Abans, davant d'una peça amb el català espatllat només es podia aprovar
+  // amb la falta o descartar-la. Descartar-la és injust: la peça no té la
+  // culpa que la nostra màquina escrigui malament. Això la torna a escriure i
+  // la deixa on era, esperant que la llegeixis.
+  if (path === '/revisio/reescriure') {
+    if (request.method !== 'POST') return seeOther('/revisio')
+    const form = await request.formData()
+    const id = String(form.get('id') || '')
+    const pendents = await listPendingCandidates(env)
+    const peca = pendents.find((p) => p.id === id)
+    let missatge
+    if (!peca) {
+      missatge = 'Aquesta peça ja no espera: algú l’ha decidida mentrestant.'
+    } else {
+      const intent = await reescriuCandidata(env, peca)
+      if (!intent.ok) {
+        // Es diu QUÈ ha passat i que la peça no s'ha tocat. Un "no s'ha pogut"
+        // a seques deixaria dubtant si el text ha canviat a mitges.
+        missatge = `No s’ha reescrit: ${intent.motiu}. La peça es queda com estava.`
+      } else {
+        const desat = await updateCandidateText(env, id, intent.story)
+        missatge = desat.ok
+          ? 'Reescrita. Torna-la a llegir: segueix esperant la teva decisió.'
+          : desat.error === 'not-pending'
+          ? 'No s’ha desat: algú ha decidit la peça mentre es reescrivia.'
+          : 'No s’ha pogut desar la reescriptura. La peça es queda com estava.'
+      }
+    }
+    return htmlResponse(await listPage(env, { missatge }))
   }
 
   if (path === '/revisio/decidir') {

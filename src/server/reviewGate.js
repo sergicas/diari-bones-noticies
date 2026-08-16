@@ -931,6 +931,47 @@ export async function decideCandidate(env, id, decision) {
 }
 
 /**
+ * DESA EL TEXT REESCRIT D'UNA CANDIDATA, sense tocar-ne l'estat.
+ *
+ * La condició de l'UPDATE és la que garanteix que això no pugui publicar res
+ * ni desdir cap decisió: només toca files que encara esperen, i que ningú no
+ * hagi decidit. Si la peça s'ha decidit mentrestant, `changes` és 0 i qui ho
+ * ha demanat s'assabenta que ja no hi era a temps.
+ */
+export async function updateCandidateText(env, id, story) {
+  const db = database(env)
+  if (!db || !id || !story?.title) return { ok: false, error: 'no-database' }
+  try {
+    const net = senseMaterialDeTreball(story)
+    const outcome = await db
+      .prepare(
+        `UPDATE stories
+            SET title = ?, payload_json = ?, updated_at = ?
+          WHERE id = ?
+            AND editorial_status = '${PENDING_STATUS}'
+            AND human_decision IS NULL
+            AND auto_decision IS NULL
+            AND COALESCE(withdrawal, '') = ''`,
+      )
+      .bind(String(net.title).slice(0, 300), JSON.stringify({ ...net, id }), nowIso(), id)
+      .run()
+    if (Number(outcome?.meta?.changes || 0) === 0) {
+      return { ok: false, error: 'not-pending' }
+    }
+    return { ok: true, id }
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        event: 'review.rewrite.save-failed',
+        id,
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    )
+    return { ok: false, error: 'database-error' }
+  }
+}
+
+/**
  * Les que ningú no ha llegit en set dies marxen soles. Es marquen com a
  * descartades (no esborrades) perquè quedi rastre i no tornin a proposar-se.
  */
