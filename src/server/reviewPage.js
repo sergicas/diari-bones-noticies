@@ -409,10 +409,27 @@ function seeOther(location) {
  * Ruta única de la sala de revisió. Retorna null si el camí no li pertoca,
  * perquè el worker segueixi el seu curs normal.
  */
+/**
+ * Llegeix el formulari sense petar si el cos no n'és un. La sala és una pàgina
+ * pública i qualsevol robot hi pot enviar brossa; això valia un error 500.
+ */
+async function formulariDe(request) {
+  try {
+    return await request.formData()
+  } catch {
+    return new FormData()
+  }
+}
+
 export async function handleReviewRoutes(request, env) {
   const url = new URL(request.url)
   const path = url.pathname.replace(/\/+$/, '') || '/'
-  if (path !== '/revisio' && path !== '/revisio/decidir') return null
+  // TOTES les adreces de la sala, en un sol lloc. Afegir una ruta nova més
+  // avall i oblidar-se d'aquesta llista feia que la petició caigués al
+  // servidor de fitxers i tornés un 405 sec: el botó semblava muntat i no
+  // funcionava. Si algú n'afegeix una altra, ha de passar per aquí.
+  const RUTES = new Set(['/revisio', '/revisio/decidir', '/revisio/reescriure'])
+  if (!RUTES.has(path)) return null
 
   // Sense contrasenya configurada, la sala no existeix. Val més un 404 net que
   // una porta oberta perquè algú s'ha oblidat de posar-hi el secret.
@@ -425,7 +442,7 @@ export async function handleReviewRoutes(request, env) {
   const authorized = await isReviewer(request, env)
 
   if (path === '/revisio' && request.method === 'POST' && !authorized) {
-    const form = await request.formData()
+    const form = await formulariDe(request)
     const provided = String(form.get('contrasenya') || '')
     if (!timingSafeEqual(provided, reviewSecret(env))) {
       return htmlResponse(loginPage({ error: 'Contrasenya incorrecta.' }), {
@@ -458,7 +475,7 @@ export async function handleReviewRoutes(request, env) {
   // la deixa on era, esperant que la llegeixis.
   if (path === '/revisio/reescriure') {
     if (request.method !== 'POST') return seeOther('/revisio')
-    const form = await request.formData()
+    const form = await formulariDe(request)
     const id = String(form.get('id') || '')
     const pendents = await listPendingCandidates(env)
     const peca = pendents.find((p) => p.id === id)
@@ -485,7 +502,7 @@ export async function handleReviewRoutes(request, env) {
 
   if (path === '/revisio/decidir') {
     if (request.method !== 'POST') return seeOther('/revisio')
-    const form = await request.formData()
+    const form = await formulariDe(request)
     const id = String(form.get('id') || '')
     const decisio = String(form.get('decisio') || '')
     const outcome = await decideCandidate(env, id, decisio)

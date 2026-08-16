@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { reescriuCandidata } from '../rewriteCandidate.js'
+import { handleReviewRoutes } from '../reviewPage.js'
 import { updateCandidateText } from '../reviewGate.js'
 
 // LA TERCERA SORTIDA DE LA SALA.
@@ -155,5 +156,47 @@ describe('desar el text reescrit no pot publicar res', () => {
       title: 'Un titular ben escrit',
     })
     expect(JSON.stringify(base.escriptures)).not.toContain('THE ENGLISH SOURCE')
+  })
+})
+
+describe('la sala coneix totes les seves adreces', () => {
+  // El botó es va desplegar sense funcionar: `handleReviewRoutes` tenia una
+  // llista de rutes que no incloïa la nova, i el POST queia al servidor de
+  // fitxers amb un 405. Aquesta prova és perquè no torni a passar.
+  it('cap ruta de /revisio cau fora de la sala', async () => {
+    const env = { BONDIARI_REVIEW_PASSWORD: 'secret' }
+    for (const ruta of ['/revisio', '/revisio/decidir', '/revisio/reescriure']) {
+      const res = await handleReviewRoutes(
+        new Request(`https://bondiari.com${ruta}`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          body: 'id=x',
+        }),
+        env,
+      )
+      expect(res, `${ruta} ha caigut fora de la sala`).not.toBeNull()
+    }
+  })
+
+  it('un POST amb brossa no tomba la sala', async () => {
+    // Un robot qualsevol pot enviar qualsevol cosa a una pàgina pública.
+    // Abans, un cos sense formulari feia petar la pàgina amb un error 500.
+    const res = await handleReviewRoutes(
+      new Request('https://bondiari.com/revisio', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{"a":1}',
+      }),
+      { BONDIARI_REVIEW_PASSWORD: 'secret' },
+    )
+    expect(res.status).toBe(401)
+  })
+
+  it("i una ruta que no és seva, sí que hi cau", async () => {
+    const res = await handleReviewRoutes(
+      new Request('https://bondiari.com/noticia/x'),
+      { BONDIARI_REVIEW_PASSWORD: 'secret' },
+    )
+    expect(res).toBeNull()
   })
 })
