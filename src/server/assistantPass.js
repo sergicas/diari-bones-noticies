@@ -23,6 +23,33 @@ import {
 // una peça es publica sense que ningú la miri no pot ser el menys provat.
 
 export const MODES = Object.freeze(['off', 'shadow', 'auto'])
+export const ABASTS = Object.freeze(['guarded', 'all'])
+
+// Quantes peces com a màxim pot publicar sol en una passada. No és una porta
+// d'aprovació —les que sobren no esperen ningú, entren a la passada següent—:
+// és un tallafoc perquè una avaria de l'IA o una allau de fonts no ompli el
+// diari en una nit amb peces que ningú no ha llegit.
+export const MAX_PER_PASSADA_DEFECTE = 6
+
+/**
+ * Fins on arriba l'automatisme. FALLA TANCAT, com el mode: només el valor
+ * exacte `all` treu la reserva d'àmbits sensibles.
+ */
+export function resolAbast(env) {
+  const demanat = String(env?.ASSISTANT_SCOPE ?? 'guarded')
+  if (ABASTS.includes(demanat)) return demanat
+  console.error(
+    JSON.stringify({ event: 'assistant.scope.invalid', valor: demanat, s_aplica: 'guarded' }),
+  )
+  return 'guarded'
+}
+
+/** El sostre de publicacions per passada. Un valor absurd cau al defecte. */
+export function resolSostre(env) {
+  const n = Number.parseInt(String(env?.ASSISTANT_MAX_PER_PASS ?? ''), 10)
+  if (Number.isFinite(n) && n > 0) return n
+  return MAX_PER_PASSADA_DEFECTE
+}
 
 /**
  * Quin mode s'aplica de debò. FALLA TANCAT: només el valor exacte `auto`
@@ -64,9 +91,10 @@ export async function passadaDeLAjudant(env, candidates = []) {
 
   try {
     const exemples = await humanDecisionExamples(env)
+    const abast = resolAbast(env)
     const tots = []
     for (const story of candidates) {
-      const r = await revisaCandidata(env, story, { exemples })
+      const r = await revisaCandidata(env, story, { exemples, abast })
       const decision =
         r.veredicte === 'publicar' ? 'approve' : r.veredicte === 'descartar' ? 'reject' : 'doubt'
       tots.push({
@@ -104,7 +132,25 @@ export async function passadaDeLAjudant(env, candidates = []) {
       return { mode, aprovades: [] }
     }
 
-    const decidides = tots.filter((v) => v.decision !== 'doubt')
+    // SOSTRE. Les que sobren NO es descarten ni es marquen de cap manera: es
+    // queden tal com estaven i es tornaran a mirar a la passada següent. Un
+    // límit que descartés convertiria un tallafoc en una censura silenciosa.
+    const sostre = resolSostre(env)
+    const aprovacions = tots.filter((v) => v.decision === 'approve')
+    const ajornades = aprovacions.slice(sostre)
+    if (ajornades.length > 0) {
+      // Mai un límit en silenci: ha de constar què s'ha deixat per després.
+      console.log(
+        JSON.stringify({
+          event: 'assistant.capped',
+          sostre,
+          publicades: sostre,
+          ajornades: ajornades.length,
+        }),
+      )
+    }
+    const ajornadesIds = new Set(ajornades.map((v) => v.id))
+    const decidides = tots.filter((v) => v.decision !== 'doubt' && !ajornadesIds.has(v.id))
     if (decidides.length === 0) return { mode, aprovades: [] }
 
     const outcome = await recordAssistantDecisions(env, decidides)

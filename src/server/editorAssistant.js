@@ -4,13 +4,16 @@
 // obligació. Sergi ho va demanar sabent el que compra: hi haurà peces al diari
 // que ningú no haurà llegit abans.
 //
-// Per fer-ho amb cara i ulls, l'ajudant treballa amb tres capes, i les dues
-// primeres MANEN sobre la tercera:
+// Per fer-ho amb cara i ulls, l'ajudant treballa amb capes, i les guàrdies
+// MANEN sobre el criteri de l'IA:
 //
-//   1. La guàrdia de fets. Si el titular diu una cosa que no és a la font, no
-//      s'aprova sola. Passi el que passi.
-//   2. Els àmbits sensibles. Salut i medicina no s'aproven mai soles.
-//   3. El criteri editorial, jutjat amb IA a partir de les decisions REALS que
+//   1. La guàrdia de fets. Si el titular diu una xifra o un nom propi que no és
+//      a la font, no s'aprova sola. Passi el que passi.
+//   2. La guàrdia de termes clínics. Si la peça anomena una malaltia o un
+//      tractament que la font no anomena, no s'aprova sola.
+//   3. Els àmbits sensibles. DESACTIVABLE amb `ASSISTANT_SCOPE` (vegeu més
+//      avall): quan l'abast és `all`, aquesta capa no s'aplica.
+//   4. El criteri editorial, jutjat amb IA a partir de les decisions REALS que
 //      ha anat prenent Sergi. No una llista de regles inventades: els seus sís
 //      i els seus nos.
 //
@@ -19,13 +22,18 @@
 // plasmàtiques" quan la font parlava de mieloma múltiple: dos diagnòstics
 // diferents. Ningú no ho hauria vist llegint només la peça.
 //
-// Qui l'atura és la SEGONA capa, no la primera: parla de malalties i
-// tractaments, i per tant no s'aprova sola, digui el que digui l'IA. La
-// guàrdia de fets compara xifres i noms propis, i aquí no n'hi havia cap
-// d'inventat: el titular deia "FDA", que sí que era a la font.
+// LA CAPA 3 JA NO HI ÉS A PRODUCCIÓ. El 17-08-2026 Sergi va decidir, amb
+// l'advertència d'aquest cas al davant i per escrit, que no vol aprovació
+// humana en CAP àmbit, salut i medicina incloses. És el seu diari i la decisió
+// és seva.
 //
-// Val la pena tenir-ho clar: contra els errors de FONS, el que protegeix és
-// treure els temes delicats de l'automatisme, no cap comprovació enginyosa.
+// Per això existeix ara la capa 2. La guàrdia de fets original comparava xifres
+// i sigles, i aquí no n'hi havia cap d'inventada —el titular deia "FDA", que sí
+// que era a la font—: el que canviava era el NOM DE LA MALALTIA, en minúscula.
+// La capa 2 compara precisament això, i ho fa entre llengües aprofitant que els
+// termes clínics són cognats grecollatins (myeloma/mieloma, leukemia/leucèmia).
+// No substitueix una persona i no ho pretén: redueix el forat concret pel qual
+// va passar l'error conegut, sense demanar-li a ningú que llegeixi res.
 
 import { runTextModel } from './ai/textModel.js'
 
@@ -36,7 +44,7 @@ export const DUBTE = 'dubte'
 // Versió del criteri. Es desa amb cada veredicte d'ombra perquè, quan es
 // comparin amb les decisions humanes, se sàpiga quin ajudant les va emetre.
 // Puja-la sempre que canviï el prompt o les llistes.
-export const SHADOW_VERSION = 'ajudant-2026-08-15.1'
+export const SHADOW_VERSION = 'ajudant-2026-08-17.1'
 
 // QUÈ ES POT AUTOMATITZAR: llista POSITIVA, no de prohibicions.
 //
@@ -75,7 +83,12 @@ const MATERIES_DELICADES = [
  * Torna el MOTIU quan no, perquè quedi escrit a la sala per què una peça ha
  * anat a mans d'una persona.
  */
-export function potDecidirSol(story) {
+export function potDecidirSol(story, { abast = 'guarded' } = {}) {
+  // ABAST `all`: no queda cap àmbit reservat a una persona. Decisió d'en Sergi
+  // del 17-08-2026, presa amb l'error del mieloma escrit al davant. La llista
+  // de sota es conserva sencera i provada a propòsit: tornar enrere és canviar
+  // una paraula a wrangler.jsonc, no reescriure codi.
+  if (abast === 'all') return { pot: true, motiu: '' }
   const ambit = story?.topic || ''
   if (!AMBITS_AUTOMATITZABLES.has(ambit)) {
     return { pot: false, motiu: `l’àmbit «${ambit || 'sense àmbit'}» no es decideix sol` }
@@ -145,6 +158,65 @@ export function dadesSenseSuport(story) {
   return [...new Set(sospitoses)]
 }
 
+// GUÀRDIA DE TERMES CLÍNICS.
+//
+// La guàrdia de fets mira xifres i noms propis, i per això no va veure l'error
+// del mieloma: "leucèmia de cèl·lules plasmàtiques" no porta cap xifra ni cap
+// majúscula inventada. El que hi havia canviat era el nom de la malaltia.
+//
+// Comparar noms de malaltia entre el nostre català i una font anglesa sembla
+// impossible, però no ho és: els termes clínics són cognats grecollatins i
+// només difereixen en la grafia (myeloma/mieloma, leukemia/leucèmia,
+// thrombosis/trombosi). Normalitzant aquestes grafies, la comparació funciona.
+//
+// ABAST DELIBERADAMENT ESTRET: només salta quan la NOSTRA peça anomena una
+// malaltia o teràpia que NO surt a la font. No jutja el sentit, no entén la
+// medicina i no substitueix ningú. Tapa el forat conegut, i prou.
+function normalitzaClinic(text) {
+  return normalitza(text)
+    .replace(/ph/g, 'f')
+    .replace(/th/g, 't')
+    .replace(/ae|oe/g, 'e')
+    .replace(/y/g, 'i')
+    .replace(/k/g, 'c')
+    .replace(/([a-z])\1/g, '$1')
+}
+
+// Arrels de malalties i estats prou freqüents perquè un canvi de nom passi per
+// alt. S'escriuen en català i es normalitzen igual que la font.
+const ARRELS_CLINIQUES = [
+  'cancer', 'tumor', 'diabet', 'alzheimer', 'parkinson', 'asma', 'artritis',
+  'ictus', 'infart', 'demencia', 'obesitat', 'colesterol', 'hipertensi',
+  'tuberculosi', 'malaria', 'covid', 'hepatitis', 'osteoporosi', 'esclerosi',
+  'epilepsi', 'migranya', 'anemia', 'autisme', 'sepsi',
+]
+
+// Paraules llargues amb terminació inequívocament clínica: mieloma, leucèmia,
+// dermatitis, neuropatia, immunoteràpia, quimioteràpia…
+const SUFIXOS_CLINICS = /\b[a-z]{4,}(oma|emia|itis|patia|terapia|sindrome|distrofia)\b/g
+
+export function termesClinicsSenseSuport(story) {
+  const font = materialDeFont(story)
+  if (!font.trim()) return []
+  const fontNorm = normalitzaClinic(font)
+  const nostre = normalitzaClinic(
+    `${story?.title || ''} ${Array.isArray(story?.body) ? story.body.join(' ') : ''}`,
+  )
+  const sospitosos = new Set()
+
+  for (const arrel of ARRELS_CLINIQUES) {
+    const a = normalitzaClinic(arrel)
+    if (nostre.includes(a) && !fontNorm.includes(a)) sospitosos.add(arrel)
+  }
+  for (const terme of nostre.match(SUFIXOS_CLINICS) || []) {
+    // Es compara l'arrel, no la paraula sencera: la desinència sí que canvia
+    // entre llengües ("myeloma"/"mieloma" comparteixen "mielom").
+    const arrel = terme.slice(0, 6)
+    if (!fontNorm.includes(arrel)) sospitosos.add(terme)
+  }
+  return [...sospitosos]
+}
+
 function retallaPerAlPrompt(story) {
   const cos = Array.isArray(story?.body) ? story.body.join(' ') : ''
   // El material ORIGINAL hi ha d'anar. Sense ell, el model comparava la nostra
@@ -184,6 +256,15 @@ const SISTEMA = [
   'cosa que el material de la font no diu —un nom, una malaltia, una xifra, una',
   'conclusió més forta que l’original—, digues dubte i explica-ho al motiu.',
   'Aquesta comprovació va per davant de qualsevol altra consideració.',
+  '',
+  'SALUT I MEDICINA. Aquestes peces es publiquen automàticament i ningú no les',
+  'llegirà abans que el lector. Extrema-hi la comprovació:',
+  '· la malaltia, el fàrmac i la població de l’estudi han de ser EXACTAMENT els',
+  'de la font; malalties de la mateixa família no són intercanviables;',
+  '· si la font parla d’un assaig en animals o en laboratori i la peça ho fa',
+  'semblar un tractament per a persones, digues dubte;',
+  '· si la peça suggereix el que ha de fer un pacient, o dona una dosi, o promet',
+  'una curació, digues dubte encara que la font ho digui.',
   'DUBTE és per a les peces que semblen bones però tenen alguna cosa que',
   'convé que miri una persona: una afirmació delicada, una xifra que no acabes',
   'de veure clara, un tema que toca gent concreta.',
@@ -220,7 +301,7 @@ function llegeixVeredicte(text) {
 /**
  * El veredicte per a una peça. Les guàrdies manen sobre l'IA.
  */
-export async function revisaCandidata(env, story, { exemples = [] } = {}) {
+export async function revisaCandidata(env, story, { exemples = [], abast = 'guarded' } = {}) {
   // SENSE FONT NO ES DECIDEIX. Que no hi hagi material amb què comparar no és
   // un permís: és precisament el cas en què no es pot comprovar res.
   if (!materialDeFont(story)) {
@@ -238,7 +319,17 @@ export async function revisaCandidata(env, story, { exemples = [] } = {}) {
       guardia: 'fets',
     }
   }
-  const permes = potDecidirSol(story)
+  // Va DESPRÉS de la guàrdia de fets i ABANS de qualsevol criteri editorial:
+  // canviar el nom d'una malaltia no és una qüestió de gust editorial.
+  const clinics = termesClinicsSenseSuport(story)
+  if (clinics.length > 0) {
+    return {
+      veredicte: DUBTE,
+      motiu: `la peça parla de «${clinics.slice(0, 3).join(', ')}» i la font no en diu res`,
+      guardia: 'clinica',
+    }
+  }
+  const permes = potDecidirSol(story, { abast })
   if (!permes.pot) {
     return { veredicte: DUBTE, motiu: permes.motiu, guardia: 'sensible' }
   }

@@ -4,6 +4,7 @@ import {
   esSensible,
   potDecidirSol,
   revisaCandidata,
+  termesClinicsSenseSuport,
 } from '../editorAssistant.js'
 
 // L'AJUDANT PUBLICA SOL, i per això les guàrdies manen sobre el seu criteri.
@@ -91,18 +92,32 @@ describe('el veredicte', () => {
   it('EL CAS DE L’FDA no s’aprova mai sol', async () => {
     // La peça real del 14-08-2026: deia "leucèmia de cèl·lules plasmàtiques"
     // quan la font parlava de mieloma múltiple. Encara que l'IA digués que sí,
-    // la guàrdia de salut la treu de l'automatisme.
-    const r = await revisaCandidata(
-      env('VEREDICTE: publicar · MOTIU: sembla una bona notícia'),
-      {
-        title: "L'FDA aprova un tractament per a la leucèmia de cèl·lules plasmàtiques",
-        reviewSourceContext: 'FDA approves drug for relapsed or refractory multiple myeloma.',
-        topic: 'Ciència',
-        body: ['Un text.'],
-      },
-    )
+    // no s'aprova sola.
+    //
+    // Fins al 17-08-2026 qui l'aturava era la guàrdia de salut. Amb els àmbits
+    // sensibles fora per decisió d'en Sergi, l'atura la guàrdia de termes
+    // clínics — i per això s'exigeix el motiu concret, no només el dubte: si
+    // algun dia torna a passar per «sensible», voldrà dir que s'ha restaurat la
+    // reserva d'àmbits i això s'ha de veure aquí.
+    const peça = {
+      title: "L'FDA aprova un tractament per a la leucèmia de cèl·lules plasmàtiques",
+      reviewSourceContext: 'FDA approves drug for relapsed or refractory multiple myeloma.',
+      topic: 'Ciència',
+      body: ['Un text.'],
+    }
+    const r = await revisaCandidata(env('VEREDICTE: publicar · MOTIU: sembla una bona notícia'), peça)
     expect(r.veredicte).toBe('dubte')
-    expect(r.guardia).toBe('sensible')
+    expect(r.guardia).toBe('clinica')
+
+    // I amb l'abast obert de debò, que és com corre a producció des del
+    // 17-08-2026, continua aturada.
+    const obert = await revisaCandidata(
+      env('VEREDICTE: publicar · MOTIU: sembla una bona notícia'),
+      peça,
+      { abast: 'all' },
+    )
+    expect(obert.veredicte).toBe('dubte')
+    expect(obert.guardia).toBe('clinica')
   })
 
   it('una xifra inventada tampoc, digui el que digui l’IA', async () => {
@@ -229,5 +244,109 @@ describe('sense font no es decideix', () => {
     )
     expect(r.veredicte).toBe('dubte')
     expect(r.guardia).toBe('fets')
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 17-08-2026: SERGI TREU LA RESERVA D'ÀMBITS SENSIBLES.
+//
+// Va decidir, amb l'error del mieloma escrit al davant, que no vol aprovació
+// humana en cap àmbit. Amb la capa 3 fora, qui ha de tapar aquell forat concret
+// és la guàrdia de termes clínics. Aquestes proves són la seva raó de ser.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('abast de l’automatisme', () => {
+  const peçaClinica = { topic: 'Biotecnologia', title: 'Un tractament per al mieloma múltiple' }
+
+  it('per defecte (guarded) la salut no es decideix sola', () => {
+    expect(potDecidirSol(peçaClinica).pot).toBe(false)
+  })
+
+  it('amb abast «all» no queda cap àmbit reservat', () => {
+    expect(potDecidirSol(peçaClinica, { abast: 'all' }).pot).toBe(true)
+    expect(potDecidirSol({ topic: 'Longevitat', title: 'Envelliment' }, { abast: 'all' }).pot).toBe(
+      true,
+    )
+  })
+
+  it('la llista d’àmbits es conserva intacta per poder tornar enrere', () => {
+    expect(esSensible({ topic: 'Longevitat', title: 'Envelliment' })).toBe(true)
+    expect(potDecidirSol({ topic: 'Astronomia', title: 'Un cometa' }).pot).toBe(true)
+  })
+})
+
+describe('guàrdia de termes clínics', () => {
+  it('atura el cas real: la font diu mieloma i la peça diu leucèmia', () => {
+    expect(
+      termesClinicsSenseSuport({
+        title: 'L’FDA aprova un tractament per a la leucèmia de cèl·lules plasmàtiques',
+        body: ['El fàrmac s’adreça a pacients que ja han rebut altres teràpies.'],
+        reviewSourceContext:
+          'The FDA approved a new treatment for patients with multiple myeloma who have received prior therapies.',
+      }),
+    ).toContain('leucemia')
+  })
+
+  it('deixa passar la mateixa malaltia dita en català i en anglès', () => {
+    expect(
+      termesClinicsSenseSuport({
+        title: 'L’FDA aprova un tractament per al mieloma múltiple',
+        body: ['El fàrmac s’adreça a pacients que ja han rebut altres teràpies.'],
+        reviewSourceContext:
+          'The FDA approved a new treatment for patients with multiple myeloma who have received prior therapies.',
+      }),
+    ).toHaveLength(0)
+  })
+
+  it('travessa les grafies gregues: leukemia/leucèmia, thrombosis/trombosi', () => {
+    expect(
+      termesClinicsSenseSuport({
+        title: 'Un avenç contra la leucèmia infantil',
+        body: [],
+        reviewSourceContext: 'A breakthrough against childhood leukemia.',
+      }),
+    ).toHaveLength(0)
+  })
+
+  it('atura una malaltia que la peça s’inventa del no-res', () => {
+    expect(
+      termesClinicsSenseSuport({
+        title: 'Un estudi relaciona el son amb l’alzheimer',
+        body: [],
+        reviewSourceContext: 'A study links sleep quality with memory consolidation in adults.',
+      }),
+    ).toContain('alzheimer')
+  })
+
+  it('no diu res quan la peça no és mèdica', () => {
+    expect(
+      termesClinicsSenseSuport({
+        title: 'El telescopi Webb fotografia una galàxia llunyana',
+        body: ['La imatge mostra estructures mai vistes.'],
+        reviewSourceContext: 'The Webb telescope imaged a distant galaxy.',
+      }),
+    ).toHaveLength(0)
+  })
+
+  it('sense font no afirma res (ho atura la guàrdia de sense-font)', () => {
+    expect(termesClinicsSenseSuport({ title: 'Mieloma', body: [] })).toHaveLength(0)
+  })
+})
+
+describe('la guàrdia clínica mana sobre l’IA, també amb abast «all»', () => {
+  it('un canvi de malaltia no s’aprova encara que l’IA digui publicar', async () => {
+    const env = { AI: ai('VEREDICTE: publicar · MOTIU: troballa clara') }
+    const r = await revisaCandidata(
+      env,
+      {
+        topic: 'Biotecnologia',
+        title: 'L’FDA aprova un tractament per a la leucèmia de cèl·lules plasmàtiques',
+        body: ['Assaig en pacients.'],
+        reviewSourceContext: 'The FDA approved a treatment for multiple myeloma patients.',
+      },
+      { abast: 'all' },
+    )
+    expect(r.veredicte).toBe('dubte')
+    expect(r.guardia).toBe('clinica')
   })
 })
