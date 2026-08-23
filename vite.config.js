@@ -21,8 +21,23 @@ function stampServiceWorker() {
       const assetsDir = resolve(rootDir, 'dist', 'assets')
       if (!existsSync(swPath) || !existsSync(assetsDir)) return
       const assetNames = readdirSync(assetsDir).sort().join(',')
-      const hash = createHash('sha256').update(assetNames).digest('hex').slice(0, 12)
       const source = readFileSync(swPath, 'utf8')
+      const hashBuilder = createHash('sha256')
+        .update(assetNames)
+        .update(source.replace(/__BUILD_HASH__/g, ''))
+
+      for (const shellFile of [
+        'manifest.webmanifest',
+        'logo-colibri.png',
+        'favicon.svg',
+      ]) {
+        const shellPath = resolve(rootDir, 'dist', shellFile)
+        if (existsSync(shellPath)) {
+          hashBuilder.update(shellFile).update(readFileSync(shellPath))
+        }
+      }
+
+      const hash = hashBuilder.digest('hex').slice(0, 12)
       const stamped = source.replace(/__BUILD_HASH__/g, hash)
       writeFileSync(swPath, stamped, 'utf8')
     },

@@ -2,11 +2,16 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.jsx'
+import AppErrorBoundary from './components/AppErrorBoundary.jsx'
+import AppStatus from './components/AppStatus.jsx'
 import { initNativePush } from './lib/nativePush.js'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <App />
+    <AppErrorBoundary>
+      <App />
+    </AppErrorBoundary>
+    <AppStatus />
   </StrictMode>,
 )
 
@@ -14,14 +19,6 @@ createRoot(document.getElementById('root')).render(
 void initNativePush()
 
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
-  let isReloadingForUpdate = false
-
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (isReloadingForUpdate) return
-    isReloadingForUpdate = true
-    window.location.reload()
-  })
-
   window.addEventListener('load', () => {
     navigator.serviceWorker
       .register('/sw.js', { updateViaCache: 'none' })

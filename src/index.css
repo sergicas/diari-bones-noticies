@@ -114,6 +114,122 @@ p {
   min-height: 100vh;
 }
 
+.app-status {
+  position: fixed;
+  z-index: 1000;
+  right: 18px;
+  bottom: max(18px, env(safe-area-inset-bottom));
+  width: min(390px, calc(100vw - 36px));
+  padding: 14px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 16px;
+  background: rgba(22, 22, 24, 0.96);
+  color: #fff;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.24);
+}
+
+.app-status > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px 12px;
+}
+
+.app-status strong,
+.app-status span {
+  display: block;
+}
+
+.app-status span {
+  flex-basis: 100%;
+  color: rgba(255, 255, 255, 0.76);
+  font-size: 0.88rem;
+}
+
+.app-status button {
+  margin-left: auto;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: #fff;
+  color: #111;
+  font-weight: 800;
+}
+
+.app-status button:focus-visible {
+  outline: 3px solid #34c759;
+  outline-offset: 3px;
+}
+
+.app-status--reconnected {
+  background: rgba(16, 88, 57, 0.97);
+}
+
+.app-error {
+  display: grid;
+  align-content: center;
+  min-height: 100vh;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 40px 24px;
+  gap: 18px;
+}
+
+.app-error__kicker {
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.app-error h1 {
+  max-width: 16ch;
+  font-family: var(--display-font);
+  font-size: clamp(2.4rem, 8vw, 4.8rem);
+  line-height: 0.98;
+  letter-spacing: -0.05em;
+}
+
+.app-error > p:not(.app-error__kicker) {
+  max-width: 54ch;
+  color: var(--muted);
+  font-size: 1.05rem;
+  line-height: 1.65;
+}
+
+.app-error__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.app-error__actions button,
+.app-error__actions a {
+  padding: 12px 18px;
+  border-radius: 999px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.app-error__actions button {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.app-error__actions a {
+  border: 1px solid var(--line-strong);
+  background: var(--paper);
+  color: var(--ink);
+}
+
+@media (max-width: 560px) {
+  .app-status {
+    right: 12px;
+    bottom: max(12px, env(safe-area-inset-bottom));
+    width: calc(100vw - 24px);
+  }
+}
+
 ::selection {
   background: rgba(52, 199, 89, 0.2);
   color: var(--ink);
@@ -146,6 +262,7 @@ p {
   .site-header,
   .site-footer,
   .footer-note,
+  .app-status,
   .newsletter-form,
   .accessibility-controls,
   .no-print,

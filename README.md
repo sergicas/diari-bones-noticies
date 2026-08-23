@@ -36,7 +36,11 @@ destinació. No versionis secrets ni valors d’entorn locals.
 
 ```bash
 npm run verify
+npm run audit:production
 ```
+
+La segona ordre audita només les dependències que arriben a producció. Es manté
+separada de `verify` perquè necessita accés al registre npm.
 
 `npm run check:articles` comprova que cada peça editorial tingui `imageUrl` i
 `imageAlt`, i que la imatge sigui una d’aquestes opcions:
