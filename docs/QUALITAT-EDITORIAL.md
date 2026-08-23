@@ -18,9 +18,9 @@ La regla nova és: **una peça generada no és necessàriament publicable**.
 
 | Format | Cos mínim | Frases mínimes | Impacte mínim |
 |---|---:|---:|---:|
-| Notícia constructiva | 70 paraules | 4 | 8 paraules |
-| Verificació | 60 paraules | 3 | 8 paraules |
-| Agenda | 45 paraules | 3 | 8 paraules |
+| Notícia constructiva | 45 paraules | 2 | 8 paraules |
+| Verificació | 45 paraules | 2 | 8 paraules |
+| Agenda | 40 paraules | 2 | 8 paraules |
 | Oportunitat | 30 paraules | 2 | 8 paraules |
 | Dada pública | 25 paraules | 1 | 8 paraules |
 
@@ -48,7 +48,9 @@ La implementació executable és a `src/server/editorialQuality.js`.
    afirmació, veredicte i evidència.
 5. Agenda sense prou detalls no entra. RAISC i Idescat produeixen peces de
    servei estructurades amb dades concretes.
-6. La portada té un màxim de 12 peces, tres per font i límits per categoria.
+6. La portada té un màxim de 12 peces, un sostre estricte de tres per font i
+   límits per categoria. Si no hi ha prou diversitat, l'edició queda més curta:
+   els excedents d'una font no es recuperen per omplir-la.
 7. Les reescriptures antigues queden invalidades (`own:v2`) i les URL es tornen
    a avaluar amb la memòria `seen-urls-v4`.
 8. Les fonts declarades com a no obertes al mateix catàleg s’han retirat del

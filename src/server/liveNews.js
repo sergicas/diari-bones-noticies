@@ -830,27 +830,22 @@ function normalizeEuropePmcItem(block, feed) {
   }
 }
 
-// Sostre per font: cap diari pot dominar més de N peces del lot final.
-// Mantenim l'ordre original i fem servir el sobrant com a omplerta si la
-// primera passada no arriba al volum desitjat.
+// Sostre ESTRICTE per font: cap mitjà pot dominar més de N peces del lot final.
+// Mantenim l'ordre original, però no recuperem mai el sobrant per omplir la
+// portada. Una edició curta i diversa és editorialment millor que una edició
+// aparentment plena que depèn d'una sola font.
 export function applyDiversityCap(stories, maxPerSource, targetTotal) {
   const counts = new Map()
-  const primary = []
-  const overflow = []
+  const kept = []
   for (const story of stories) {
+    if (kept.length >= targetTotal) break
     const source = story.source || '—'
     const count = counts.get(source) || 0
-    if (count < maxPerSource) {
-      primary.push(story)
-      counts.set(source, count + 1)
-    } else {
-      overflow.push(story)
-    }
+    if (count >= maxPerSource) continue
+    kept.push(story)
+    counts.set(source, count + 1)
   }
-  if (primary.length >= targetTotal) {
-    return primary.slice(0, targetTotal)
-  }
-  return [...primary, ...overflow].slice(0, targetTotal)
+  return kept
 }
 
 // Acota quantes peces pot aportar cada llengua forana (les de casa, ca/es, no
@@ -2403,9 +2398,17 @@ export async function getLiveNewsPayload(
   // notícies europees.
   const languageBalanced = capPerLanguage(preDiversity, maxStoriesPerLanguage)
   const balanced = capPerCategory(languageBalanced)
-  const finalStories = ensureCategoryCoverage(
+  const storiesWithCoverage = ensureCategoryCoverage(
     applyDiversityCap(balanced, maxStoriesPerSource, targetStoryLimit),
     balanced,
+    targetStoryLimit,
+  )
+  // `ensureCategoryCoverage` pot afegir una candidata després del primer tall.
+  // El sostre es torna a aplicar al final perquè sigui un invariant de la
+  // publicació, també quan en el futur canviïn les categories garantides.
+  const finalStories = applyDiversityCap(
+    storiesWithCoverage,
+    maxStoriesPerSource,
     targetStoryLimit,
   )
 

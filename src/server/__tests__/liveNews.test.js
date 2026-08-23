@@ -1095,29 +1095,27 @@ describe('applyDiversityCap — sostre per font', () => {
     expect(result.length).toBe(6)
   })
 
-  it('quan el sostre deixaria el lot curt, completa amb overflow (soft cap)', () => {
+  it('quan el sostre deixa el lot curt, no recupera excedents', () => {
     // 6 d'El País + 2 Vilaweb + 1 ARA = 9, target 30, max 3
-    // → primary 3+2+1 = 6, no arriba a 30, completa amb overflow d'El País
+    // → 3+2+1 = 6: la qualitat i la pluralitat passen davant del volum.
     const stories = [
       story('El País', 1), story('El País', 2), story('El País', 3),
       story('El País', 4), story('El País', 5), story('El País', 6),
       story('Vilaweb', 1), story('Vilaweb', 2), story('ARA', 1),
     ]
     const result = applyDiversityCap(stories, 3, 30)
-    expect(result.length).toBe(9)
-    // En soft cap, totes les peces hi caben encara que superin el límit.
-    expect(result.filter((s) => s.source === 'El País').length).toBe(6)
+    expect(result.length).toBe(6)
+    expect(result.filter((s) => s.source === 'El País').length).toBe(3)
   })
 
-  it('quan el límit per font deixa el lot massa curt, hi torna overflow per completar', () => {
+  it('una sola font no pot omplir tota la portada', () => {
     const stories = [
       story('El País', 1), story('El País', 2), story('El País', 3),
       story('El País', 4), story('El País', 5),
     ]
     const result = applyDiversityCap(stories, 2, 5)
-    // Primer 2 d'El País, després els 3 sobrants
-    expect(result.length).toBe(5)
-    expect(result.filter((s) => s.source === 'El País').length).toBe(5)
+    expect(result.length).toBe(2)
+    expect(result.every((s) => s.source === 'El País')).toBe(true)
   })
 
   it('quan hi ha prou diversitat, retorna tot dins del límit', () => {
@@ -1129,9 +1127,25 @@ describe('applyDiversityCap — sostre per font', () => {
   })
 
   it('respecta el target total i no torna més peces que el demanat', () => {
-    const stories = Array.from({ length: 100 }, (_, i) => story('X', i))
+    const stories = Array.from({ length: 100 }, (_, i) => story(`Font ${i}`, i))
     const result = applyDiversityCap(stories, 5, 30)
     expect(result.length).toBe(30)
+  })
+
+  it('manté el sostre estricte per a qualsevol distribució de fonts', () => {
+    const stories = [
+      ...Array.from({ length: 20 }, (_, i) => story('Phys.org', i)),
+      ...Array.from({ length: 7 }, (_, i) => story('NASA', i)),
+      ...Array.from({ length: 2 }, (_, i) => story('PLOS', i)),
+    ]
+    const result = applyDiversityCap(stories, 3, 12)
+    const counts = result.reduce((bySource, item) => {
+      bySource[item.source] = (bySource[item.source] || 0) + 1
+      return bySource
+    }, {})
+
+    expect(result).toHaveLength(8)
+    expect(Math.max(...Object.values(counts))).toBeLessThanOrEqual(3)
   })
 
   it('gestiona el cas buit sense petar', () => {
