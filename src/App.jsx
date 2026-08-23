@@ -75,10 +75,19 @@ const activeEditionMaxStories = 25
 // com a secció pròpia (/hemeroteca), amb la data original ben visible.
 const serviceEditionFormats = new Set(['verification', 'data', 'opportunity'])
 const maxStoredFeedStories = 40
+const deferredSeedLoadMs = 4000
 
-const seedArticlesPromise = import('./data/articles.js').then((m) =>
-  m.seedArticles.map((story) => normalizeStory(story)).filter(Boolean),
-)
+let seedArticlesPromise = null
+
+function loadSeedArticles() {
+  if (!seedArticlesPromise) {
+    seedArticlesPromise = import('./data/articles.js').then((m) =>
+      m.seedArticles.map((story) => normalizeStory(story)).filter(Boolean),
+    )
+  }
+
+  return seedArticlesPromise
+}
 
 function normalizePathname(pathname) {
   const cleanPathname = pathname || '/'
@@ -647,6 +656,13 @@ function waitForSwController() {
       })
       .catch((error) => {
         console.warn('No s’ha pogut carregar l’hemeroteca permanent.', error)
+        loadSeedArticles()
+          .then((articles) => {
+            if (!isCancelled) setSeedStories(articles)
+          })
+          .catch((seedError) => {
+            console.warn('No s’ha pogut carregar el catàleg editorial.', seedError)
+          })
       })
 
     return () => {
@@ -656,19 +672,46 @@ function waitForSwController() {
 
   useEffect(() => {
     let isCancelled = false
+    let idleCallbackId = null
+    let timeoutId = null
 
-    seedArticlesPromise
-      .then((articles) => {
-        if (!isCancelled) setSeedStories(articles)
-      })
-      .catch((error) => {
-        console.warn('No s’ha pogut carregar el catàleg editorial.', error)
-      })
+    const hydrateSeedCatalog = () => {
+      loadSeedArticles()
+        .then((articles) => {
+          if (!isCancelled) setSeedStories(articles)
+        })
+        .catch((error) => {
+          console.warn('No s’ha pogut carregar el catàleg editorial.', error)
+        })
+    }
+
+    if (route.page === 'story') {
+      hydrateSeedCatalog()
+    } else {
+      timeoutId = window.setTimeout(() => {
+        timeoutId = null
+        if (isCancelled) return
+
+        if ('requestIdleCallback' in window) {
+          idleCallbackId = window.requestIdleCallback(hydrateSeedCatalog, {
+            timeout: 2000,
+          })
+        } else {
+          hydrateSeedCatalog()
+        }
+      }, deferredSeedLoadMs)
+    }
 
     return () => {
       isCancelled = true
+      if (idleCallbackId !== null) {
+        window.cancelIdleCallback(idleCallbackId)
+      }
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId)
+      }
     }
-  }, [])
+  }, [route.page])
 
   useEffect(() => {
     const handlePopState = () => {
@@ -703,18 +746,14 @@ function waitForSwController() {
 
     async function updateFromRadar() {
       try {
-        const [payload, editorialStories] = await Promise.all([
-          fetchLivePositiveNewsPayload(),
-          seedArticlesPromise,
-        ])
+        const payload = await fetchLivePositiveNewsPayload()
 
         if (isCancelled) {
           return
         }
 
         setLiveStories((currentStories) =>
-          mergeLiveStories(currentStories, payload.stories, editorialStories)
-            .stories,
+          mergeLiveStories(currentStories, payload.stories).stories,
         )
 
         const updatedAt = payload.updatedAt || new Date().toISOString()
@@ -1134,13 +1173,9 @@ function waitForSwController() {
 
   async function refreshRadar() {
     try {
-      const [payload, editorialStories] = await Promise.all([
-        fetchLivePositiveNewsPayload(),
-        seedArticlesPromise,
-      ])
+      const payload = await fetchLivePositiveNewsPayload()
       setLiveStories((currentStories) =>
-        mergeLiveStories(currentStories, payload.stories, editorialStories)
-          .stories,
+        mergeLiveStories(currentStories, payload.stories).stories,
       )
       const updatedAt = payload.updatedAt || new Date().toISOString()
       const nextAt =
@@ -1168,14 +1203,10 @@ function waitForSwController() {
     setIsRefreshing(true)
 
     try {
-      const [payload, editorialStories] = await Promise.all([
-        fetchLivePositiveNewsPayload(),
-        seedArticlesPromise,
-      ])
+      const payload = await fetchLivePositiveNewsPayload()
 
       setLiveStories((currentStories) =>
-        mergeLiveStories(currentStories, payload.stories, editorialStories)
-          .stories,
+        mergeLiveStories(currentStories, payload.stories).stories,
       )
 
       const updatedAt = payload.updatedAt || new Date().toISOString()
