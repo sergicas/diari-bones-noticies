@@ -1,4 +1,4 @@
-import { useEffect, useState, lazy, Suspense } from 'react'
+import { useEffect, useRef, useState, lazy, Suspense } from 'react'
 import { flushSync } from 'react-dom'
 import './App.css'
 import './styles/professional-shell.css'
@@ -559,6 +559,8 @@ function App() {
     initialFilterState.distanceFilter,
   )
   const [currentPath, setCurrentPath] = useState(getCurrentPath)
+  const mainRef = useRef(null)
+  const previousPagePathRef = useRef(getPathnameFromPath(currentPath))
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [lastRefreshAt, setLastRefreshAt] = useState(() =>
     loadStoredTimestamp(refreshStorageKey),
@@ -683,6 +685,18 @@ function waitForSwController() {
     window.addEventListener('popstate', handlePopState)
     return () => window.removeEventListener('popstate', handlePopState)
   }, [])
+
+  useEffect(() => {
+    const nextPagePath = getPathnameFromPath(currentPath)
+    if (previousPagePathRef.current === nextPagePath) return
+
+    previousPagePathRef.current = nextPagePath
+    const frame = window.requestAnimationFrame(() => {
+      mainRef.current?.focus({ preventScroll: true })
+    })
+
+    return () => window.cancelAnimationFrame(frame)
+  }, [currentPath])
 
   useEffect(() => {
     let isCancelled = false
@@ -1111,7 +1125,10 @@ function waitForSwController() {
     }
 
     if (scroll) {
-      window.scrollTo({ top: 0, behavior: 'smooth' })
+      window.scrollTo({
+        top: 0,
+        behavior: prefersReducedMotion ? 'auto' : 'smooth',
+      })
     }
   }
 
@@ -1194,7 +1211,12 @@ function waitForSwController() {
             onRefresh={handleRefresh}
           />
 
-          <main id="contingut" className="site-main">
+          <main
+            ref={mainRef}
+            id="contingut"
+            className="site-main"
+            tabIndex="-1"
+          >
             <ErrorBoundary>
               <Suspense fallback={<div className="section-block"><h2>Carregant vista…</h2></div>}>
                 {route.page === 'story' ? (
