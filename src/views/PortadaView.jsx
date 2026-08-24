@@ -10,6 +10,7 @@ import { getDistanceBand, getOriginLabel } from '../lib/distance.js'
 import { getStorySection } from '../lib/sections.js'
 import { getTopicIcon } from '../lib/category.js'
 import { formatDate, handleImageError } from '../lib/viewHelpers.js'
+import { getForYouStories, getStoryPreferenceMatch } from '../lib/readerPreferences.js'
 
 export function PortadaView({
   // activeCategory es conserva perquè les adreces del diari continuen portant
@@ -30,9 +31,11 @@ export function PortadaView({
   hasActiveFilters,
   editionStories,
   portadaStories,
+  readerPreferences,
 }) {
   const todayStories = portadaStories.slice(0, 3)
   const remainingStories = portadaStories.slice(3)
+  const forYouStories = getForYouStories(portadaStories, readerPreferences)
 
   return (
     <>
@@ -188,7 +191,29 @@ export function PortadaView({
           </div>
           <div className="news-grid news-grid--highlights">
             {todayStories.map((story) => (
-              <StoryCard key={story.id} story={story} onNavigate={navigate} />
+              <StoryCard
+                key={story.id}
+                story={story}
+                onNavigate={navigate}
+                interestMatch={getStoryPreferenceMatch(story, readerPreferences).matches}
+              />
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {forYouStories.length > 0 ? (
+        <section className="section-block for-you" aria-labelledby="for-you-title">
+          <div className="section-heading">
+            <div>
+              <p className="section-tag">Els teus interessos</p>
+              <h2 id="for-you-title">Per a tu, sense canviar la portada</h2>
+            </div>
+            <p className="section-caption">Aquestes peces també apareixen en el seu lloc editorial original.</p>
+          </div>
+          <div className="news-grid news-grid--highlights">
+            {forYouStories.map((story) => (
+              <StoryCard key={story.id} story={story} onNavigate={navigate} interestMatch />
             ))}
           </div>
         </section>
@@ -285,6 +310,7 @@ export function PortadaView({
                 key={story.id}
                 story={story}
                 onNavigate={navigate}
+                interestMatch={getStoryPreferenceMatch(story, readerPreferences).matches}
               />
             ))}
           </div>

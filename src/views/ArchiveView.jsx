@@ -9,29 +9,42 @@ import {
   EDITORIAL_TOPIC_INDEX,
   classifyAllowedEditorialTopic,
 } from '../lib/category.js'
+import { getStoryPreferenceMatch, hasReaderInterests } from '../lib/readerPreferences.js'
+import { distanceBandConfig, getDistanceBand } from '../lib/distance.js'
 
 export function ArchiveView({
   archiveStories,
   initialTopic = 'all',
   lastRefreshLabel,
   onNavigate,
+  readerPreferences,
 }) {
   const [searchTerm, setSearchTerm] = useState('')
   const [sourceFilter, setSourceFilter] = useState('all')
   const [langFilter, setLangFilter] = useState('all')
   const [topicFilter, setTopicFilter] = useState(initialTopic)
+  const [territoryFilter, setTerritoryFilter] = useState(
+    readerPreferences?.territories?.length ? 'preferred' : 'all',
+  )
+  const [interestFilter, setInterestFilter] = useState(
+    initialTopic === 'all' && hasReaderInterests(readerPreferences) ? 'preferred' : 'all',
+  )
 
   const availableSources = [...new Set(archiveStories.map((s) => s.source).filter(Boolean))].sort()
   const availableLanguages = [...new Set(archiveStories.map((s) => s.language).filter(Boolean))].sort()
 
   const normalizedQuery = searchTerm.trim().toLowerCase()
   const filtered = archiveStories.filter((story) => {
+    const preferenceMatch = getStoryPreferenceMatch(story, readerPreferences)
+    if (interestFilter === 'preferred' && !preferenceMatch.matches) return false
     if (
       topicFilter !== 'all' &&
       classifyAllowedEditorialTopic(story) !== topicFilter
     ) return false
     if (sourceFilter !== 'all' && story.source !== sourceFilter) return false
     if (langFilter !== 'all' && story.language !== langFilter) return false
+    if (territoryFilter === 'preferred' && !readerPreferences.territories.includes(preferenceMatch.territoryId)) return false
+    if (territoryFilter !== 'all' && territoryFilter !== 'preferred' && getDistanceBand(story).id !== territoryFilter) return false
     if (!normalizedQuery) return true
     const haystack = `${story.title || ''} ${story.summary || ''} ${story.impact || ''} ${story.source || ''} ${story.location || ''}`.toLowerCase()
     return haystack.includes(normalizedQuery)
@@ -42,6 +55,8 @@ export function ArchiveView({
     topicFilter !== 'all' ||
     sourceFilter !== 'all' ||
     langFilter !== 'all'
+    || territoryFilter !== 'all'
+    || interestFilter !== 'all'
 
   // Les peces FITS-NONE són accessibles des de l'hemeroteca, però no formen
   // part de cap tema nou ni poden aparèixer en un filtre de tema específic.
@@ -72,6 +87,8 @@ export function ArchiveView({
     setTopicFilter('all')
     setSourceFilter('all')
     setLangFilter('all')
+    setTerritoryFilter('all')
+    setInterestFilter('all')
   }
 
   return (
@@ -139,6 +156,23 @@ export function ArchiveView({
                   <option value="all">Tots els temes</option>
                   {EDITORIAL_TOPIC_INDEX.map((topic) => (
                     <option key={topic.id} value={topic.label}>{topic.label}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="archive-toolbar__field">
+                <span>Interessos</span>
+                <select value={interestFilter} onChange={(event) => setInterestFilter(event.target.value)}>
+                  <option value="all">Totes les peces</option>
+                  <option value="preferred" disabled={!hasReaderInterests(readerPreferences)}>Els meus interessos</option>
+                </select>
+              </label>
+              <label className="archive-toolbar__field">
+                <span>Territori</span>
+                <select value={territoryFilter} onChange={(event) => setTerritoryFilter(event.target.value)}>
+                  <option value="all">Tots els territoris</option>
+                  <option value="preferred" disabled={!readerPreferences?.territories?.length}>Els meus territoris</option>
+                  {distanceBandConfig.map((territory) => (
+                    <option key={territory.id} value={territory.id}>{territory.label}</option>
                   ))}
                 </select>
               </label>

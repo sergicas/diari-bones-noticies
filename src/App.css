@@ -1286,6 +1286,77 @@
   opacity: 0.75;
 }
 
+.push-optin__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
+.push-optin__btn--off {
+  background: transparent;
+  color: var(--ink);
+  border-color: var(--ink);
+}
+
+.story-card--interest {
+  box-shadow: 5px 5px 0 #ffe000;
+}
+
+.paper-chip--interest {
+  background: #ffe000;
+  color: #000;
+}
+
+.preferences-panel {
+  max-width: 1040px;
+  margin-inline: auto;
+}
+
+.preference-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.preference-options--compact {
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+}
+
+.preference-option,
+.preference-switch {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px;
+  border: 2px solid var(--ink);
+  background: var(--surface, #fff);
+  cursor: pointer;
+}
+
+.preference-option input,
+.preference-switch input {
+  width: 1.25rem;
+  height: 1.25rem;
+  flex: 0 0 auto;
+  accent-color: #e72a30;
+}
+
+.preference-option span {
+  display: grid;
+  gap: 4px;
+}
+
+.preference-option small {
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.preference-switch {
+  margin-top: 18px;
+  font-weight: 700;
+}
+
 .share-block {
   margin: 24px 0 8px;
 }
@@ -2456,7 +2527,7 @@
 
 .archive-toolbar {
   display: grid;
-  grid-template-columns: 1.6fr repeat(3, 1fr) auto;
+  grid-template-columns: minmax(220px, 1.6fr) repeat(5, minmax(130px, 1fr)) auto;
   gap: 12px;
   align-items: end;
   margin: 0 0 12px;

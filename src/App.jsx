@@ -36,6 +36,7 @@ import {
   classifyAllowedEditorialTopic,
 } from './lib/category.js'
 import { formatDateTime } from './lib/viewHelpers.js'
+import { loadReaderPreferences, saveReaderPreferences } from './lib/readerPreferences.js'
 
 import PortadaView from './views/PortadaView.jsx'
 import StoryDetailView from './views/StoryDetailView.jsx'
@@ -52,6 +53,7 @@ const PrivacyView = lazy(() => import('./views/PrivacyView.jsx'))
 const ManifestView = lazy(() => import('./views/ManifestView.jsx'))
 const AboutView = lazy(() => import('./views/AboutView.jsx'))
 const DiagnosticView = lazy(() => import('./views/DiagnosticView.jsx'))
+const PreferencesView = lazy(() => import('./views/PreferencesView.jsx'))
 
 const siteName = 'El Bon Diari'
 const siteUrl = 'https://bondiari.com'
@@ -173,6 +175,10 @@ function getRoute(path) {
 
   if (normalizedPath === '/desats' || normalizedPath === '/guardats') {
     return { page: 'saved' }
+  }
+
+  if (normalizedPath === '/preferencies' || normalizedPath === '/interessos') {
+    return { page: 'preferences' }
   }
 
   if (normalizedPath.startsWith('/noticia/')) {
@@ -568,6 +574,7 @@ function App() {
     initialFilterState.distanceFilter,
   )
   const [currentPath, setCurrentPath] = useState(getCurrentPath)
+  const [readerPreferences, setReaderPreferences] = useState(loadReaderPreferences)
   const mainRef = useRef(null)
   const previousPagePathRef = useRef(getPathnameFromPath(currentPath))
   const [isRefreshing, setIsRefreshing] = useState(false)
@@ -632,6 +639,7 @@ function waitForSwController() {
           import('./views/ManifestView.jsx'),
           import('./views/AboutView.jsx'),
           import('./views/DiagnosticView.jsx'),
+          import('./views/PreferencesView.jsx'),
         ])
       } catch {
         // Ignorar fallades en offline inicial
@@ -1053,6 +1061,10 @@ function waitForSwController() {
       nextTitle = `Desats · ${siteName}`
       nextDescription =
         'Els articles que has desat per llegir després, guardats al teu dispositiu i disponibles fins i tot sense connexió.'
+    } else if (route.page === 'preferences') {
+      nextTitle = `Els meus interessos · ${siteName}`
+      nextDescription =
+        'Preferències locals de temes, territoris i notificacions, sense alterar l’ordre editorial de la portada.'
     } else if (route.page === 'home' && activeCategory !== 'Totes') {
       nextTitle = `${activeCategory} | ${siteName}`
       nextDescription = `Peces de la secció ${activeCategory}, filtrades amb criteri editorial i proximitat.`
@@ -1199,6 +1211,10 @@ function waitForSwController() {
     }
   }
 
+  function updateReaderPreferences(nextPreferences) {
+    setReaderPreferences(saveReaderPreferences(nextPreferences))
+  }
+
   async function handleRefresh() {
     setIsRefreshing(true)
 
@@ -1277,6 +1293,7 @@ function waitForSwController() {
                     initialTopic={requestedArchiveTopic}
                     lastRefreshLabel={lastRefreshLabel}
                     onNavigate={navigate}
+                    readerPreferences={readerPreferences}
                   />
                 ) : null}
 
@@ -1318,6 +1335,7 @@ function waitForSwController() {
                     hasActiveFilters={hasActiveFilters}
                     editionStories={activeStories}
                     portadaStories={portadaStories}
+                    readerPreferences={readerPreferences}
                   />
                 ) : null}
 
@@ -1330,6 +1348,14 @@ function waitForSwController() {
                 {route.page === 'privacy' ? <PrivacyView onNavigate={navigate} /> : null}
 
                 {route.page === 'saved' ? <SavedView onNavigate={navigate} /> : null}
+
+                {route.page === 'preferences' ? (
+                  <PreferencesView
+                    preferences={readerPreferences}
+                    onChange={updateReaderPreferences}
+                    onNavigate={navigate}
+                  />
+                ) : null}
 
                 {route.page === 'diagnostic' ? <DiagnosticView /> : null}
               </Suspense>

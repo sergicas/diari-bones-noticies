@@ -6,12 +6,12 @@ calma, proximitat), amb tres correccions: la portada no es reordena mai, la
 promesa de privacitat es diu amb honestedat, i cap funció no es dona per feta
 fins que s'ha vist funcionar a bondiari.com.
 
-Data: 24 de juliol de 2026 · Estat: en pausa després del Bloc 1
+Data: 24 d’agost de 2026 · Estat: implementació completada; verificació final en curs
 
-> Pausa editorial acordada el 27 de juliol de 2026. Abans d’implementar els
-> blocs 2 i 3, el projecte ha de superar els criteris de
-> [`docs/QUALITAT-EDITORIAL.md`](docs/QUALITAT-EDITORIAL.md). Personalitzar o
-> distribuir una portada de peces superficials amplificaria el problema.
+> La pausa editorial acordada el 27 de juliol de 2026 es tanca després de
+> superar els criteris de [`docs/QUALITAT-EDITORIAL.md`](docs/QUALITAT-EDITORIAL.md).
+> Els blocs 2 i 3 mantenen la jerarquia comuna de portada i fan explícit el
+> topall anti-spam abans de qualsevol enviament.
 
 ---
 
@@ -113,6 +113,13 @@ de mitjans): l'exportació per a aules no arrossega drets de tercers.
    del matí; a igualtat, mana la diversitat (no repetir la categoria del dia
    abans). La regla s'escriu al codi i a la documentació, no queda a
    discreció de ningú.
+
+   Regla implementada a `src/server/dailyNotification.js`: entre les peces que
+   han superat el porter d’IA, guanya la puntuació d’impacte editorial del radar
+   (solidesa de la font i del material disponible); a igualtat es prefereix una
+   categoria diferent de la selecció anterior i, si l’empat continua, es
+   conserva l’ordre de l’edició del matí. La selecció diària queda fixada a D1
+   perquè els reintents i els dos canals comparteixin exactament la mateixa peça.
 3. **El servidor guarda només**: subscripció de l'aparell + opció triada. La
    pàgina de Privacitat s'actualitza amb aquesta frase exacta.
 4. **Primer el web, després l'iPhone.** El canal web (PWA) es fa i es verifica

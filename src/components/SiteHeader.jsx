@@ -25,6 +25,7 @@ export default function SiteHeader({
     { href: '/manifest', label: 'Manifest', page: 'manifest' },
     { href: '/hemeroteca', label: 'Hemeroteca', page: 'archive' },
     { href: '/desats', label: 'Desats', page: 'saved' },
+    { href: '/preferencies', label: 'Interessos', page: 'preferences' },
   ]
   const [isOwner] = useState(readOwnerFlag)
   const isHome = currentPage === 'home'

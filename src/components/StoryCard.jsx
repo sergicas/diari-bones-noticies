@@ -6,7 +6,7 @@ import { getStorySection } from '../lib/sections.js'
 import { getTopicIcon } from '../lib/category.js'
 import { formatDate, getLanguageLabel, handleImageError } from '../lib/viewHelpers.js'
 
-export function StoryCard({ story, onNavigate }) {
+export function StoryCard({ story, onNavigate, interestMatch = false }) {
   const storyPath = getStoryPath(story.id)
   const originBadge = getOriginBadge(story.origin, story.editorialFormat)
   const distanceBand = getDistanceBand(story)
@@ -15,7 +15,7 @@ export function StoryCard({ story, onNavigate }) {
 
   return (
     <a
-      className="story-card"
+      className={`story-card ${interestMatch ? 'story-card--interest' : ''}`}
       href={storyPath}
       onClick={(event) => {
         if (!canInterceptNavigation(event)) {
@@ -68,6 +68,9 @@ export function StoryCard({ story, onNavigate }) {
               <span className="paper-chip__dot" aria-hidden="true" />
               Nou
             </span>
+          ) : null}
+          {interestMatch ? (
+            <span className="paper-chip paper-chip--interest">Del teu interès</span>
           ) : null}
         </div>
         <span className="story-card__time">{story.readTime}</span>

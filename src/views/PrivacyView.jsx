@@ -15,7 +15,7 @@ export function PrivacyView({ onNavigate }) {
       <article className="section-block about-block">
         <section className="about-block__section">
           <p>
-            <strong>Última actualització: 4 de juliol de 2026.</strong>
+            <strong>Última actualització: 24 d’agost de 2026.</strong>
           </p>
           <p>
             El Bon Diari (bondiari.com) i l’app «El Bon Diari» són un projecte
@@ -75,15 +75,18 @@ export function PrivacyView({ onNavigate }) {
         <section className="about-block__section">
           <h2>Notificacions push</h2>
           <p>
-            Si actives les notificacions (al web o a l’app), el teu dispositiu
-            genera un <strong>testimoni de subscripció</strong> —al web, una
-            subscripció Web Push; a l’app, un «device token» d’Apple (APNs)— que
-            desem per poder-te enviar la peça destacada del dia. Aquest testimoni{' '}
+            Si actives les notificacions, <strong>el servidor guarda només la
+            subscripció de l’aparell i l’opció triada</strong>: «La peça del dia»
+            o «Desactivades». Al web és una subscripció Web Push i a l’app un
+            «device token» d’Apple (APNs). Aquest testimoni{' '}
             <strong>no ens identifica personalment</strong> i no s’associa a cap
-            altra dada teva. Pots desactivar les notificacions quan vulguis des
-            de la configuració del navegador o del dispositiu, i el testimoni
-            deixa d’usar-se (i s’elimina quan Apple o el navegador ens indiquen
-            que ja no és vàlid).
+            nom, correu ni historial de lectura. Per garantir el màxim d’un avís
+            diari, conservem durant vuit dies només el dia, el canal i una
+            empremta irreversible del dispositiu; no permet reconstruir el
+            testimoni. Pots desactivar
+            els avisos des d’«Els meus interessos»: la baixa esborra la
+            subscripció del servidor. També eliminem els testimonis que Apple o
+            el navegador indiquen que ja no són vàlids.
           </p>
         </section>
 
@@ -91,9 +94,10 @@ export function PrivacyView({ onNavigate }) {
           <h2>Emmagatzematge local al dispositiu</h2>
           <p>
             Fem servir l’emmagatzematge local del navegador o de l’app només per
-            recordar preferències teves (per exemple, si t’has exclòs del
-            comptador o l’estat de la subscripció push). Aquesta informació es
-            queda al teu dispositiu i no s’envia enlloc.
+            recordar preferències teves (temes i territoris d’interès, mida de
+            lletra, llegibilitat, exclusió del comptador o estat dels avisos).
+            Els interessos de lectura es queden al teu dispositiu i no s’envien
+            enlloc.
           </p>
         </section>
 

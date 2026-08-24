@@ -10,6 +10,10 @@ import { sendPushToAll } from './push.js'
 import { sendApnsToAll } from './apns.js'
 import { announceFreshStories } from './social.js'
 import {
+  notificationStoryId,
+  selectAndRecordDailyNotification,
+} from './dailyNotification.js'
+import {
   beginPipelineJob,
   completePipelineJob,
   failPipelineJob,
@@ -181,7 +185,9 @@ async function processDailyDistribution(env, message) {
   // nova de `latest`: si no, el correu i la notificació podien anar per camins
   // diferents i enviar coses distintes.
   const digest = await sendDailyDigest(env, { stories })
-  const top = stories[0]
+  const deliveryDay = String(message.requestedAt || new Date().toISOString()).slice(0, 10)
+  const selection = await selectAndRecordDailyNotification(env, stories, deliveryDay)
+  const top = selection.story
   let push = { skipped: 'no-story' }
   let apns = { skipped: 'no-story' }
   if (top) {
@@ -190,8 +196,12 @@ async function processDailyDistribution(env, message) {
       body: top.title,
       url: `https://bondiari.com/noticia/${top.id || feedStoryId(top.url)}`,
     }
-    push = await sendPushToAll(env, notification)
-    apns = await sendApnsToAll(env, notification)
+    const delivery = { day: deliveryDay, storyId: notificationStoryId(top) }
+    // El web i APNs comparteixen la mateixa peça, però cada canal té un pany
+    // diari propi per dispositiu. Això permet activar Apple després del web
+    // sense duplicar avisos dins d'un mateix canal.
+    push = await sendPushToAll(env, notification, delivery)
+    apns = await sendApnsToAll(env, notification, delivery)
   }
   // Les peces que ningú no ha llegit en set dies marxen soles, i després
   // s'avisa de les que queden. Aquest ordre importa: així el correu no compta
@@ -208,7 +218,13 @@ async function processDailyDistribution(env, message) {
     review = { skipped: 'failed' }
   }
 
-  const result = { digest, push, apns, review }
+  const result = {
+    digest,
+    push,
+    apns,
+    review,
+    notificationStoryId: top ? notificationStoryId(top) : null,
+  }
   const sent =
     Number(digest.sent || 0) + Number(push.sent || 0) + Number(apns.sent || 0)
   const failed =

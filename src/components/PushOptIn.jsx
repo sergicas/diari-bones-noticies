@@ -1,4 +1,10 @@
 import { useEffect, useState } from 'react'
+import {
+  disableNativePush,
+  enableNativePush,
+  isNativePushAvailable,
+  isNativePushEnabled,
+} from '../lib/nativePush.js'
 
 // Clau pública VAPID (és pública; la privada viu com a secret del Worker).
 const VAPID_PUBLIC_KEY =
@@ -15,6 +21,7 @@ function urlBase64ToUint8Array(base64) {
 
 function getInitialPushState() {
   if (typeof window === 'undefined') return 'unsupported'
+  if (isNativePushAvailable()) return isNativePushEnabled() ? 'subscribed' : 'idle'
   if (
     !('serviceWorker' in navigator) ||
     !('PushManager' in window) ||
@@ -30,6 +37,7 @@ export default function PushOptIn() {
   const [state, setState] = useState(getInitialPushState)
 
   useEffect(() => {
+    if (isNativePushAvailable()) return undefined
     if (getInitialPushState() !== 'idle') return undefined
     let cancelled = false
     navigator.serviceWorker.ready
@@ -59,10 +67,45 @@ export default function PushOptIn() {
       const response = await fetch('/api/push/subscribe', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(sub),
+        body: JSON.stringify({ subscription: sub, option: 'daily' }),
       })
       if (!response.ok) throw new Error('push-subscription-rejected')
       setState('subscribed')
+    } catch {
+      setState('error')
+    }
+  }
+
+  async function unsubscribe() {
+    setState('unsubscribing')
+    try {
+      if (isNativePushAvailable()) {
+        await disableNativePush()
+      } else {
+        const reg = await navigator.serviceWorker.ready
+        const sub = await reg.pushManager.getSubscription()
+        if (sub) {
+          const response = await fetch('/api/push/unsubscribe', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ endpoint: sub.endpoint }),
+          })
+          if (!response.ok) throw new Error('push-unsubscribe-rejected')
+          await sub.unsubscribe()
+        }
+      }
+      setState('idle')
+    } catch {
+      setState('error-subscribed')
+    }
+  }
+
+  async function enable() {
+    if (!isNativePushAvailable()) return subscribe()
+    setState('working')
+    try {
+      const result = await enableNativePush()
+      setState(result.enabled ? 'subscribed' : result.denied ? 'denied' : 'idle')
     } catch {
       setState('error')
     }
@@ -72,10 +115,25 @@ export default function PushOptIn() {
 
   return (
     <div className="push-optin">
-      {state === 'subscribed' ? (
-        <p className="push-optin__ok">
-          Fet. Rebràs la peça destacada del dia com a avís al teu dispositiu.
-        </p>
+      {state === 'subscribed' || state === 'unsubscribing' || state === 'error-subscribed' ? (
+        <>
+          <p className="push-optin__ok">
+            La peça del dia està activada. El servidor limita l’enviament a un avís diari.
+          </p>
+          <div className="push-optin__actions">
+            <button
+              type="button"
+              className="push-optin__btn push-optin__btn--off"
+              onClick={unsubscribe}
+              disabled={state === 'unsubscribing'}
+            >
+              {state === 'unsubscribing' ? 'Desactivant…' : 'Desactivar avisos'}
+            </button>
+          </div>
+          {state === 'error-subscribed' ? (
+            <p className="push-optin__note">No s’ha pogut completar la baixa. La subscripció es manté perquè ho puguis tornar a provar.</p>
+          ) : null}
+        </>
       ) : state === 'denied' ? (
         <p className="push-optin__note">
           Tens els avisos bloquejats. Pots activar-los des dels permisos del navegador.
@@ -85,10 +143,10 @@ export default function PushOptIn() {
           <button
             type="button"
             className="push-optin__btn"
-            onClick={subscribe}
+            onClick={enable}
             disabled={state === 'working'}
           >
-            {state === 'working' ? 'Activant…' : 'Rebre la peça destacada del dia al mòbil'}
+            {state === 'working' ? 'Activant…' : 'Activar «La peça del dia»'}
           </button>
           {state === 'error' ? (
             <p className="push-optin__note">No s'ha pogut activar. Torna-ho a provar.</p>
