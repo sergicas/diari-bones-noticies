@@ -43,6 +43,30 @@ export function ArchiveView({
     sourceFilter !== 'all' ||
     langFilter !== 'all'
 
+  // Les peces FITS-NONE són accessibles des de l'hemeroteca, però no formen
+  // part de cap tema nou ni poden aparèixer en un filtre de tema específic.
+  const unclassifiedArchiveStories = topicFilter === 'all'
+    ? filtered.filter((story) => !classifyAllowedEditorialTopic(story))
+    : []
+  const archiveGroups = [
+    ...EDITORIAL_TOPIC_INDEX
+      .map((topic) => ({
+        id: topic.id,
+        label: topic.label,
+        stories: filtered.filter(
+          (story) => classifyAllowedEditorialTopic(story) === topic.label,
+        ),
+      }))
+      .filter((group) => group.stories.length > 0),
+    ...(unclassifiedArchiveStories.length > 0
+      ? [{
+          id: 'hemeroteca-general',
+          label: 'Hemeroteca general',
+          stories: unclassifiedArchiveStories,
+        }]
+      : []),
+  ]
+
   const resetFilters = () => {
     setSearchTerm('')
     setTopicFilter('all')
@@ -146,19 +170,11 @@ export function ArchiveView({
               {hasFilters ? `${filtered.length} de ${archiveStories.length} peces` : `${archiveStories.length} peces`}
             </p>
             {filtered.length > 0 ? (
-              EDITORIAL_TOPIC_INDEX
-                .map((topic) => ({
-                  topic,
-                  stories: filtered.filter(
-                    (story) => classifyAllowedEditorialTopic(story) === topic.label,
-                  ),
-                }))
-                .filter((group) => group.stories.length > 0)
-                .map(({ topic, stories }) => (
-                  <div className="archive-topic" key={topic.id}>
+              archiveGroups.map(({ id, label, stories }) => (
+                  <div className="archive-topic" key={id}>
                     <div className="section-heading">
                       <div>
-                        <p className="section-tag">{topic.label}</p>
+                        <p className="section-tag">{label}</p>
                         <h3>{stories.length} {stories.length === 1 ? 'peça' : 'peces'}</h3>
                       </div>
                     </div>

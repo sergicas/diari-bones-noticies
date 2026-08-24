@@ -70,6 +70,20 @@ describe('Colors d’estat accessibles', () => {
   })
 })
 
+describe('Navegació SPA accessible', () => {
+  it('mou el focus al contingut principal quan canvia de pàgina', () => {
+    expect(appJsx).toContain('ref={mainRef}')
+    expect(appJsx).toContain('mainRef.current?.focus({ preventScroll: true })')
+    expect(appJsx).toMatch(/<main[\s\S]*?tabIndex="-1"/)
+  })
+
+  it('respecta la preferència de reduir moviment en tornar a dalt', () => {
+    expect(appJsx).toMatch(
+      /behavior:\s*prefersReducedMotion\s*\?\s*'auto'\s*:\s*'smooth'/,
+    )
+  })
+})
+
 describe('Mode fosc: mai més a mitges', () => {
   // Juliol 2026: activar el mode fosc només a index.css (variables) sense
   // adaptar App.css (targetes amb blanc fixat) va deixar la portada

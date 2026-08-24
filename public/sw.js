@@ -11,6 +11,30 @@
 const CACHE_VERSION = 'bondiari-shell-__BUILD_HASH__'
 const APP_SHELL = ['/', '/manifest.webmanifest', '/logo-colibri.png?v=4', '/favicon.svg']
 
+function cacheResponse(request, response) {
+  if (!response.ok || response.type !== 'basic') return Promise.resolve()
+  return caches
+    .open(CACHE_VERSION)
+    .then((cache) => cache.put(request, response.clone()))
+}
+
+function offlineJson() {
+  return new Response(JSON.stringify({ error: 'offline', stories: [] }), {
+    status: 503,
+    headers: { 'content-type': 'application/json; charset=utf-8' },
+  })
+}
+
+function offlinePage() {
+  return new Response(
+    '<!doctype html><html lang="ca"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Sense connexió · El Bon Diari</title><body><main><h1>Ara mateix no hi ha connexió</h1><p>Torna-ho a provar quan recuperis la xarxa.</p></main></body></html>',
+    {
+      status: 503,
+      headers: { 'content-type': 'text/html; charset=utf-8' },
+    },
+  )
+}
+
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches
@@ -43,18 +67,17 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return
 
   if (url.pathname === '/api/live-news') {
+    const networkResponse = fetch(request).then((response) => {
+      if (!response.ok) throw new Error(`live-news-${response.status}`)
+      return response
+    })
+    event.waitUntil(
+      networkResponse
+        .then((response) => cacheResponse(request, response))
+        .catch(() => undefined),
+    )
     event.respondWith(
-      fetch(request)
-        .then((response) => {
-          if (!response.ok) throw new Error(`live-news-${response.status}`)
-          const copy = response.clone()
-          caches
-            .open(CACHE_VERSION)
-            .then((cache) => cache.put(request, copy))
-            .catch(() => undefined)
-          return response
-        })
-        .catch(() => caches.match(request)),
+      networkResponse.catch(async () => (await caches.match(request)) || offlineJson()),
     )
     return
   }
@@ -62,31 +85,35 @@ self.addEventListener('fetch', (event) => {
   if (url.pathname.startsWith('/api/')) return
 
   if (request.mode === 'navigate') {
+    const networkResponse = fetch(request)
+    event.waitUntil(
+      networkResponse
+        .then((response) => cacheResponse(request, response))
+        .catch(() => undefined),
+    )
     event.respondWith(
-      fetch(request)
-        .then((response) => {
-          const copy = response.clone()
-          caches.open(CACHE_VERSION).then((cache) => cache.put('/', copy)).catch(() => undefined)
-          return response
-        })
-        .catch(() => caches.match('/')),
+      networkResponse.catch(async () =>
+        (await caches.match(request)) || (await caches.match('/')) || offlinePage(),
+      ),
     )
     return
   }
 
+  const cachedResponse = caches.match(request)
+  const networkResponse = cachedResponse.then((cached) =>
+    cached ? null : fetch(request),
+  )
+  event.waitUntil(
+    networkResponse
+      .then((response) =>
+        response ? cacheResponse(request, response) : undefined,
+      )
+      .catch(() => undefined),
+  )
   event.respondWith(
-    caches.match(request).then((cached) => {
-      if (cached) return cached
-      return fetch(request)
-        .then((response) => {
-          if (response.ok && response.type === 'basic') {
-            const copy = response.clone()
-            caches.open(CACHE_VERSION).then((cache) => cache.put(request, copy)).catch(() => undefined)
-          }
-          return response
-        })
-        .catch(() => cached)
-    }),
+    Promise.all([cachedResponse, networkResponse])
+      .then(([cached, network]) => cached || network || Response.error())
+      .catch(() => Response.error()),
   )
 })
 

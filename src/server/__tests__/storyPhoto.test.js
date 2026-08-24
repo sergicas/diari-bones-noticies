@@ -126,6 +126,7 @@ describe('pickBestCommonsPhoto', () => {
     expect(photo.url).toContain('pla%C3%A7a%20nova')
     expect(photo.author).toBe('Joana Fotògrafa')
     expect(photo.license).toBe('CC BY-SA 4.0')
+    expect(photo.sourceUrl).toContain('commons.wikimedia.org')
     expect(photo.source).toBe('wikimedia-commons')
   })
 
@@ -159,6 +160,11 @@ describe('attachRealPhotos', () => {
     expect(stories[0].imageUrl).toContain('upload.wikimedia.org')
     expect(stories[0].imageCredit).toContain('Joana Fotògrafa')
     expect(stories[0].imageCredit).toContain('Wikimedia Commons')
+    expect(stories[0].imageRights).toEqual({
+      verified: true,
+      license: 'CC BY-SA 4.0',
+      proofUrl: expect.stringContaining('commons.wikimedia.org'),
+    })
     expect(stories[0].photoChecked).toBe(true)
   })
 
@@ -219,6 +225,7 @@ describe('attachRealPhotos', () => {
           url: 'https://upload.wikimedia.org/foto-orrius.jpg',
           author: 'Isidre blanc',
           license: 'CC BY-SA 4.0',
+          sourceUrl: 'https://commons.wikimedia.org/wiki/File:Foto_Orrius.jpg',
           place: 'òrrius',
           source: 'wikimedia-commons',
         },
@@ -317,5 +324,41 @@ describe('attachRealPhotos', () => {
     expect(story.photo).toBeUndefined()
     expect(story.imageUrl).toContain('/api/story-image/')
     expect(story.imageCredit).toBe('El Bon Diari (il·lustració IA)')
+  })
+
+  it('substitueix qualsevol foto externa sense prova de llicència per la il·lustració pròpia', () => {
+    const story = {
+      title: 'Una peça amb una foto sense llicència comprovable',
+      category: 'Ciència',
+      location: 'Món',
+      url: 'https://exemple.cat/foto-sense-drets',
+      imageUrl: 'https://exemple.cat/foto.jpg',
+      imageCredit: 'Un crèdit no és una llicència',
+    }
+
+    sanitizeStoryPhoto(story)
+
+    expect(story.imageUrl).toMatch(/^\/api\/story-image\//)
+    expect(story.imageCredit).toBe('El Bon Diari (il·lustració IA)')
+    expect(story.imageRights).toBeUndefined()
+  })
+
+  it('conserva una foto externa amb llicència lliure i URL de prova', () => {
+    const story = {
+      title: 'Una peça amb fotografia lliure',
+      category: 'Ciència',
+      location: 'Món',
+      url: 'https://exemple.cat/foto-lliure',
+      imageUrl: 'https://upload.wikimedia.org/foto-lliure.jpg',
+      imageRights: {
+        verified: true,
+        license: 'CC BY 4.0',
+        proofUrl: 'https://commons.wikimedia.org/wiki/File:Foto_lliure.jpg',
+      },
+    }
+
+    sanitizeStoryPhoto(story)
+
+    expect(story.imageUrl).toBe('https://upload.wikimedia.org/foto-lliure.jpg')
   })
 })

@@ -16,7 +16,10 @@ import {
   readNewsletterAudience,
 } from './server/newsletter.js'
 import { renderStoryPage, findStory } from './server/storyMeta.js'
+import { renderContentPage } from './server/pageContent.js'
+import { handleReviewRoutes } from './server/reviewPage.js'
 import { handleNewsSitemap } from './server/newsSitemap.js'
+import { handleArchiveSitemap } from './server/archiveSitemap.js'
 import { handlePushSubscribe, handlePushUnsubscribe } from './server/push.js'
 import { handleApnsRegister } from './server/apns.js'
 import { handleStoryImage } from './server/storyImage.js'
@@ -24,6 +27,7 @@ import {
   backfillEditorialArchive,
   persistEditorialEdition,
   readEditorialStoryCatalog,
+  readPipelineJob,
   readPipelineHealth,
   readUniqueEditorialStats,
 } from './server/editorialStore.js'
@@ -164,6 +168,56 @@ async function handleLiveNews(request, env) {
   }
 }
 
+/**
+ * Estat d'una feina de la cua, per clau d'idempotència.
+ *
+ * Protegida amb el mateix testimoni que el refresc: diu com va la maquinària
+ * per dins i no ha de ser pública. La clau va a l'URL perquè NO és cap secret
+ * —el secret és el testimoni de la capçalera— i així l'adreça es pot desar i
+ * tornar a consultar.
+ */
+async function handlePipelineJob(request, env) {
+  if (request.method !== 'GET' && request.method !== 'HEAD') {
+    return methodNotAllowed('GET, HEAD')
+  }
+  if (!(await isRefreshAuthorized(request, env))) {
+    return jsonResponse(
+      { ok: false, error: 'unauthorized' },
+      {
+        status: 401,
+        headers: {
+          'cache-control': 'no-store',
+          'www-authenticate': 'Bearer realm="bondiari-refresh"',
+        },
+      },
+    )
+  }
+  const key = new URL(request.url).searchParams.get('key') || ''
+  if (!key) {
+    return jsonResponse(
+      { ok: false, error: 'missing-key' },
+      { status: 400, headers: { 'cache-control': 'no-store' } },
+    )
+  }
+  try {
+    const job = await readPipelineJob(env, key)
+    if (!job) {
+      // Encara no ha començat: la cua pot trigar a repartir el missatge.
+      return jsonResponse(
+        { ok: true, status: 'queued', idempotencyKey: key },
+        { status: 200, headers: { 'cache-control': 'no-store' } },
+      )
+    }
+    return jsonResponse(
+      { ok: true, ...job },
+      { status: 200, headers: { 'cache-control': 'no-store' } },
+    )
+  } catch (error) {
+    console.error('No s’ha pogut llegir l’estat de la feina', error)
+    return jsonResponse({ ok: false }, { status: 500 })
+  }
+}
+
 async function handleRefreshNews(request, env) {
   if (request.method !== 'POST') return methodNotAllowed('POST')
   if (!(await isRefreshAuthorized(request, env))) {
@@ -179,6 +233,38 @@ async function handleRefreshNews(request, env) {
     )
   }
   try {
+    // PASSA PER LA CUA, NO EXECUTA DIRECTAMENT (14-08-2026).
+    //
+    // Executant-lo aquí, un refresc manual podia coincidir amb el del cron i
+    // totes dues execucions es trepitjaven el lot públic. Amb la cua
+    // serialitzada (max_concurrency: 1 a wrangler.jsonc) hi ha un sol
+    // escriptor de debò, que és el que aquesta arquitectura dona per suposat.
+    if (env.INGEST_QUEUE) {
+      const message = buildManualRefreshQueueMessage()
+      await env.INGEST_QUEUE.send(message, { contentType: 'json' })
+      // 202: acceptat, encara no fet. Retornar 200 faria creure a qui truca
+      // que el refresc ja ha acabat, i llegiria el lot vell pensant que és nou.
+      //
+      // S'hi torna l'adreça per consultar AQUESTA feina. Sondejar la data del
+      // lot no serveix: una feina aliena que acabi abans la canviaria, i una de
+      // pròpia que acabi sense novetats no la canviaria.
+      const statusUrl = `${new URL(request.url).origin}/api/pipeline-job?key=${encodeURIComponent(
+        message.idempotencyKey,
+      )}`
+      return jsonResponse(
+        {
+          ok: true,
+          queued: true,
+          idempotencyKey: message.idempotencyKey,
+          statusUrl,
+        },
+        {
+          status: 202,
+          headers: { 'cache-control': 'no-store', location: statusUrl },
+        },
+      )
+    }
+    // Sense cua configurada (desenvolupament local), es fa aquí mateix.
     const payload = await getLiveNewsPayload(env.LIVE_NEWS_KV, { force: true, env })
     const edition = await persistEditorialEdition(env, payload, {
       slot: 'manual',
@@ -186,6 +272,7 @@ async function handleRefreshNews(request, env) {
     })
     return jsonResponse({
       ok: true,
+      queued: false,
       count: payload.stories.length,
       editionId: edition.editionId,
       nextRefreshAt: payload.nextRefreshAt,
@@ -561,6 +648,7 @@ async function route(request, env, ctx) {
     }
   }
   if (path === '/api/refresh-news') return handleRefreshNews(request, env)
+  if (path === '/api/pipeline-job') return handlePipelineJob(request, env)
   if (path === '/api/stats') return handleStats(request, env)
   if (path === '/api/editorial-stats') return handleEditorialStats(request, env)
   // Una peça concreta per id. La fa servir el front quan es demana /noticia/:id
@@ -600,10 +688,19 @@ async function route(request, env, ctx) {
   // Sitemap de Google News amb les peces vives del radar (últimes 48 h).
   if (path === '/news-sitemap.xml') return handleNewsSitemap(env)
 
+  // Sitemap durador amb TOTES les peces de l'hemeroteca (D1).
+  if (path === '/sitemap-hemeroteca.xml') return handleArchiveSitemap(env)
+
   // Notificacions push (PWA).
   if (path === '/api/push/subscribe') return handlePushSubscribe(request, env)
   if (path === '/api/push/unsubscribe') return handlePushUnsubscribe(request, env)
   if (path === '/api/push/register-apns') return handleApnsRegister(request, env)
+
+  // Sala de revisió privada: cap peça nova no es publica fins que una persona
+  // l'ha llegida aquí. Va abans que qualsevol altra pàgina perquè /revisio no
+  // caigui mai al fallback de la SPA.
+  const reviewPage = await handleReviewRoutes(request, env)
+  if (reviewPage) return reviewPage
 
   // Pàgina de notícia: servim l'HTML amb meta socials propis (títol, imatge)
   // perquè quan algú la comparteix surti la targeta de la peça, no la genèrica.
@@ -611,6 +708,13 @@ async function route(request, env, ctx) {
     const storyPage = await renderStoryPage(request, env)
     if (storyPage) return storyPage
   }
+
+  // Portada, temes, hemeroteca, índex de temes i pàgines fixes: injectem text
+  // real dins del HTML perquè Googlebot i els lectors sense JS hi vegin
+  // contingut (fins ara arribaven amb el <body> buit). Si la ruta no li pertoca
+  // o falla, renderContentPage retorna null i caiem al fallback d'ASSETS.
+  const contentPage = await renderContentPage(request, env)
+  if (contentPage) return contentPage
 
   // Per a qualsevol ruta no-API, delega al sistema d'assets estàtics.
   return env.ASSETS.fetch(request)

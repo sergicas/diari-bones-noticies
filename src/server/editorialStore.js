@@ -1,5 +1,6 @@
 import { feedStoryId } from '../lib/story-id.js'
-import { keepAllowedEditorialTopic } from '../lib/category.js'
+import { keepArchiveStory } from '../lib/category.js'
+import { editorialSeedStories } from '../data/articles.js'
 import { selectPublishableStories } from './editorialQuality.js'
 
 const MAX_STATEMENTS_PER_BATCH = 40
@@ -43,12 +44,9 @@ function parseStoredStory(value) {
 }
 
 function selectPublicStories(stories, { onReject } = {}) {
-  const topicSafe = []
-  for (const story of stories || []) {
-    const filtered = keepAllowedEditorialTopic(story)
-    if (filtered) topicSafe.push(filtered)
-    else onReject?.(story, 'outside-topic')
-  }
+  // El catàleg durable no descarta FITS-NONE: no entren a la línia temàtica
+  // nova, però es mantenen a l'hemeroteca i continuen resolent la seva URL.
+  const topicSafe = (stories || []).map(keepArchiveStory)
 
   const qualitySafe = selectPublishableStories(topicSafe, {
     onReject: (story, result) => onReject?.(story, 'quality', result),
@@ -66,6 +64,10 @@ function selectPublicStories(stories, { onReject } = {}) {
   )
 }
 
+function editorialSeeds() {
+  return selectPublicStories(editorialSeedStories)
+}
+
 function monthBounds(date = new Date()) {
   const start = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1))
   const end = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1))
@@ -74,8 +76,14 @@ function monthBounds(date = new Date()) {
 
 export async function readEditorialStoryCatalog(env, { limit = 1000 } = {}) {
   const db = database(env)
-  if (!db) return { available: false, stories: [], count: 0, updatedAt: null }
   const safeLimit = Math.max(1, Math.min(MAX_ARCHIVE_STORIES, Number(limit) || 1000))
+  // Les peces llavor aprovades formen part del catàleg encara que el binding
+  // D1 no estigui disponible en una previsualització. No les escrivim a D1
+  // aquí: la lectura és determinista i no té efectes laterals.
+  if (!db) {
+    const stories = editorialSeeds().slice(0, safeLimit)
+    return { available: false, stories, count: stories.length, updatedAt: null }
+  }
   const result = await db
     .prepare(
       `SELECT payload_json, updated_at
@@ -88,8 +96,11 @@ export async function readEditorialStoryCatalog(env, { limit = 1000 } = {}) {
     .all()
   const rows = result.results || []
   const stories = selectPublicStories(
-    rows.map((row) => parseStoredStory(row.payload_json)).filter(Boolean),
-  )
+    [
+      ...rows.map((row) => parseStoredStory(row.payload_json)).filter(Boolean),
+      ...editorialSeedStories,
+    ],
+  ).slice(0, safeLimit)
   const updatedAt = rows.reduce(
     (latest, row) => (!latest || row.updated_at > latest ? row.updated_at : latest),
     null,
@@ -189,7 +200,6 @@ export async function backfillEditorialArchive(env) {
   let qualityRejected = 0
   const stories = selectPublicStories(candidates, {
     onReject: (_story, reason) => {
-      if (reason === 'outside-topic') outsideTopic += 1
       if (reason === 'quality') qualityRejected += 1
     },
   })
@@ -325,7 +335,16 @@ export async function persistEditorialEdition(
             editorial_status = 'published',
             published_at = excluded.published_at,
             payload_json = excluded.payload_json,
-            updated_at = excluded.updated_at`,
+            updated_at = excluded.updated_at
+          -- L'ARXIU NO POT DESFER UNA DECISIÓ HUMANA (15-08-2026).
+          --
+          -- Aquest upsert forçava l'estat de publicada sempre. Si
+          -- s'executava just després que una persona rebutgés una peça que
+          -- l'ajudant havia aprovat —el radar tancant l'edició mentre ell
+          -- decideix a la sala—, la tornava a deixar publicada. La condició fa
+          -- que la fila d'una peça rebutjada o retirada no es toqui gens.
+          WHERE COALESCE(stories.human_decision, '') <> 'reject'
+            AND COALESCE(stories.withdrawal, '') = ''`,
         )
         .bind(
           id,
@@ -361,21 +380,58 @@ export async function persistEditorialEdition(
 
 export async function findStoryInEditorialStore(env, id) {
   const db = database(env)
-  if (!db || !id) return null
-  const row = await db
-    .prepare(
-      `SELECT payload_json
-      FROM stories
-      WHERE id = ? AND editorial_status != 'rejected'
-      LIMIT 1`,
-    )
-    .bind(id)
+  if (!id) return null
+  if (db) {
+    const row = await db
+      .prepare(
+        // LLISTA BLANCA, NO NEGRA (14-08-2026).
+        //
+        // Abans deia `editorial_status != 'rejected'`, i això deixava passar
+        // les peces en estat `captured`: qualsevol esborrany pendent de
+        // revisió era llegible per /noticia/:id abans que ningú l'aprovés.
+        // La porta d'aprovació tenia, doncs, una escletxa pública.
+        //
+        // Amb una llista blanca, un estat nou neix INVISIBLE i cal decidir
+        // expressament de publicar-lo. Amb una llista negra passava el
+        // contrari, que és el costat perillós.
+        `SELECT payload_json
+        FROM stories
+        WHERE id = ? AND editorial_status IN ('published', 'distributed', 'archived')
+        LIMIT 1`,
+      )
+      .bind(id)
+      .first()
+    if (row?.payload_json) {
+      try {
+        return JSON.parse(row.payload_json)
+      } catch {
+        // Si la fila persistent és invàlida, encara podem resoldre una llavor.
+      }
+    }
+  }
+  return editorialSeedStories.find((story) => story.id === id) || null
+}
+
+/**
+ * LES PECES D'UNA EDICIÓ, PER A REPARTIR-LES, dient si l'edició existeix.
+ *
+ * ZERO PECES ÉS UNA RESPOSTA VÀLIDA, i vol dir "no enviïs res". Abans, una
+ * edició que es quedava buida després de treure'n les retirades es confonia
+ * amb una edició inexistent, i el repartiment queia a `latest`: enviava peces
+ * velles o d'una altra edició, justament al pas que no es pot desfer. El
+ * recanvi només val quan de debò no hi ha edició.
+ */
+export async function readEditionForDistribution(env, editionId, limit = 30) {
+  const db = database(env)
+  if (!db || !editionId) return { stories: [], edicioTrobada: false }
+  const existeix = await db
+    .prepare(`SELECT id FROM editions WHERE id = ? LIMIT 1`)
+    .bind(editionId)
     .first()
-  if (!row?.payload_json) return null
-  try {
-    return JSON.parse(row.payload_json)
-  } catch {
-    return null
+  if (!existeix) return { stories: [], edicioTrobada: false }
+  return {
+    stories: await readEditionStories(env, editionId, limit),
+    edicioTrobada: true,
   }
 }
 
@@ -384,10 +440,16 @@ export async function readEditionStories(env, editionId, limit = 30) {
   if (!db || !editionId) return []
   const result = await db
     .prepare(
+      // Ni retirades ni rebutjades. Sense aquest filtre, una edició d'ahir
+      // encara podia enviar per correu, notificació o xarxes una peça que
+      // algú havia tret del diari aquest matí.
       `SELECT stories.payload_json
       FROM edition_stories
       INNER JOIN stories ON stories.id = edition_stories.story_id
       WHERE edition_stories.edition_id = ?
+        AND COALESCE(stories.human_decision, '') <> 'reject'
+        AND COALESCE(stories.withdrawal, '') = ''
+        AND stories.editorial_status NOT IN ('rejected', 'captured')
       ORDER BY edition_stories.position ASC
       LIMIT ?`,
     )
@@ -449,21 +511,94 @@ export async function completePipelineJob(env, idempotencyKey, result) {
     .run()
 }
 
-export async function failPipelineJob(env, idempotencyKey, error) {
+/**
+ * Un intent fallit NO és una feina fallida.
+ *
+ * Cloudflare Queues reparteix com a mínim una vegada i reintenta fins a
+ * `max_retries`. Marcar 'failed' al primer error feia que qui esperava la
+ * feina l'abandonés mentre la cua encara l'havia de tornar a executar: l'estat
+ * mentia. Ara només és terminal quan de debò s'han esgotat els intents; fins
+ * llavors es queda a 'processing' amb l'últim error apuntat, que és la
+ * veritat: s'està intentant, i el darrer intent va anar malament.
+ *
+ * (Es manté a 'processing' i no s'inventa cap estat nou perquè l'esquema de
+ * `pipeline_jobs` té un CHECK amb els tres valors i no cal migrar-lo.)
+ */
+export async function failPipelineJob(
+  env,
+  idempotencyKey,
+  error,
+  { terminal = true, attempts = null } = {},
+) {
   const db = database(env)
   if (!db) return
+  const missatge = error instanceof Error ? error.message : String(error)
+  const timestamp = nowIso()
+  if (terminal) {
+    await db
+      .prepare(
+        `UPDATE pipeline_jobs
+        SET status = 'failed', last_error = ?, updated_at = ?
+        WHERE idempotency_key = ?`,
+      )
+      .bind(missatge, timestamp, idempotencyKey)
+      .run()
+    return
+  }
   await db
     .prepare(
       `UPDATE pipeline_jobs
-      SET status = 'failed', last_error = ?, updated_at = ?
+      SET status = 'processing', last_error = ?, attempts = ?, updated_at = ?
       WHERE idempotency_key = ?`,
     )
     .bind(
-      error instanceof Error ? error.message : String(error),
-      nowIso(),
+      missatge,
+      Number(attempts || 1),
+      timestamp,
       idempotencyKey,
     )
     .run()
+}
+
+/**
+ * L'estat d'una feina concreta de la cua.
+ *
+ * Sense això, qui demanava un refresc només podia mirar si la data del lot
+ * canviava, i això és un senyal indirecte que enganya de dues maneres: una
+ * feina ALIENA que acabi abans fa creure que ha acabat la teva, i una feina
+ * PRÒPIA que acabi sense canviar el lot (perquè no hi havia res nou) fa creure
+ * que no ha acabat. Amb la clau d'idempotència es pregunta per la feina que
+ * s'ha encuat i per cap altra.
+ */
+export async function readPipelineJob(env, idempotencyKey) {
+  const db = database(env)
+  if (!db || !idempotencyKey) return null
+  const row = await db
+    .prepare(
+      `SELECT idempotency_key, job_type, status, attempts, result_json,
+              last_error, created_at, updated_at, completed_at
+         FROM pipeline_jobs WHERE idempotency_key = ? LIMIT 1`,
+    )
+    .bind(idempotencyKey)
+    .first()
+  if (!row) return null
+  let result = null
+  try {
+    result = row.result_json ? JSON.parse(row.result_json) : null
+  } catch {
+    result = null
+  }
+  return {
+    idempotencyKey: row.idempotency_key,
+    type: row.job_type,
+    status: row.status,
+    attempts: Number(row.attempts || 0),
+    result,
+    error: row.last_error || null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    completedAt: row.completed_at || null,
+  }
 }
 
 export async function recordDeliveryRun(

@@ -3,8 +3,7 @@ name: Verify
 on:
   push:
     branches:
-      - main
-      - 'agent/**'
+      - '**'
   pull_request:
 
 permissions:

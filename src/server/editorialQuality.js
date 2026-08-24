@@ -52,6 +52,8 @@ const SUBSTANTIVE_ISSUES = new Set([
   'generic-body',
   'generic-impact',
   'impact-repeated-in-body',
+  'truncated-body',
+  'truncated-impact',
   'missing-source',
 ])
 
@@ -73,6 +75,8 @@ const GENERIC_IMPACT_PATTERNS = [
   /^actualitza un indicador p[uú]blic\b/i,
   /^el radar autom[aà]tic\b/i,
   /^aquesta (?:not[ií]cia|pe[çc]a) (?:[ée]s|es) [uú]til perqu[eè] informa\b/i,
+  /\b(?:pot|podria) revolucionar\b/i,
+  /\bpot tenir un impacte significatiu\b/i,
 ]
 
 function plainText(value) {
@@ -80,6 +84,26 @@ function plainText(value) {
     .replace(/<[^>]*>/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
+}
+
+// Un text publicable no pot acabar en una paraula que exigeix complement.
+// Aquesta comprovació detecta els talls mecànics per caràcters ("...com la")
+// sense exigir punt final, perquè molts impactes breus correctes no en duen.
+const TRAILING_PROSE_CONNECTOR = new RegExp(
+  '\\s+(?:' +
+    [
+      'i|o|de|del|dels|d|a|al|als|en|amb|per|sense|sobre|sota|entre|fins|des|durant',
+      'contra|cap|segons|malgrat|mitjançant|després|abans|que|qui|com|on',
+      'el|la|els|les|un|una|uns|unes|l',
+      'y|e|u|con|desde|hasta|para|por|sin|tras|los|las|unos|unas',
+      'and|or|of|for|with|from|to|at|by|in|on|the|an|that|which|as',
+    ].join('|') +
+    ')[\\s,:;–—-]*$',
+  'iu',
+)
+
+export function hasTruncatedEnding(value) {
+  return TRAILING_PROSE_CONNECTOR.test(plainText(value))
 }
 
 export function countWords(value) {
@@ -139,6 +163,8 @@ export function evaluateEditorialQuality(story) {
   if (GENERIC_IMPACT_PATTERNS.some((pattern) => pattern.test(impact))) {
     issues.push('generic-impact')
   }
+  if (hasTruncatedEnding(body)) issues.push('truncated-body')
+  if (hasTruncatedEnding(impact)) issues.push('truncated-impact')
 
   const bodyNormalized = normalized(body)
   const impactNormalized = normalized(impact)

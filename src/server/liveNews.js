@@ -13,6 +13,7 @@ import { storyImagePath } from '../lib/story-image-path.js'
 import { applyOwnContent } from './storyText.js'
 import { runTextModel, activeTextProvider } from './ai/textModel.js'
 import { attachRealPhotos, sanitizeStoryPhotos } from './storyPhoto.js'
+import { isValidConfiguredFeedXml, validateFeedActivation } from './rss/feedActivation.js'
 import {
   selectPublishableStories,
 } from './editorialQuality.js'
@@ -28,6 +29,7 @@ import {
   allowedSourceNames,
   selectFeedsForRun,
   tickerFeedNames,
+  NOMES_FONTS_DEL_GIR,
 } from './rss/feedsConfig.js'
 import {
   normalizeAgendaItem,
@@ -37,6 +39,19 @@ import {
   normalizeIdescatUpdate,
   collectIdescatUpdates,
 } from './rss/serviceFeeds.js'
+import { passadaDeLAjudant } from './assistantPass.js'
+import {
+  candidateId,
+  markStoriesLive,
+  markWithdrawn,
+  senseMaterialDeTreball,
+  pendingLiveStories,
+  pendingWithdrawals,
+  persistStoryDetails,
+  readDecisions,
+  recordPendingCandidates,
+  splitByReviewDecision,
+} from './reviewGate.js'
 
 export {
   refreshIntervalMs,
@@ -48,7 +63,8 @@ export {
 // Les peces publicades es desen també sota una clau estable story:<id> perquè la
 // seva pàgina de detall es pugui resoldre encara que surtin de la portada (finestra
 // de 30 peces / 4 dies). Així els enllaços compartits o indexats no fan 404.
-const storyDetailTtlSeconds = 30 * 24 * 60 * 60
+// Qui les desa és `persistStoryDetails` (server/reviewGate.js), que és on viu
+// ara la durada d'aquestes còpies.
 
 const cacheKey = 'latest'
 // El Bon Diari és un DIARI: el radar només manté notícies de pocs dies. Una
@@ -57,6 +73,39 @@ const cacheKey = 'latest'
 // per a seccions lentes (ciència, cultura) sense fossilitzar-se. La portada en
 // mostra fins a 25 peces de < 5 dies (App.jsx); la resta va a l'Hemeroteca.
 const maxLiveStoryAgeMs = 5 * 24 * 60 * 60 * 1000
+
+// CADA ÀMBIT TÉ EL SEU RELLOTGE (13-08-2026).
+//
+// Els cinc dies de dalt es van posar quan això era un radar de bones notícies
+// generals: allà, una notícia de fa una setmana ja no serveix. Un diari
+// especialitzat no funciona així. Un estudi de longevitat amb revisió
+// d'experts no caduca en cinc dies, i un assaig de filosofia encara menys.
+//
+// Sense això, Longevitat es quedava buit per sempre i en silenci: la font
+// d'Europe PMC passa totes les comprovacions, però serveix estudis de sis
+// setmanes enrere i el radar els llençava tots abans d'ensenyar-los.
+//
+// El risc conegut d'allargar finestres és fossilitzar la portada (ja va passar
+// el 2026-06 amb una finestra de 60 dies). Ara hi ha dos frens que aleshores no
+// existien: les peces d'aquests àmbits no es publiquen soles —passen per la
+// sala de revisió— i el lot lidera sempre les d'avui.
+//
+// Són vuit números i es poden canviar sense tocar res més.
+const maxLiveStoryAgeDaysByTopic = {
+  Longevitat: 60,
+  Astronomia: 30,
+  Biotecnologia: 30,
+  Filosofia: 30,
+  Literatura: 30,
+  Ciència: 14,
+  IA: 10,
+  Tecnologia: 10,
+}
+function maxLiveStoryAgeMsByTopic(topic) {
+  const days = maxLiveStoryAgeDaysByTopic[topic]
+  return days ? days * 24 * 60 * 60 * 1000 : 0
+}
+
 export function isStoryWithinLiveWindow(story, now = Date.now()) {
   if (story?.expiresAt) {
     const rawExpiry = String(story.expiresAt)
@@ -75,7 +124,10 @@ export function isStoryWithinLiveWindow(story, now = Date.now()) {
     verification: 45 * 24 * 60 * 60 * 1000,
     data: 365 * 24 * 60 * 60 * 1000,
   }
-  const maxAge = maxAgeByFormat[story?.editorialFormat] || maxLiveStoryAgeMs
+  const maxAge =
+    maxAgeByFormat[story?.editorialFormat] ||
+    maxLiveStoryAgeMsByTopic(story?.topic) ||
+    maxLiveStoryAgeMs
   return (
     !Number.isNaN(publishedAt) &&
     now - publishedAt <= maxAge
@@ -565,6 +617,13 @@ const advertorialUrlPatterns = [
 ]
 
 const advertorialPhrasePatterns = [
+  // Marques explícites de contingut pagat o fet en col·laboració. La detecció
+  // es fa també sobre el summary perquè molts RSS no les posen al titular.
+  /\b(sponsored|sponsor(?:ed|ship)?|paid\s+(?:post|content)|advertorial|branded\s+content|partner\s+content|in\s+partnership\s+with|produced\s+with|presented\s+by|brand\s+studio|insights\s+in\s+partnership)\b/i,
+  /\b(patrocinad[oa]|contenido\s+de\s+marca|contenido\s+patrocinado|en\s+colaboraci[oó]n\s+con|producido\s+con|presentado\s+por|publicitat|contingut\s+patrocinat|contingut\s+de\s+marca|en\s+col·laboraci[oó]\s+amb|produ[iï]t\s+amb|presentat\s+per)\b/i,
+  // Butlletins-resum i autopromoció de la capçalera: no són una peça
+  // editorial independent encara que enllacin a notícies potencialment útils.
+  /^\s*(?:the\s+download|daily\s+(?:download|digest|briefing|roundup)|morning\s+(?:roundup|briefing)|weekly\s+(?:roundup|digest)|newsletter)\s*[:—–-]?/i,
   // Patrons al començament del títol — fórmules típiques de llistes de productes
   /^\s*(els?\s+millors?|las?\s+mejor(?:es)?|los\s+mejores|the\s+best|top\s*\d*|les?\s+meilleur)\b/i,
   /^\s*\d+\s+(productes?|producto?s|products?|coses?|cosas?|things?|raons?|razones?|reasons?|claves?|tips?|marcas?|marques?|brands?|opciones|opcions|formas|formes|maneres|maneras|trucos|trucs|hacks?|secretos|secrets|errores|errors)\b/i,
@@ -679,27 +738,114 @@ export function looksLikeAdvertorial({ url, title, summary }) {
   })
 }
 
-// Sostre per font: cap diari pot dominar més de N peces del lot final.
-// Mantenim l'ordre original i fem servir el sobrant com a omplerta si la
-// primera passada no arriba al volum desitjat.
+function cleanEuropePmcText(value) {
+  return decodeHtmlEntities(stripHtml(String(value || '')))
+    .replace(/<!\[CDATA\[|\]\]>/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function extractEuropePmcTag(block, tag) {
+  return cleanEuropePmcText(extractTag(block, tag))
+}
+
+function normalizeEuropePmcItem(block, feed) {
+  const pmcid = extractEuropePmcTag(block, 'pmcid')
+  const title = extractEuropePmcTag(block, 'title')
+  const publishedAt = parseRfc822Date(extractEuropePmcTag(block, 'firstPublicationDate'))
+  const license = extractEuropePmcTag(block, 'license').toLowerCase()
+  const abstract = extractEuropePmcTag(block, 'abstractText')
+  const authors = extractEuropePmcTag(block, 'authorString')
+  const journal =
+    extractEuropePmcTag(block, 'journalTitle') ||
+    extractEuropePmcTag(extractTag(block, 'journal'), 'title')
+  const doi = extractEuropePmcTag(block, 'doi')
+  const pubTypes = [...String(block || '').matchAll(/<pubType\b[^>]*>([\s\S]*?)<\/pubType>/gi)]
+    .map((item) => cleanEuropePmcText(item[1]).toLowerCase())
+  const isPeerReviewedStudy =
+    pubTypes.includes('journal article') && !pubTypes.every((type) => type === 'review')
+  // La paraula "longevity" també s'utilitza en materials, odontologia o fauna.
+  // Aquesta font ha d'alimentar exclusivament la línia d'envelliment saludable
+  // en persones, no qualsevol estudi que contingui el mot al títol.
+  const longevityMaterial = `${title} ${abstract}`.toLowerCase()
+  const hasHumanLongevityScope =
+    /<descriptorName>Humans<\/descriptorName>/i.test(String(block || '')) &&
+    /\b(?:centenarian|older adults?|healthy aging|healthy ageing|healthspan|age-related)\b/i.test(longevityMaterial)
+  const makesTherapeuticClaim =
+    /\b(?:therapeutic|treatment|small[- ]molecule|drug|inhibitor|clinical trial)\b/i.test(longevityMaterial)
+  if (
+    !pmcid ||
+    !title ||
+    !publishedAt ||
+    license !== 'cc by' ||
+    !isPeerReviewedStudy ||
+    !hasHumanLongevityScope ||
+    makesTherapeuticClaim
+  ) {
+    return null
+  }
+
+  const url = `https://europepmc.org/articles/${pmcid}`
+  const summary = abstract || title
+  if (looksLikeAdvertorial({ url, title, summary })) return null
+  return {
+    title,
+    category: feed.defaultCategory,
+    location: '',
+    summary: `${summary.slice(0, 180)}${summary.length > 180 ? '...' : ''}`,
+    sourceContext: [
+      journal && `Revista: ${journal}.`,
+      authors && `Autoria: ${authors}.`,
+      doi && `DOI: ${doi}.`,
+      abstract,
+    ].filter(Boolean).join(' '),
+    impact: 'Estudi revisat per parells d’accés obert, pendent de revisió editorial.',
+    source: feed.name,
+    circuit: feed.circuit || 'A',
+    sourceCircuit: feed.circuit || 'A',
+    sourceTopic: feed.sourceTopic || '',
+    reuseLicense: feed.reuseLicense,
+    sourceCredit: `${authors || feed.sourceCredit || feed.name} / ${journal || feed.name}`,
+    originalUrl: doi ? `https://doi.org/${doi}` : url,
+    sourceTier: feed.sourceTier || 'A',
+    editorialFormat: 'constructive',
+    language: feed.language,
+    outputLanguage: feed.outputLanguage || 'ca',
+    url,
+    imageUrl: storyImagePath(url, { title, category: feed.defaultCategory }),
+    imageAlt: `Il·lustració editorial per a ${title}.`,
+    imageCredit: 'El Bon Diari (il·lustració IA)',
+    imageAttributionUrl: '',
+    editorialScore: 0,
+    curated: false,
+    editorialVersion: liveEditorialVersion,
+    publishedAt,
+    study: {
+      journal,
+      doi,
+      peerReviewed: true,
+      openAccessLicense: 'CC BY',
+      pmcUrl: url,
+    },
+  }
+}
+
+// Sostre ESTRICTE per font: cap mitjà pot dominar més de N peces del lot final.
+// Mantenim l'ordre original, però no recuperem mai el sobrant per omplir la
+// portada. Una edició curta i diversa és editorialment millor que una edició
+// aparentment plena que depèn d'una sola font.
 export function applyDiversityCap(stories, maxPerSource, targetTotal) {
   const counts = new Map()
-  const primary = []
-  const overflow = []
+  const kept = []
   for (const story of stories) {
+    if (kept.length >= targetTotal) break
     const source = story.source || '—'
     const count = counts.get(source) || 0
-    if (count < maxPerSource) {
-      primary.push(story)
-      counts.set(source, count + 1)
-    } else {
-      overflow.push(story)
-    }
+    if (count >= maxPerSource) continue
+    kept.push(story)
+    counts.set(source, count + 1)
   }
-  if (primary.length >= targetTotal) {
-    return primary.slice(0, targetTotal)
-  }
-  return [...primary, ...overflow].slice(0, targetTotal)
+  return kept
 }
 
 // Acota quantes peces pot aportar cada llengua forana (les de casa, ca/es, no
@@ -1151,6 +1297,9 @@ export function isMaritimeRescue(text, language = 'ca') {
 }
 
 export function normalizeFeedItem(block, feed) {
+  if (feed?.format === 'europe-pmc-search') {
+    return normalizeEuropePmcItem(block, feed)
+  }
   const title = decodeHtmlEntities(stripHtml(extractTag(block, 'title')))
   const linkTag = extractTag(block, 'link')
   const link = decodeHtmlEntities(linkTag || extractAtomLink(block))
@@ -1232,6 +1381,16 @@ export function normalizeFeedItem(block, feed) {
       'Converteix informació pública en una oportunitat accionable.',
   }
 
+  const useLicensedSourceImage =
+    feed.circuit === 'A' && imageUrl && feed.imageRights && feed.licenseProofUrl
+  const imageRights = useLicensedSourceImage
+    ? {
+        verified: true,
+        license: feed.imageRights.license,
+        proofUrl: feed.licenseProofUrl,
+        policy: 'institution-published-whole-image',
+      }
+    : undefined
   const story = {
     title,
     category,
@@ -1242,18 +1401,26 @@ export function normalizeFeedItem(block, feed) {
       impactByFormat[editorialFormat] ||
       'El radar automàtic l’ha detectada com a notícia constructiva.',
     source: feed.name,
+    circuit: feed.circuit || 'B',
+    sourceCircuit: feed.circuit || 'B',
+    sourceTopic: feed.sourceTopic || '',
+    reuseLicense: feed.reuseLicense || '',
+    sourceCredit: feed.sourceCredit || feed.name,
+    originalUrl: link,
     sourceTier: feed.sourceTier || 'B',
     editorialFormat,
     language: feed.language,
+    outputLanguage: feed.outputLanguage || feed.language,
     url: link,
-    // La foto del mitjà (imageUrl) només s'ha fet servir amunt com a senyal de
-    // qualitat (que la peça és un article real amb imatge). NO es publica: en
-    // lloc seu, una il·lustració editorial pròpia generada per IA (cap risc de
-    // drets d'autor). Vegeu src/server/storyImage.js.
-    imageUrl: storyImagePath(link, { title, category }),
-    imageAlt: `Il·lustració editorial per a ${title}.`,
-    imageCredit: 'El Bon Diari (il·lustració IA)',
-    imageAttributionUrl: '',
+    imageUrl: useLicensedSourceImage ? imageUrl : storyImagePath(link, { title, category }),
+    imageAlt: useLicensedSourceImage
+      ? `Imatge publicada per ${feed.sourceCredit || feed.name}: ${title}`
+      : `Il·lustració editorial per a ${title}.`,
+    imageCredit: useLicensedSourceImage
+      ? `${feed.imageRights.credit || feed.name} · ${feed.imageRights.license}`
+      : 'El Bon Diari (il·lustració IA)',
+    imageAttributionUrl: useLicensedSourceImage ? link : '',
+    ...(imageRights ? { imageRights } : {}),
     // editorialScore calculat a dalt: 0 = neutre/polític (només surt si la IA
     // l'aprova) · 1 = bo (paraula clau positiva o feed local).
     editorialScore,
@@ -1292,6 +1459,21 @@ export function normalizeFeedItem(block, feed) {
 export const FEED_HEALTH_KV_KEY = 'feed-health-stats'
 const CIRCUIT_BREAKER_MAX_FAILURES = 5
 const CIRCUIT_BREAKER_PAUSE_MS = 24 * 60 * 60 * 1000 // 24 hores
+const BROWSER_FEED_HEADERS = {
+  accept: 'application/rss+xml, application/atom+xml, application/xml, text/xml;q=0.9, */*;q=0.8',
+  'accept-language': 'ca-ES,ca;q=0.9,en;q=0.8',
+  // Alguns gestors de bot bloquegen clients que només s'identifiquen amb un
+  // nom de producte. El mateix perfil s'aplica a TOT el pipeline de feeds.
+  'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 ElBonDiari/1.0 (+https://bondiari.com)',
+}
+
+function retryableFeedStatus(status) {
+  return status === 408 || status === 429 || status >= 500
+}
+
+function waitForFeedRetry(delayMs) {
+  return new Promise((resolve) => setTimeout(resolve, delayMs))
+}
 
 export async function readFeedHealthStats(kvOrEnv) {
   const kv = kvOrEnv?.LIVE_NEWS_KV || kvOrEnv
@@ -1339,63 +1521,68 @@ export function isSignificantHealthChange(oldRecord, newRecord) {
 }
 
 export async function fetchFeed(feed, options = {}) {
-  const timeoutMs = options.timeoutMs ?? 6000
-  const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+  const timeoutMs = options.timeoutMs ?? feed.fetch?.timeoutMs ?? 6000
+  const maxAttempts = options.maxAttempts ?? feed.fetch?.maxAttempts ?? 1
+  const retryDelayMs = options.retryDelayMs ?? feed.fetch?.retryDelayMs ?? 250
   const startTime = Date.now()
+  let lastResult = null
 
-  try {
-    const response = await fetch(feed.url, {
-      headers: {
-        accept: 'application/rss+xml, application/xml, application/atom+xml, text/xml, */*',
-        'user-agent': 'El Bon Diari/1.0 (+https://bondiari.com)',
-      },
-      signal: controller.signal,
-    })
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+    try {
+      const response = await fetch(feed.url, {
+        headers: BROWSER_FEED_HEADERS,
+        signal: controller.signal,
+      })
 
-    if (!response.ok) {
-      const durationMs = Date.now() - startTime
-      return {
+      if (!response.ok) {
+        lastResult = {
+          ok: false,
+          status: response.status,
+          xml: null,
+          error: `HTTP ${response.status}`,
+          durationMs: Date.now() - startTime,
+          attempts: attempt,
+        }
+        if (!retryableFeedStatus(response.status)) return lastResult
+      } else {
+        const xml = await response.text()
+        if (!isValidConfiguredFeedXml(feed, xml)) {
+          return {
+            ok: false,
+            status: response.status,
+            xml,
+            error: 'Not valid RSS/Atom XML',
+            durationMs: Date.now() - startTime,
+            attempts: attempt,
+          }
+        }
+        return {
+          ok: true,
+          status: response.status,
+          xml,
+          error: null,
+          durationMs: Date.now() - startTime,
+          attempts: attempt,
+        }
+      }
+    } catch (error) {
+      const isAbort = error.name === 'AbortError' || controller.signal?.aborted
+      lastResult = {
         ok: false,
-        status: response.status,
+        status: 0,
         xml: null,
-        error: `HTTP ${response.status}`,
-        durationMs,
+        error: isAbort ? `Timeout (${timeoutMs}ms)` : (error?.message || 'Fetch error'),
+        durationMs: Date.now() - startTime,
+        attempts: attempt,
       }
+    } finally {
+      clearTimeout(timeoutId)
     }
-
-    const xml = await response.text()
-    const durationMs = Date.now() - startTime
-    if (!/<rss[\s>]|<feed[\s>]/i.test(xml)) {
-      return {
-        ok: false,
-        status: response.status,
-        xml,
-        error: 'Not valid RSS/Atom XML',
-        durationMs,
-      }
-    }
-
-    return {
-      ok: true,
-      status: response.status,
-      xml,
-      error: null,
-      durationMs,
-    }
-  } catch (error) {
-    const durationMs = Date.now() - startTime
-    const isAbort = error.name === 'AbortError' || controller.signal?.aborted
-    return {
-      ok: false,
-      status: 0,
-      xml: null,
-      error: isAbort ? `Timeout (${timeoutMs}ms)` : (error?.message || 'Fetch error'),
-      durationMs,
-    }
-  } finally {
-    clearTimeout(timeoutId)
+    if (attempt < maxAttempts) await waitForFeedRetry(retryDelayMs)
   }
+  return lastResult
 }
 
 export async function collectFeedStories(feed, options = {}) {
@@ -1436,13 +1623,36 @@ export async function collectFeedStories(feed, options = {}) {
     return { stories: [], candidates: 0, healthUpdate }
   }
 
-  const itemRegex = /<(item|entry)\b[^>]*>([\s\S]*?)<\/\1>/gi
+  const activation = validateFeedActivation(feed, result.xml, now)
+  if (!activation.active) {
+    const healthUpdate = {
+      name: feed.name,
+      url: feed.url,
+      lastAttemptAt: isoNow,
+      lastSuccessAt: healthRecord?.lastSuccessAt || null,
+      lastHttpStatus: result.status,
+      durationMs: result.durationMs,
+      storiesCount: 0,
+      rawItemCount: activation.entries.length,
+      consecutiveFailures: 0,
+      status: 'disabled',
+      pausedUntil: null,
+      lastError: `activació desactivada: ${activation.reason}`,
+    }
+    console.warn(`[radar] Feed ${feed.name} desactivat: ${activation.reason}`)
+    return { stories: [], candidates: 0, disabled: true, healthUpdate }
+  }
+
+  const itemRegex = feed.format === 'europe-pmc-search'
+    ? /<result\b[^>]*>([\s\S]*?)<\/result>/gi
+    : /<(item|entry)\b[^>]*>([\s\S]*?)<\/\1>/gi
   const stories = []
   let candidates = 0
   let match
   while ((match = itemRegex.exec(result.xml)) !== null) {
     candidates += 1
-    const story = normalizeFeedItem(match[2], feed)
+    const block = feed.format === 'europe-pmc-search' ? match[1] : match[2]
+    const story = normalizeFeedItem(block, feed)
     if (story) stories.push(story)
   }
 
@@ -1489,11 +1699,23 @@ const aiBatchSize = 10
 const maxAiCallsPerRun = 6 // 6×10 = 60 jutjades/passada; 24 feeds + 6 = 30 subpeticions
 
 const AI_SYSTEM_BATCH = [
-  "Ets el filtre d'El Bon Diari, un diari que NOMÉS publica BONES notícies",
-  'de Cultura (música, literatura, teatre, cinema, arts i patrimoni), Esports,',
-  'Ciència, Tecnologia, Societat, Religió, Solidaritat o Educació.',
+  "Ets el filtre d'El Bon Diari, un diari especialitzat en català que NOMÉS",
+  'publica peces de vuit àmbits: Ciència, Tecnologia, IA, Biotecnologia,',
+  'Astronomia, Longevitat, Filosofia i Literatura.',
   'Et passo una llista numerada de titulars. Per a CADA número respon en una',
   'línia amb el format "N: SI" o "N: NO" (només això, res més).',
+  // TROBALLA, NO PROCÉS (13-08-2026). Les dues primeres peces que va revisar
+  // una persona es van descartar per avorrides, i totes dues tenien la mateixa
+  // forma: "avancen les converses per iniciar un assaig" i "les empreses
+  // busquen dades fiables". Cap de les dues explicava res que hagués passat.
+  'Respon SI només si la peça explica una TROBALLA, un RESULTAT o una IDEA:',
+  'alguna cosa que s’ha descobert, s’ha observat, s’ha demostrat, s’ha',
+  'publicat en un estudi, o un pensament que es proposa i es defensa.',
+  'Respon NO si només explica INTENCIONS o PROCÉS, encara que sigui d’un',
+  'àmbit bo: converses, negociacions, reunions, plans, anuncis del que es',
+  'farà, projectes que tot just comencen, empreses que busquen, inverteixen o',
+  's’alien, finançament, contractes, tendències de mercat, informes de sector',
+  'o adopció de tecnologia per part d’organitzacions.',
   'Respon NO si el titular és dolent, trist o tens: guerra, mort, accident,',
   'succés, crim, armes, droga, judici, corrupció, escàndol, política o',
   'eleccions, conflicte, retret o insult, tensió diplomàtica o comercial,',
@@ -1506,7 +1728,9 @@ const AI_SYSTEM_BATCH = [
   'sortejos o bases legals de concursos, o',
   'resultats i fitxatges de competició esportiva.',
   'Respon NO si no pertany clarament a un dels vuit àmbits autoritzats.',
-  'Respon SI NOMÉS si és clarament constructiva i d’un d’aquests àmbits.',
+  'Dit curt: respon SI només si, després de llegir el titular, el lector sap',
+  'alguna cosa NOVA que abans no sabia. Si només sap què pensa fer algú,',
+  'respon NO.',
   'En cas de DUBTE, respon NO.',
   'Exemple:\n1: NO\n2: SI\n3: NO',
 ].join(' ')
@@ -1681,11 +1905,30 @@ export async function collectLivePositiveNews(env, { seenUrls } = {}) {
         }),
       ),
     ),
-    Promise.all([
-      collectAgendaStories(),
-      collectRaiscOpportunities(),
-      collectIdescatUpdates(),
-    ]),
+    // LES FONTS DE SERVEI TAMBÉ S'APAGUEN AMB EL GIR (13-08-2026).
+    //
+    // L'agenda cultural, les oportunitats i les dades obertes van per un camí
+    // a part i no passaven per l'interruptor de fonts: la primera nit del gir,
+    // la portada d'un diari d'astronomia i filosofia obria amb una exposició
+    // de Gaudí a Mataró, etiquetada com a Ciència.
+    //
+    // Són bones fonts, però d'un diari de proximitat, no d'un diari
+    // especialitzat d'abast mundial. Es tornen a encendre amb la mateixa
+    // constant que la resta.
+    // Cada col·lector torna { stories, candidates }, no una llista: el consum
+    // de sota fa `result.stories`. Tornar-hi llistes buides trencava el radar
+    // sencer amb "result.stories is not iterable".
+    NOMES_FONTS_DEL_GIR
+      ? Promise.resolve([
+          { stories: [], candidates: 0 },
+          { stories: [], candidates: 0 },
+          { stories: [], candidates: 0 },
+        ])
+      : Promise.all([
+          collectAgendaStories(),
+          collectRaiscOpportunities(),
+          collectIdescatUpdates(),
+        ]),
   ])
 
   for (const result of feedResults) {
@@ -1916,6 +2159,35 @@ function ensureCategoryCoverage(capped, pool, limit) {
   return result
 }
 
+// Invariants de l'ÚLTIMA porta de publicació. Totes les sortides del radar
+// —incloses les de reserva quan hi ha peces pendents de revisió— han de passar
+// pel mateix llistó. Sense aquest pas, `stale-awaiting-review` podia recuperar
+// un lot antic de 16 peces amb 10 de la mateixa font i textos que ja no
+// superaven les regles editorials vigents.
+export function enforcePublicationInvariants(
+  stories,
+  limit = targetStoryLimit,
+) {
+  const qualityStories = selectPublishableStories(
+    Array.isArray(stories) ? stories : [],
+  )
+  const languageBalanced = capPerLanguage(
+    qualityStories,
+    maxStoriesPerLanguage,
+  )
+  const categoryBalanced = capPerCategory(languageBalanced)
+  const storiesWithCoverage = ensureCategoryCoverage(
+    applyDiversityCap(categoryBalanced, maxStoriesPerSource, limit),
+    categoryBalanced,
+    limit,
+  )
+  return applyDiversityCap(
+    storiesWithCoverage,
+    maxStoriesPerSource,
+    limit,
+  )
+}
+
 export async function getLiveNewsPayload(
   kv,
   { force = false, env, allowRefresh = true } = {},
@@ -1958,6 +2230,138 @@ export async function getLiveNewsPayload(
     }
   }
 
+  // SINCRONITZACIÓ DE LES APROVADES — ABANS DE RES MÉS.
+  //
+  // Va aquí, i no més avall, perquè el radar té diverses sortides anticipades
+  // (cap font no respon, cap peça no arriba a tenir contingut propi...). Si la
+  // sincronització quedava després, una passada que sortís per qualsevol
+  // d'aquelles portes deixava les peces aprovades sense publicar fins vés a
+  // saber quan.
+  //
+  // Aquest és també l'ÚNIC lloc del programa que escriu el lot públic quan
+  // s'aprova una peça: la sala de revisió només registra decisions a D1. Tenir
+  // dos escriptors era el que feia perdre aprovacions simultànies.
+  // Es llegeixen ARA —abans de qualsevol sortida anticipada— però NO es marquen
+  // aquí. Marcar-les abans d'aplicar els límits era el forat: si els sostres
+  // per llengua o per font deixaven fora una peça aprovada, ja constava com a
+  // publicada i no es tornava a intentar mai. Es perdia en silenci.
+  //
+  // Qui marca és `tancaEdicio`, l'única porta de sortida del radar, i només
+  // marca el que ha quedat de debò al lot escrit I té la pàgina de detall
+  // desada. El que caigui pels límits o falli en desar-se, segueix pendent i
+  // es torna a intentar a la pròxima passada.
+  const cachedStories = Array.isArray(cached?.stories) ? cached.stories : []
+  const perSincronitzar = await pendingLiveStories(env)
+  const jaAlLot = new Set(cachedStories.map((story) => story.url))
+  const recuperades = perSincronitzar.filter((story) => !jaAlLot.has(story.url))
+  if (recuperades.length > 0) {
+    // Entren al lot de treball perquè participin com una peça més: passaran
+    // pels mateixos límits que la resta, i si en queden fora, esperaran.
+    cached = { ...(cached || {}), stories: [...recuperades, ...cachedStories] }
+  }
+
+  /**
+   * ÚNICA SORTIDA DEL RADAR que toca el lot públic.
+   *
+   * Fa les tres coses en ordre i en un sol lloc: desa les pàgines de detall,
+   * escriu el lot i marca com a publicades NOMÉS les peces aprovades que
+   * compleixen totes dues condicions. Tenir-ho escampat per les sortides feia
+   * que una peça pogués constar com a publicada sense ser-hi.
+   */
+  // ORDRES DE RETIRADA. El radar és l'únic que escriu el lot públic, així que
+  // és ell qui les compleix: treu la peça del lot i la seva pàgina de detall,
+  // i només llavors la marca com a retirada.
+  // Sense sala configurada no hi ha ni ordres ni aprovacions: el radar no pot
+  // publicar res de nou igualment. Es diu aquí, explícitament, en lloc de
+  // deixar que la consulta respongui "cap" i sembli que tot va bé.
+  const aRetirar = env?.EDITORIAL_DB ? await pendingWithdrawals(env) : []
+  const urlsRetirades = new Set(aRetirar.map((r) => r.url))
+
+  async function tancaEdicio(
+    storiesEntrada,
+    { detallDe = [], etiqueta, nomesSiCanvia = false } = {},
+  ) {
+    // AQUÍ ES NETEJA TOT EL MATERIAL INTERN, i no només en desar la candidata.
+    //
+    // `reviewSourceContext` és la còpia de la font que fa servir l'ajudant per
+    // comprovar els fets. S'esborrava en desar la peça a D1, però una aprovació
+    // automàtica de la MATEIXA passada conservava l'objecte original i acabava
+    // escrivint-lo tal qual a `latest` i a `story:<id>`. Això és publicar
+    // fragments de la font: greu sempre, i sobretot en Circuit B, on no en
+    // podem republicar ni una frase.
+    //
+    // Es fa a la porta única de publicació perquè cap camí no se la pugui
+    // saltar.
+    let stories = enforcePublicationInvariants(storiesEntrada).map(
+      senseMaterialDeTreball,
+    )
+    const idsRetirats = new Set(aRetirar.map((r) => r.id))
+    let retiratsConfirmats = []
+    // Les retirades surten del lot abans d'escriure'l, i de tots els detalls:
+    // esborrar la còpia i tornar-la a escriure tot seguit des de
+    // `perSincronitzar` la deixava pública igualment.
+    if (urlsRetirades.size > 0) {
+      stories = stories.filter((story) => !urlsRetirades.has(story.url))
+      for (const r of aRetirar) {
+        try {
+          await kv.delete(`story:${r.id}`)
+          retiratsConfirmats.push(r.id)
+        } catch {
+          // Si no es pot esborrar ara, l'ordre segueix PENDENT i es reintenta
+          // a la pròxima passada. No es marca com a retirada.
+        }
+      }
+    }
+    const detallsNets = [...perSincronitzar, ...detallDe]
+      .filter((story) => !idsRetirats.has(candidateId(story)))
+      .map(senseMaterialDeTreball)
+    const desades = await persistStoryDetails(kv, detallsNets)
+    // 2) El lot definitiu — però NOMÉS si de debò ha canviat res.
+    //
+    //    A les sortides d'avaria, reescriure el lot igualment renovava
+    //    `updatedAt` i feia semblar acabada d'actualitzar una edició que no
+    //    s'havia pogut renovar. La data ha de dir la veritat: si el diari
+    //    d'avui és el mateix d'ahir perquè cap font no responia, la data ha de
+    //    seguir sent la d'ahir. És l'únic senyal que tenim que alguna cosa
+    //    falla.
+    //    Es compara amb `cachedStories`, que és el que hi ha DESAT a KV, i no
+    //    amb `cached`, que ja porta fusionades les aprovades que s'estan
+    //    recuperant. Comparar amb el fusionat feia creure que no havia canviat
+    //    res justament quan hi havia una peça nova per publicar.
+    const mateixLot =
+      cachedStories.length === stories.length &&
+      cachedStories.every((story, i) => story.url === stories[i]?.url)
+    const payload =
+      nomesSiCanvia && mateixLot && urlsRetirades.size === 0 && cached?.updatedAt
+        ? { ...cached }
+        : await setCachedPayload(kv, stories)
+    // Només ara, i NOMÉS les que s'han pogut esborrar de debò. Marcar-les
+    // totes deixava una peça com a "retirada" amb la còpia encara al web.
+    if (retiratsConfirmats.length > 0) {
+      await markWithdrawn(env, retiratsConfirmats)
+    }
+    // 3) I només ara, marcar. Dues condicions, totes dues obligatòries:
+    //    ser al lot escrit i tenir la pàgina de detall desada.
+    if (perSincronitzar.length > 0) {
+      const alLot = new Set(stories.map((story) => story.url))
+      const marcar = perSincronitzar
+        .filter((story) => alLot.has(story.url))
+        .map((story) => candidateId(story))
+        .filter((id) => desades.has(id))
+      if (marcar.length > 0) await markStoriesLive(env, marcar)
+      console.log(
+        JSON.stringify({
+          event: 'review.sync.committed',
+          etiqueta,
+          marcades: marcar.length,
+          // La resta segueix pendent i es torna a intentar a la pròxima passada.
+          quedenPendents: perSincronitzar.length - marcar.length,
+        }),
+      )
+    }
+    return payload
+  }
+
   // Les ja publicades es llegeixen ABANS de recollir, perquè la recollida les
   // pugui apartar abans de retallar la reserva (vegeu collectLivePositiveNews).
   const seenEntries = await loadSeenEntries(kv)
@@ -1980,7 +2384,13 @@ export async function getLiveNewsPayload(
   // cinc dies. Sortint per aquí, el lot es quedaria congelat i les velles no
   // marxarien mai.
   if (reviewedThisPass === 0 && cached?.stories?.length) {
-    return { ...cached, cache: 'stale' }
+    // Encara que no hi hagi res nou, cal tancar l'edició: és per aquí que
+    // surten al web les peces que una persona ha aprovat.
+    const payload = await tancaEdicio(cached.stories, {
+      etiqueta: 'stale',
+      nomesSiCanvia: true,
+    })
+    return { ...payload, cache: 'stale' }
   }
 
   // (El marcatge de "vistes" es fa MÉS AVALL, només per a les que de debò entren
@@ -2017,13 +2427,7 @@ export async function getLiveNewsPayload(
   // Acotem les llengües foranes ABANS de la diversitat per font, perquè el
   // català i el castellà mai no quedin fora encara que un dia hi hagi allau de
   // notícies europees.
-  const languageBalanced = capPerLanguage(preDiversity, maxStoriesPerLanguage)
-  const balanced = capPerCategory(languageBalanced)
-  const finalStories = ensureCategoryCoverage(
-    applyDiversityCap(balanced, maxStoriesPerSource, targetStoryLimit),
-    balanced,
-    targetStoryLimit,
-  )
+  const finalStories = enforcePublicationInvariants(preDiversity)
 
   // BLINDATGE DE DRETS D'AUTOR: sigui quin sigui l'origen de la peça (fresca
   // d'aquest refresc o arrossegada d'un lot anterior amb el codi antic),
@@ -2064,9 +2468,12 @@ export async function getLiveNewsPayload(
   if (publishedStories.length === 0 && cached?.stories?.length) {
     const safeCachedStories = selectPublishableStories(cached.stories)
     if (safeCachedStories.length > 0) {
+      const payload = await tancaEdicio(safeCachedStories, {
+        etiqueta: 'stale-incomplete',
+        nomesSiCanvia: true,
+      })
       return {
-        ...cached,
-        stories: safeCachedStories,
+        ...payload,
         cache: 'stale-incomplete',
         qualityRejectedCount,
         qualityRejectedByIssue,
@@ -2087,7 +2494,67 @@ export async function getLiveNewsPayload(
   // notícia acceptada que avui queda fora (pel sostre d'una altra llengua o per
   // diversitat de font) segueix sent elegible al pròxim refresc en lloc de
   // cremar-se. Així el català i el castellà no els devora l'allau anglesa.
-  const shownFreshUrls = publishedStories
+  // PORTA D'APROVACIÓ HUMANA (13-08-2026). Fins aquí el radar ha fet la seva
+  // feina: recollir, filtrar, redactar i il·lustrar. Ara decideix una persona.
+  //
+  // Les peces que JA són al lot públic no es tornen a jutjar: van passar la
+  // porta en el seu dia, i tancar-les ara les faria desaparèixer del web i
+  // trencaria enllaços que Google ja té indexats. Només es jutgen les noves.
+  // Conseqüència volguda: si la base de dades no respon, les novetats s'aturen
+  // però el diari d'ahir segueix dret.
+  const publicUrls = new Set((cached?.stories || []).map((story) => story.url))
+  const newcomers = publishedStories.filter((story) => !publicUrls.has(story.url))
+  const decisions = await readDecisions(env, newcomers.map(candidateId))
+  const {
+    approved: approvedStories,
+    pending: pendingStories,
+    rejected: rejectedStories,
+  } = splitByReviewDecision(publishedStories, { decisions, publicUrls })
+  if (pendingStories.length > 0 || rejectedStories.length > 0) {
+    console.log(
+      JSON.stringify({
+        event: 'review.gate.applied',
+        approved: approvedStories.length,
+        pending: pendingStories.length,
+        rejected: rejectedStories.length,
+      }),
+    )
+  }
+
+  // LES CANDIDATES ES DESEN TAL COM SÓN, sense cap marca d'agrupació.
+  //
+  // Res no es descarta per semblar repetit: aquella primera versió era un camí
+  // de pèrdua silenciosa, i el criteri arribava a confondre l'eclipsi del 2026
+  // amb el del 2027. Però l'agrupació tampoc no es DESA aquí.
+  //
+  // Persistir-la la deixava congelada: quan la representant sortia de la sala
+  // —aprovada o descartada—, la seguidora es quedava amb una marca que
+  // apuntava a algú que ja no hi era, i deixava de dibuixar-se. Dues fonts de
+  // veritat per a la mateixa cosa, i la desada era la dolenta.
+  //
+  // L'agrupació es calcula en LLEGIR la sala (vegeu reviewPage.listPage), que
+  // és l'únic moment en què se sap quines peces hi ha de debò.
+  //
+  // Si D1 no ho pot desar, això llança i el radar s'atura ABANS de marcar res
+  // com a vist: la cua reintentarà i no es perdrà cap candidata.
+  if (pendingStories.length > 0) {
+    await recordPendingCandidates(env, pendingStories)
+  }
+
+  // L'AJUDANT DE REDACCIÓ DECIDEIX (15-08-2026).
+  //
+  // Viu en un mòdul a part (`assistantPass.js`) perquè es pugui provar sol:
+  // aquí dins només es podia exercitar muntant el radar sencer, i el tros de
+  // codi que decideix si una peça es publica sola no pot ser el menys provat.
+  const passada = await passadaDeLAjudant(env, pendingStories)
+  approvedStories.push(...passada.aprovades)
+  perSincronitzar.push(...passada.aprovades)
+
+  // Es marquen `pendingStories` SENCERES: totes han quedat desades a la sala i
+  // no se n'ha descartat cap per semblar repetida. Si no es marquessin, el
+  // radar les tornaria a recollir i a fer escriure a cada passada, cremant
+  // quota per proposar el que ja espera que algú el llegeixi.
+  const shownFreshUrls = [...approvedStories, ...pendingStories]
     .filter((story) => freshUrlSet.has(story.url))
     .map((story) => story.url)
   if (shownFreshUrls.length > 0) {
@@ -2100,17 +2567,32 @@ export async function getLiveNewsPayload(
   }
 
   try {
-    const payload = await setCachedPayload(kv, publishedStories)
-    // Persistim sota story:<id> només les peces que entren per primer cop.
-    // Les peces arrossegades ja tenen aquesta còpia i reescriure fins a 50 claus
-    // a cada refresc consumia quota de KV sense canviar-ne el contingut.
-    await Promise.all(
-      storiesRequiringDetailPersistence(publishedStories, shownFreshUrls).map((story) =>
-        kv.put(`story:${feedStoryId(story.url)}`, JSON.stringify(story), {
-          expirationTtl: storyDetailTtlSeconds,
+    // MAI un diari en blanc. Si un dia no hi ha res aprovat —perquè ningú no ha
+    // revisat i l'arrossegament ja ha caducat— val més deixar el lot d'ahir
+    // dret que buidar la portada. El correu del matí ja avisa que hi ha peces
+    // esperant; una pàgina en blanc no ho arreglaria i sí que espantaria Google.
+    if (approvedStories.length === 0 && cached?.stories?.length) {
+      console.warn(
+        JSON.stringify({
+          event: 'review.gate.nothing-approved',
+          pending: pendingStories.length,
+          keptFromPreviousEdition: cached.stories.length,
         }),
-      ),
-    )
+      )
+      const payload = await tancaEdicio(cached.stories, {
+        etiqueta: 'stale-awaiting-review',
+        nomesSiCanvia: true,
+      })
+      return { ...payload, cache: 'stale-awaiting-review' }
+    }
+    // Una sola porta: desa els detalls, escriu el lot i marca. Els detalls que
+    // toquen són els de les peces que entren per primer cop (les arrossegades
+    // ja tenen la còpia, i reescriure-les cremava quota de KV sense canviar
+    // res) més, sempre, les aprovades que s'estan recuperant.
+    const payload = await tancaEdicio(approvedStories, {
+      detallDe: storiesRequiringDetailPersistence(approvedStories, shownFreshUrls),
+      etiqueta: 'refresh',
+    })
     await updateEditorialStats(kv, {
       reviewed: reviewedThisPass,
       published: shownFreshUrls.length,
@@ -2123,7 +2605,8 @@ export async function getLiveNewsPayload(
       cronDurationMs,
       reviewedThisPass,
       publishedCount: shownFreshUrls.length,
-      totalStories: publishedStories.length,
+      totalStories: approvedStories.length,
+      pendingReviewCount: pendingStories.length,
       qualityRejectedCount,
       qualityRejectedByIssue,
       // Deixa constància de quin cervell d'IA ha escrit aquesta edició, perquè
@@ -2172,7 +2655,10 @@ export async function getLiveNewsPayload(
     return {
       updatedAt,
       nextRefreshAt: new Date(Date.now() + refreshIntervalMs).toISOString(),
-      stories: publishedStories,
+      // També aquí el lot ha de ser el JA APROVAT: si l'escriptura a KV falla,
+      // el que retornem alimenta la base de dades editorial, i deixar-hi passar
+      // peces sense revisar les publicaria per la porta del darrere.
+      stories: approvedStories,
       cache: 'transient',
       qualityRejectedCount,
       qualityRejectedByIssue,

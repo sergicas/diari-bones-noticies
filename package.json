@@ -10,11 +10,13 @@
     "db:migrate:staging": "wrangler d1 migrations apply EDITORIAL_DB --remote --env staging",
     "db:migrate:production": "wrangler d1 migrations apply EDITORIAL_DB --remote --env=\"\"",
     "check:articles": "node scripts/check-articles.mjs",
+    "check:bundle": "node scripts/check-bundle.mjs",
+    "audit:production": "npm audit --omit=dev --audit-level=high",
     "check:worker": "wrangler deploy --dry-run --env=\"\" --outdir .wrangler/dry-run/production",
     "check:worker:staging": "wrangler deploy --dry-run --env staging --outdir .wrangler/dry-run/staging",
-    "build": "vite build && node scripts/generate-sitemap.mjs",
-    "deploy": "npm run build && wrangler deploy --env=\"\"",
-    "deploy:staging": "npm run build && wrangler deploy --env staging",
+    "build": "vite build && node scripts/generate-sitemap.mjs && node scripts/check-bundle.mjs",
+    "deploy": "npm run verify && wrangler deploy --env=\"\"",
+    "deploy:staging": "npm run verify && wrangler deploy --env staging",
     "lint": "eslint .",
     "verify": "npm run lint && npm test && npm run check:articles && npm run build && npm run check:worker && npm run check:worker:staging",
     "preview": "vite preview",
@@ -52,7 +54,7 @@
     "globals": "^17.4.0",
     "vite": "^8.0.4",
     "vitest": "^4.1.8",
-    "wrangler": "^4.114.0"
+    "wrangler": "^4.125.0"
   },
   "overrides": {
     "xcode": {

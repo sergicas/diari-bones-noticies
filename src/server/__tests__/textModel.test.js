@@ -1,8 +1,16 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { runTextModel, activeTextProvider } from '../ai/textModel.js'
+import {
+  runTextModel,
+  activeTextProvider,
+  resetTextModelFallback,
+} from '../ai/textModel.js'
 
 afterEach(() => {
   vi.restoreAllMocks()
+  // La pausa del recanvi viu al mòdul (a propòsit: en producció ha de durar
+  // entre peticions). Entre proves s'ha de netejar, o una prova que esgota la
+  // quota deixa la següent parlant amb el model equivocat.
+  resetTextModelFallback()
 })
 
 describe('porta única de la IA de text', () => {
@@ -67,7 +75,10 @@ describe('porta única de la IA de text', () => {
     expect(activeTextProvider(env)).toMatch(/^gemini:/)
   })
 
-  it('propaga un error clar si Gemini respon amb estat dolent', async () => {
+  // Quan NO hi ha model de recanvi a mà, l'error de Gemini ha d'arribar tal
+  // com és. Si es dilueix, qui llegeixi el registre no sabrà mai que el que
+  // passava era que s'havia esgotat la quota.
+  it('propaga un error clar si Gemini respon malament i no hi ha recanvi', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({

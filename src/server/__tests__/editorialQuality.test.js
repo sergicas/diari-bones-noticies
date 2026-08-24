@@ -3,12 +3,15 @@ import {
   countWords,
   editorialQualityProfile,
   evaluateEditorialQuality,
+  hasTruncatedEnding,
   isPublishableStory,
   selectPublishableStories,
 } from '../editorialQuality.js'
 import {
   applyOwnContent,
   parseOwnContentBatch,
+  polishProse,
+  polishTitle,
   shortenTitle,
 } from '../storyText.js'
 
@@ -95,6 +98,42 @@ describe('barrera de qualitat editorial', () => {
     expect(result.issues).toContain('generic-body')
   })
 
+  it('rebutja un cos o un impacte tallat en un connector', () => {
+    expect(hasTruncatedEnding('La tècnica pot tenir aplicacions com la')).toBe(
+      true,
+    )
+    expect(
+      evaluateEditorialQuality(
+        qualityStory({
+          impact:
+            'La tècnica abarateix els experiments i pot tenir aplicacions com la',
+        }),
+      ).issues,
+    ).toContain('truncated-impact')
+  })
+
+  it('rebutja la promesa hiperbòlica de revolucionar un camp', () => {
+    expect(
+      evaluateEditorialQuality(
+        qualityStory({
+          impact:
+            'Aquesta investigació pot revolucionar el camp de la informàtica i resoldre problemes complexos.',
+        }),
+      ).issues,
+    ).toContain('generic-impact')
+  })
+
+  it('rebutja la fórmula vaga d’impacte significatiu', () => {
+    expect(
+      evaluateEditorialQuality(
+        qualityStory({
+          impact:
+            'Aquesta teoria pot tenir un impacte significatiu en la comprensió de la matèria.',
+        }),
+      ).issues,
+    ).toContain('generic-impact')
+  })
+
   it('filtra i informa dels rebutjos sense modificar les peces bones', () => {
     const good = qualityStory()
     const bad = qualityStory({ body: ['Text massa curt.'] })
@@ -179,6 +218,62 @@ describe('titular llarg — s’escurça, no tomba la peça', () => {
   })
 })
 
+describe('poliment lingüístic dels titulars', () => {
+  it('corregeix els errors detectats a la portada del 24-08-2026', () => {
+    expect(
+      polishTitle(
+        'El llac Bonneville va deixar darrera seu un paisatge únic',
+        'ca',
+      ),
+    ).toBe('El llac Bonneville va deixar darrere seu un paisatge únic')
+    expect(
+      polishTitle(
+        "La bretxa superconductora d'un nickelat ultraprim defia les expectatives",
+        'ca',
+      ),
+    ).toBe(
+      "La bretxa superconductora d'un niquelat ultraprim desafia les expectatives",
+    )
+  })
+
+  it('conserva els usos catalans correctes i les altres llengües', () => {
+    expect(polishTitle('La darrera edició amplia la cobertura', 'ca')).toBe(
+      'La darrera edició amplia la cobertura',
+    )
+    expect(polishTitle('La darrera edició amplia la cobertura', 'es')).toBe(
+      'La darrera edició amplia la cobertura',
+    )
+  })
+})
+
+describe('final complet dels textos editorials', () => {
+  it('recupera una frase completa quan un impacte antic acaba tallat', () => {
+    const [piece] = parseOwnContentBatch(
+      [
+        '1 titular: Un nou material abarateix els polaritzadors de terahertz',
+        '1 cos: Un equip ha desenvolupat una alternativa amb làmines d’alumini.',
+        "1 impacte: Aquesta nova tècnica pot reduir significativament el cost dels experiments de terahertz, fent-los més accessibles per a investigadors i estudiants, i pot tenir aplicacions en camps com la",
+        '1 imatge: aluminum foil in an optics laboratory',
+      ].join('\n'),
+      1,
+    )
+
+    expect(piece.impact).toBe(
+      'Aquesta nova tècnica pot reduir significativament el cost dels experiments de terahertz, fent-los més accessibles per a investigadors i estudiants.',
+    )
+    expect(hasTruncatedEnding(piece.impact)).toBe(false)
+  })
+
+  it('corregeix les errades gramaticals observades sense tocar altres llengües', () => {
+    const original =
+      "Els ordinadors quàntics, una màquina complexa, utilitzen qubits, que són units d'informació quàntica. La evolució depèn de la estructura i l activitat."
+    expect(polishProse(original, 'ca')).toBe(
+      "Els ordinadors quàntics, màquines complexes, utilitzen qubits, que són unitats d'informació quàntica. L'evolució depèn de l'estructura i l'activitat.",
+    )
+    expect(polishProse(original, 'en')).toBe(original)
+  })
+})
+
 describe('lectura de la resposta del model', () => {
   // Regressió del 27-07-2026. Amb lots de cinc peces (els de producció) el
   // model numera només el titular i indenta la resta. El lector antic exigia
@@ -258,7 +353,7 @@ describe('reescriptura editorial amb context factual', () => {
   const validBody =
     'La cooperativa Nou Mercat ha reobert aquest dilluns l’edifici municipal després de sis mesos de reforma. El projecte posa en marxa dotze parades gestionades per productors locals i reserva dos espais per a iniciatives que comencen. En aquesta primera etapa hi treballen divuit persones vinculades al comerç i a la gestió de l’equipament. L’acord amb l’ajuntament incorpora formació específica i un sistema de lloguers progressius durant els dos primers anys. Els responsables hauran de comprovar ara si l’activitat comercial permet consolidar els llocs de treball i mantenir l’edifici obert.'
 
-  it('utilitza el context ampliat, desa la versió v2 i no el publica', async () => {
+  it('utilitza el context ampliat, desa la versió vigent del cau i no el publica', async () => {
     const run = vi.fn().mockResolvedValue({
       response: [
         '1 titular: Una cooperativa recupera el mercat municipal i crea activitat local',
@@ -279,7 +374,11 @@ describe('reescriptura editorial amb context factual', () => {
     expect(story.sourceContext).toBeUndefined()
     expect(story.body.join(' ')).toContain('divuit persones')
     expect(run.mock.calls[0][1].messages[1].content).toContain('dotze parades')
-    expect(put.mock.calls[0][0]).toMatch(/^own:v2:/)
+    // La versió puja cada cop que canvia el que se li demana al redactor; el
+    // que ha de ser cert sempre és que la clau en porti una i que no sigui
+    // cap de les que ja s'han invalidat.
+    expect(put.mock.calls[0][0]).toMatch(/^own:v\d+:/)
+    expect(put.mock.calls[0][0]).not.toMatch(/^own:v[12]:/)
   })
 
   // Una resposta curta es CONSERVA i es jutja una sola vegada, a la porta de

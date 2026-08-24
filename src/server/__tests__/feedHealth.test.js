@@ -61,6 +61,42 @@ describe('feed health and circuit breaker', () => {
     globalThis.fetch = origFetch
   })
 
+  it('envia capçaleres de navegador a totes les fonts RSS', async () => {
+    const origFetch = globalThis.fetch
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => '<rss><channel><item><title>Prova</title></item></channel></rss>',
+    })
+
+    await fetchFeed({ name: 'Browser headers', url: 'https://example.com/feed.xml' })
+    const request = globalThis.fetch.mock.calls[0][1]
+    expect(request.headers['user-agent']).toContain('Mozilla/5.0')
+    expect(request.headers.accept).toContain('application/rss+xml')
+    expect(request.headers['accept-language']).toContain('ca-ES')
+    globalThis.fetch = origFetch
+  })
+
+  it('reintenta errors transitoris amb el timeout configurat de la font', async () => {
+    const origFetch = globalThis.fetch
+    globalThis.fetch = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('xarxa temporal'))
+      .mockRejectedValueOnce(new Error('xarxa temporal'))
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: async () => '<rss><channel><item><title>Prova</title></item></channel></rss>',
+      })
+
+    const result = await fetchFeed(
+      { name: 'Retry', url: 'https://example.com/feed.xml', fetch: { timeoutMs: 12000, maxAttempts: 3, retryDelayMs: 0 } },
+    )
+    expect(result).toMatchObject({ ok: true, attempts: 3 })
+    expect(globalThis.fetch).toHaveBeenCalledTimes(3)
+    globalThis.fetch = origFetch
+  })
+
   it('collectFeedStories updates consecutiveFailures on failure', async () => {
     const origFetch = globalThis.fetch
     globalThis.fetch = vi.fn().mockResolvedValue({
@@ -95,6 +131,34 @@ describe('feed health and circuit breaker', () => {
     expect(res.healthUpdate.status).toBe('empty')
     expect(res.healthUpdate.rawItemCount).toBe(0)
 
+    globalThis.fetch = origFetch
+  })
+
+  it('la font Europe PMC de longevitat només admet estudis humans CC BY', async () => {
+    const origFetch = globalThis.fetch
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => `<?xml version="1.0"?><responseWrapper><resultList>
+        <result><pmcid>PMC-HUMAN</pmcid><title>Immune resilience in human longevity</title><firstPublicationDate>2026-08-10</firstPublicationDate><license>cc by</license><pubType>Journal Article</pubType><abstractText>Centenarian participants show an ageing-related immune pattern.</abstractText><meshHeadingList><meshHeading><descriptorName>Humans</descriptorName></meshHeading></meshHeadingList><journal><title>Aging Cell</title></journal></result>
+        <result><pmcid>PMC-MOSQUIT</pmcid><title>Longevity in mosquitoes</title><firstPublicationDate>2026-08-10</firstPublicationDate><license>cc by</license><pubType>Journal Article</pubType><abstractText>Adult mosquitoes show a lifespan change.</abstractText></result>
+      </resultList></responseWrapper>`,
+    })
+    const res = await collectFeedStories({
+      name: 'Europe PMC · Longevitat',
+      url: 'https://example.com/europe-pmc.xml',
+      format: 'europe-pmc-search',
+      language: 'en', outputLanguage: 'ca', defaultCategory: 'Salut', circuit: 'A',
+      sourceTopic: 'Longevitat', reuseLicense: 'CC BY',
+      activation: { required: true, licenseConfirmed: true },
+    }, { now: Date.parse('2026-08-12T12:00:00Z') })
+
+    expect(res.candidates).toBe(2)
+    expect(res.stories).toHaveLength(1)
+    expect(res.stories[0]).toMatchObject({
+      title: 'Immune resilience in human longevity',
+      study: { journal: 'Aging Cell', peerReviewed: true, openAccessLicense: 'CC BY' },
+    })
     globalThis.fetch = origFetch
   })
 

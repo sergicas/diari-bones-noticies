@@ -20,12 +20,16 @@ import {
   isTickerCacheFresh,
   storiesRequiringDetailPersistence,
   getLiveNewsPayload,
+  enforcePublicationInvariants,
   keepsEditorialClearance,
   isMaritimeRescue,
 } from '../liveNews.js'
 import {
   ALLOWED_EDITORIAL_TOPICS,
+  assignEditorialTopic,
   classifyAllowedEditorialTopic,
+  EDITORIAL_TOPIC_TIEBREAK_ORDER,
+  keepArchiveStory,
   keepAllowedEditorialTopic,
   normalizeCategory,
   canonicalizeCategory,
@@ -347,147 +351,160 @@ describe('refineCategoryByContent — correcció per contingut', () => {
 })
 
 describe('línia temàtica — només els vuit àmbits autoritzats', () => {
-  it('publica directament les categories autoritzades', () => {
+  it('exposa els vuit temes del pivot editorial', () => {
     expect(ALLOWED_EDITORIAL_TOPICS).toEqual([
-      'Cultura',
-      'Esports',
       'Ciència',
       'Tecnologia',
-      'Societat',
-      'Religió',
-      'Solidaritat',
-      'Educació',
-      'Economia',
-      'Política',
+      'IA',
+      'Biotecnologia',
+      'Astronomia',
+      'Longevitat',
+      'Filosofia',
+      'Literatura',
     ])
-    for (const category of ALLOWED_EDITORIAL_TOPICS) {
+    for (const topic of ALLOWED_EDITORIAL_TOPICS) {
       expect(
-        classifyAllowedEditorialTopic({ category, title: 'Una bona notícia' }),
-      ).toBe(category)
+        assignEditorialTopic({ topic, title: 'Una bona notícia' }),
+      ).toBe(topic)
     }
   })
 
-  it('reclassifica una agenda de música, literatura o teatre com a Cultura', () => {
-    for (const title of [
-      'Un concert de música omple la plaça',
-      'La biblioteca presenta una nova novel·la',
-      'El teatre municipal estrena una obra',
-    ]) {
+  it('assigna els temes específics sense duplicar la categoria canònica', () => {
+    expect(
+      assignEditorialTopic({
+        category: 'Ciència',
+        title: 'El Webb observa aigua al centre de la Via Làctia',
+      }),
+    ).toBe('Astronomia')
+    expect(
+      assignEditorialTopic({
+        category: 'Ciència',
+        title: 'Una eina redissenya proteïnes sense perdre la funció',
+      }),
+    ).toBe('Biotecnologia')
+    expect(
+      assignEditorialTopic({
+        category: 'Tecnologia',
+        title: 'Una IA millora la planificació de la collita',
+      }),
+    ).toBe('IA')
+    expect(
+      assignEditorialTopic({
+        category: 'Salut',
+        title: 'Un atles de cèl·lules senescents obre preguntes sobre envelliment',
+      }),
+    ).toBe('Longevitat')
+    expect(
+      assignEditorialTopic({
+        category: 'Cultura',
+        title: 'La sorpresa ordinària, una idea de la filosofia contemporània',
+      }),
+    ).toBe('Filosofia')
+    expect(
+      assignEditorialTopic({
+        category: 'Cultura',
+        title: 'Un llibre recupera les mecanògrafes invisibles de la història editorial',
+      }),
+    ).toBe('Literatura')
+  })
+
+  it('aplica la font de Circuit A quan l’àmbit és inequívoc', () => {
+    for (const source of ['NASA', 'ESO', 'ESA/Hubble', 'ESA/Webb']) {
       expect(
-        classifyAllowedEditorialTopic({ category: 'Agenda', title }),
-        title,
-      ).toBe('Cultura')
+        assignEditorialTopic({
+          circuit: 'A',
+          source,
+          title: 'Una nota institucional amb vocabulari genèric',
+        }),
+      ).toBe('Astronomia')
     }
+
+    expect(
+      assignEditorialTopic({
+        circuit: 'A',
+        source: 'PLOS Biology',
+        title: 'Un mecanisme de proteïnes regula la resposta de les cèl·lules',
+      }),
+    ).toBe('Biotecnologia')
+    expect(
+      assignEditorialTopic({
+        circuit: 'A',
+        source: 'NIH Research Matters',
+        title: 'Les cèl·lules senescents obren una via per estudiar l’envelliment',
+      }),
+    ).toBe('Longevitat')
   })
 
-  it('admet educació, solidaritat, religió i societat pel contingut', () => {
-    expect(
-      classifyAllowedEditorialTopic({
-        category: 'Comarcal',
-        title: 'Escolars ensenyen reanimació a les seves famílies',
-      }),
-    ).toBe('Educació')
-    expect(
-      classifyAllowedEditorialTopic({
-        category: 'Local',
-        title: 'El voluntariat reforça el banc dels aliments',
-      }),
-    ).toBe('Solidaritat')
-    expect(
-      classifyAllowedEditorialTopic({
-        category: 'Actualitat',
-        title: 'Les comunitats cristiana i musulmana obren un espai interreligiós',
-      }),
-    ).toBe('Religió')
-    expect(
-      classifyAllowedEditorialTopic({
-        category: 'Local',
-        title: 'El barri crea una xarxa comunitària per a la gent gran',
-      }),
-    ).toBe('Societat')
-    expect(
-      classifyAllowedEditorialTopic({
-        category: 'Local',
-        title: 'Reflexionem sobre la nostra societat',
-        impact: 'Podem prendre consciència de les nostres opinions.',
-      }),
-    ).toBe('Societat')
+  it('classifica automàticament les fonts humanístiques de Circuit B', () => {
+    expect(assignEditorialTopic({
+      circuit: 'B', source: 'Psyche', category: 'Cultura', title: 'How to think like a Hegelian',
+    })).toBe('Filosofia')
+    expect(assignEditorialTopic({
+      circuit: 'B', source: 'Aeon', category: 'Cultura', title: 'How we meet the future',
+    })).toBe('Filosofia')
+    expect(assignEditorialTopic({
+      circuit: 'B', source: 'Literary Hub', category: 'Cultura', title: 'Mia',
+    })).toBe('Literatura')
+    expect(assignEditorialTopic({
+      circuit: 'B', source: 'Public Domain Review', category: 'Cultura', title: 'Ars Notoria',
+    })).toBe('Literatura')
   })
 
-  // Economia (28/07) i Política (28/07) són àmbits autoritzats. El que ha de
-  // seguir FORA és el servei burocràtic: subvencions i dades de l'Idescat, que
-  // el Sergi va decidir no cobrir.
-  it('manté fora el servei i la burocràcia', () => {
-    for (const story of [
-      {
-        category: 'Dades',
-        title: "Idescat actualitza les afiliacions d'autònoms per sectors",
-      },
-      {
-        category: 'Oportunitats',
-        title: 'Convocatòria de subvencions per a l’ocupació juvenil',
-      },
-      {
-        category: 'Oportunitats',
-        title: 'Bases de la cinquena edició del Mediterranean Sustainability Award',
-      },
-    ]) {
-      expect(classifyAllowedEditorialTopic(story), story.title).toBeNull()
-      expect(keepAllowedEditorialTopic(story), story.title).toBeNull()
-    }
-  })
-
-  // La política institucional constructiva ENTRA com a tema. El soroll de
-  // partit i el conflicte ja NO arriben fins aquí: els para abans el bloc dur
-  // POLITICAL_MARKERS (vegeu el seu describe), de manera que a la classificació
-  // només hi arriba la bona política.
-  it('admet la política institucional que ha passat el bloc de conflicte', () => {
-    for (const title of [
-      'El Govern obre una oficina de protecció de drets',
-      'El Parlament aprova per unanimitat la llei de protecció de la infància',
-    ]) {
-      expect(
-        classifyAllowedEditorialTopic({ category: 'Política', title }),
-        title,
-      ).toBe('Política')
-    }
-  })
-
-  it('admet l’economia constructiva: feina, cooperatives, comerç i indústria', () => {
-    for (const story of [
-      { category: 'Economia', title: "Catalunya redueix la taxa d'atur" },
-      {
-        category: 'Local',
-        title: 'La fàbrica de Sant Andreu reobre i recontracta cinquanta treballadors',
-      },
-      {
-        category: 'Comarcal',
-        title: 'Una cooperativa crea vint llocs de treball al mercat municipal',
-      },
-    ]) {
-      expect(classifyAllowedEditorialTopic(story), story.title).toBe('Economia')
-    }
-  })
-
-  it('no reclassifica un tema per una menció lateral', () => {
-    // Internacional és estrictament de fora: la menció a tecnologia/formació al
-    // resum no el converteix en un tema autoritzat.
+  it('fixa els desempats: longevitat preval sobre biotecnologia', () => {
+    expect(EDITORIAL_TOPIC_TIEBREAK_ORDER).toEqual([
+      'Longevitat',
+      'Astronomia',
+      'Biotecnologia',
+      'IA',
+      'Literatura',
+      'Filosofia',
+      'Ciència',
+      'Tecnologia',
+    ])
     expect(
-      classifyAllowedEditorialTopic({
-        category: 'Internacional',
-        title: 'Dos governs tanquen un acord d’inversió',
-        summary: 'El paquet també inclou tecnologia i formació.',
+      assignEditorialTopic({
+        category: 'Salut',
+        title: 'Proteïnes de les cèl·lules senescents i envelliment saludable',
+      }),
+    ).toBe('Longevitat')
+  })
+
+  it('conserva la categoria d’ingesta i afegeix el tema públic', () => {
+    expect(
+      keepAllowedEditorialTopic({
+        category: 'Salut',
+        title: 'Un atles de cèl·lules senescents obre preguntes sobre envelliment',
+      }),
+    ).toMatchObject({ category: 'Salut', topic: 'Longevitat' })
+  })
+
+  it('manté FITS-NONE a l’hemeroteca sense forçar-li un tema', () => {
+    expect(
+      assignEditorialTopic({
+        category: 'Cultura',
+        title: 'Un concert de música omple la plaça',
       }),
     ).toBeNull()
-    // Una peça d'Economia es queda a Economia; la menció a cultura de l'impacte
-    // no la desvia cap a Cultura.
     expect(
-      classifyAllowedEditorialTopic({
-        category: 'Economia',
-        title: 'El comerç de proximitat guanya pes al barri',
-        impact: 'Una part es destinarà a activitats de cultura.',
+      keepAllowedEditorialTopic({
+        category: 'Política',
+        title: 'El Govern obre una oficina de protecció de drets',
       }),
-    ).toBe('Economia')
+    ).toBeNull()
+
+    const legacy = keepArchiveStory({
+      id: 'hemeroteca-politica',
+      category: 'Política',
+      title: 'El Govern obre una oficina de protecció de drets',
+      legacyArchive: true,
+    })
+    expect(legacy).toMatchObject({
+      id: 'hemeroteca-politica',
+      category: 'Política',
+      legacyArchive: true,
+    })
+    expect(legacy.topic).toBeUndefined()
+    expect(classifyAllowedEditorialTopic(legacy)).toBeNull()
   })
 })
 
@@ -949,6 +966,18 @@ describe('looksLikeAdvertorial — per URL', () => {
 })
 
 describe('looksLikeAdvertorial — per patrons de títol', () => {
+  it('descarta patrocinis i butlletins-resum abans de la redacció', () => {
+    expect(looksLikeAdvertorial({
+      url: 'https://example.test/article', title: 'Scaling AI agents with trustworthy data',
+      summary: 'In partnership with Google Cloud',
+    })).toBe(true)
+    expect(looksLikeAdvertorial({
+      url: 'https://example.test/article', title: 'The Download: our 35 young innovators', summary: '',
+    })).toBe(true)
+    expect(looksLikeAdvertorial({
+      url: 'https://example.test/article', title: 'Una recerca revisada per parells', summary: 'Resultats de l’estudi.',
+    })).toBe(false)
+  })
   it('detecta "Los/Las mejores [X]" i variants catalanes/angleses', () => {
     expect(looksLikeAdvertorial({ url: '', title: 'Los mejores robots de cocina', summary: '' })).toBe(true)
     expect(looksLikeAdvertorial({ url: '', title: 'Las mejores playas para el verano', summary: '' })).toBe(true)
@@ -1067,29 +1096,27 @@ describe('applyDiversityCap — sostre per font', () => {
     expect(result.length).toBe(6)
   })
 
-  it('quan el sostre deixaria el lot curt, completa amb overflow (soft cap)', () => {
+  it('quan el sostre deixa el lot curt, no recupera excedents', () => {
     // 6 d'El País + 2 Vilaweb + 1 ARA = 9, target 30, max 3
-    // → primary 3+2+1 = 6, no arriba a 30, completa amb overflow d'El País
+    // → 3+2+1 = 6: la qualitat i la pluralitat passen davant del volum.
     const stories = [
       story('El País', 1), story('El País', 2), story('El País', 3),
       story('El País', 4), story('El País', 5), story('El País', 6),
       story('Vilaweb', 1), story('Vilaweb', 2), story('ARA', 1),
     ]
     const result = applyDiversityCap(stories, 3, 30)
-    expect(result.length).toBe(9)
-    // En soft cap, totes les peces hi caben encara que superin el límit.
-    expect(result.filter((s) => s.source === 'El País').length).toBe(6)
+    expect(result.length).toBe(6)
+    expect(result.filter((s) => s.source === 'El País').length).toBe(3)
   })
 
-  it('quan el límit per font deixa el lot massa curt, hi torna overflow per completar', () => {
+  it('una sola font no pot omplir tota la portada', () => {
     const stories = [
       story('El País', 1), story('El País', 2), story('El País', 3),
       story('El País', 4), story('El País', 5),
     ]
     const result = applyDiversityCap(stories, 2, 5)
-    // Primer 2 d'El País, després els 3 sobrants
-    expect(result.length).toBe(5)
-    expect(result.filter((s) => s.source === 'El País').length).toBe(5)
+    expect(result.length).toBe(2)
+    expect(result.every((s) => s.source === 'El País')).toBe(true)
   })
 
   it('quan hi ha prou diversitat, retorna tot dins del límit', () => {
@@ -1101,13 +1128,61 @@ describe('applyDiversityCap — sostre per font', () => {
   })
 
   it('respecta el target total i no torna més peces que el demanat', () => {
-    const stories = Array.from({ length: 100 }, (_, i) => story('X', i))
+    const stories = Array.from({ length: 100 }, (_, i) => story(`Font ${i}`, i))
     const result = applyDiversityCap(stories, 5, 30)
     expect(result.length).toBe(30)
   })
 
+  it('manté el sostre estricte per a qualsevol distribució de fonts', () => {
+    const stories = [
+      ...Array.from({ length: 20 }, (_, i) => story('Phys.org', i)),
+      ...Array.from({ length: 7 }, (_, i) => story('NASA', i)),
+      ...Array.from({ length: 2 }, (_, i) => story('PLOS', i)),
+    ]
+    const result = applyDiversityCap(stories, 3, 12)
+    const counts = result.reduce((bySource, item) => {
+      bySource[item.source] = (bySource[item.source] || 0) + 1
+      return bySource
+    }, {})
+
+    expect(result).toHaveLength(8)
+    expect(Math.max(...Object.values(counts))).toBeLessThanOrEqual(3)
+  })
+
   it('gestiona el cas buit sense petar', () => {
     expect(applyDiversityCap([], 5, 30)).toEqual([])
+  })
+
+  it('la porta final torna a aplicar qualitat i diversitat als lots antics', () => {
+    const valid = (source, idx, overrides = {}) => ({
+      url: `https://example.com/${source}/${idx}`,
+      title: `Una notícia constructiva completa número ${idx} del radar`,
+      source,
+      category: idx % 2 ? 'Ciència' : 'Cultura',
+      language: 'ca',
+      ownContent: true,
+      editorialFormat: 'constructive',
+      body: [
+        'La institució ha presentat aquesta setmana un programa amb quaranta places noves i dades públiques trimestrals. El projecte incorpora formació, seguiment i una avaluació independent que es publicarà cada any. Les entitats participants revisaran els resultats al cap de dotze mesos i explicaran públicament els canvis que calgui aplicar.',
+      ],
+      impact:
+        'Ofereix places noves i dades públiques per comprovar els resultats.',
+      ...overrides,
+    })
+    const oldBatch = [
+      ...Array.from({ length: 10 }, (_, i) => valid('Phys.org', i)),
+      valid('NASA', 11),
+      valid('Quanta', 12),
+      valid('Quanta', 13, {
+        impact: 'Aquesta recerca pot revolucionar el camp de la ciència.',
+      }),
+    ]
+
+    const result = enforcePublicationInvariants(oldBatch)
+    expect(result.filter((story) => story.source === 'Phys.org')).toHaveLength(3)
+    expect(result.some((story) => story.impact.includes('revolucionar'))).toBe(
+      false,
+    )
   })
 })
 

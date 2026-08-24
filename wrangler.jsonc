@@ -14,6 +14,25 @@
     // seguretat també a les respostes HTML/estàtiques (no només a /api/*).
     "run_worker_first": true
   },
+  // EL DOMINI PROPI, DECLARAT AL FITXER (15-08-2026).
+  //
+  // Estava configurat només al tauler de Cloudflare, i el dia que va deixar de
+  // servir no hi havia manera de veure-ho ni de restaurar-ho des del codi.
+  // Declarat aquí, cada desplegament torna a lligar les rutes i queda escrit
+  // qui ha de respondre a bondiari.com.
+  //
+  // No es fan servir Custom Domains de Workers: el 15-08-2026 el rang IP que
+  // aquests registres assignaven era inaccessible des de Telefónica. Els
+  // CNAME DNS-only cap a workers.dev i aquestes rutes donen el mateix servei,
+  // però eviten aquella assignació de xarxa.
+  // Declarar rutes desactiva l'adreça workers.dev per defecte, i aquesta és
+  // la que fan servir els scripts (refresc, comprovacions) i l'única que va
+  // seguir funcionant el dia que bondiari.com va caure. Es manté explícitament.
+  "workers_dev": true,
+  "routes": [
+    { "pattern": "bondiari.com/*", "zone_name": "bondiari.com" },
+    { "pattern": "www.bondiari.com/*", "zone_name": "bondiari.com" }
+  ],
   "observability": {
     "enabled": true,
     "logs": {
@@ -26,7 +45,28 @@
     }
   },
   "vars": {
-    "ENVIRONMENT": "production"
+    "ENVIRONMENT": "production",
+    // Model que reescriu les peces en català. Fins al 13-08-2026 feia servir
+    // el més petit de Google (flash-lite) i no arribava: se li demanaven de 80
+    // a 150 paraules i entregava menys de 45, així que TOTES les peces queien
+    // a la barrera de qualitat i no arribava res a la sala de revisió.
+    // Es pot tornar enrere canviant només aquesta línia.
+    "GEMINI_MODEL": "gemini-flash-latest",
+    // L'AJUDANT DE REDACCIÓ: off | shadow | auto.
+    //
+    // AUTO des del 17-08-2026, per decisió d'en Sergi: el diari es publica sol.
+    // Per tornar a la revisió humana, aquesta línia a "shadow".
+    "ASSISTANT_MODE": "auto",
+    // Fins on arriba: guarded | all.
+    //
+    // "all" = cap àmbit reservat a una persona, salut i medicina incloses.
+    // Decisió d'en Sergi del 17-08-2026, presa amb l'error del mieloma al
+    // davant. Per recuperar la reserva d'àmbits sensibles: "guarded".
+    "ASSISTANT_SCOPE": "all",
+    // Sostre de peces que pot publicar sol en una passada. Les que sobren no
+    // es descarten: entren a la passada següent. Amb dues passades al dia,
+    // 6 vol dir com a màxim 12 peces automàtiques diàries.
+    "ASSISTANT_MAX_PER_PASS": "6"
   },
   "kv_namespaces": [
     { "binding": "LIVE_NEWS_KV", "id": "8dccac0ffa434f75b13ba6a7890646af" },
@@ -52,7 +92,13 @@
         "max_batch_timeout": 5,
         "max_retries": 3,
         "dead_letter_queue": "bondiari-ingest-dlq",
-        "retry_delay": 30
+        "retry_delay": 30,
+        // UN SOL CONSUMIDOR (14-08-2026). Per defecte, Cloudflare escala els
+        // consumidors en paral·lel. Dues execucions del radar alhora es
+        // trepitgen el lot públic, perquè KV no té operacions atòmiques de
+        // llegir-modificar-escriure. Amb el radar com a únic escriptor, la
+        // manera de garantir un sol escriptor és serialitzar la cua.
+        "max_concurrency": 1
       },
       {
         "queue": "bondiari-distribute",
@@ -79,11 +125,23 @@
     // Staging té dades i cues pròpies, i deliberadament no té cap cron.
     "staging": {
       "name": "bondiari-staging",
+      // Les rutes de producció s'hereten si no es buiden explícitament. Sense
+      // això un desplegament de staging podria desviar el domini públic.
+      "routes": [],
       "triggers": {
         "crons": []
       },
       "vars": {
-        "ENVIRONMENT": "staging"
+        "ENVIRONMENT": "staging",
+        // Les vars d'entorn de Wrangler NO s'hereten: sense declarar-lo aquí,
+        // staging cauria al valor per defecte del codi (flash-lite) i no
+        // reproduiria el comportament de producció.
+        "GEMINI_MODEL": "gemini-flash-latest",
+        // Mirall de producció: si staging no reprodueix el mode i l'abast, no
+        // serveix per assajar el que passarà al diari de debò.
+        "ASSISTANT_MODE": "auto",
+        "ASSISTANT_SCOPE": "all",
+        "ASSISTANT_MAX_PER_PASS": "6"
       },
       "kv_namespaces": [
         { "binding": "LIVE_NEWS_KV", "id": "3763eba40f604b528c8c968ba2280131" },
@@ -109,7 +167,11 @@
             "max_batch_timeout": 5,
             "max_retries": 3,
             "dead_letter_queue": "bondiari-ingest-staging-dlq",
-            "retry_delay": 30
+            "retry_delay": 30,
+            // Igual que a producció: les configuracions d'entorn de Wrangler NO
+            // s'hereten, així que sense aquesta línia staging es quedava amb
+            // consumidors concurrents i no reproduïa el comportament real.
+            "max_concurrency": 1
           },
           {
             "queue": "bondiari-distribute-staging",

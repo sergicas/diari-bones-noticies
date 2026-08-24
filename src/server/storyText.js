@@ -14,16 +14,39 @@
 
 import { feedStoryId } from '../lib/story-id.js'
 import { storyImagePath } from '../lib/story-image-path.js'
+import { hasVerifiedImageRights } from '../lib/imageRules.js'
 import { runTextModel } from './ai/textModel.js'
 import {
   evaluateEditorialQuality,
+  hasTruncatedEnding,
   isUsableRewrite,
 } from './editorialQuality.js'
 
 // El model de text el tria ara ./ai/textModel.js (Gemini o Cloudflare segons hi
 // hagi clau). Aquí ja no s'anomena cap model directament.
 // v2 invalida els textos breus de l'etapa inicial. Les claus v1 caduquen soles.
-const KV_PREFIX = 'own:v2:'
+// v4 (14-08-2026) invalida el text escrit abans de posar la regla de la llengua
+// al final del prompt i amb exemple.
+// v3 invalidava TOT el text escrit mentre la instrucció deia "no el
+// tradueixis": eren peces en anglès en un diari en català. Sense pujar la
+// versió, arreglar la instrucció no hauria servit de res, perquè el text ja
+// generat se serveix d'aquesta còpia i no es torna a demanar mai.
+//
+// REGLA: sempre que es canviï el que se li demana al redactor, s'ha de pujar
+// aquesta versió. Si no, el canvi només afecta les peces que encara no
+// existeixen. Les claus velles caduquen soles als 90 dies.
+const KV_PREFIX = 'own:v5:'
+
+// La clau del cau porta la LLENGUA DE SORTIDA, no només l'identificador.
+//
+// Sense això, una peça pot reutilitzar una redacció feta per a una altra
+// llengua: exactament el que va passar mentre `outputLanguage` es perdia pel
+// camí i el text es generava en anglès. Amb la llengua a la clau, un text en
+// anglès i un en català no poden ocupar mai el mateix lloc.
+function cacheKeyFor(story, id) {
+  const lang = story?.outputLanguage || story?.language || 'ca'
+  return `${KV_PREFIX}${lang}:${id}`
+}
 const CACHE_TTL_SECONDS = 90 * 24 * 3600
 const BATCH_SIZE = 5
 const MAX_BATCHES = 8 // sostre: fins a 40 peces noves per refresc
@@ -40,14 +63,28 @@ const REWRITE_SYSTEM = [
   'TITULAR: reescriu-lo amb paraules TEVES i originals, fidel als fets (mantén qui',
   'i què, sense inventar xifres, dades ni noms), to serè. Ha de ser una frase',
   'natural i llegible (no telegràfica ni tallada), de 6 a 16 paraules, sense',
-  'cometes ni símbols, i EXACTAMENT en la llengua indicada (no el tradueixis).',
+  // LA LLENGUA DE SORTIDA MANA (14-08-2026).
+  //
+  // Abans aquí hi deia "EXACTAMENT en la llengua indicada (no el tradueixis)".
+  // Amb fonts catalanes volia dir "no canviïs d'idioma" i anava bé. Amb el gir
+  // editorial, TOTES les fonts són en anglès i la sortida ha de ser en català:
+  // el model veia un original en anglès, llegia "no el tradueixis" i el deixava
+  // en anglès. Les 25 primeres peces de la sala van sortir així.
+  //
+  // I no és cap contradicció amb el Circuit B, que prohibeix traduir i
+  // republicar: aquí no es tradueix res, s'escriu de nou a partir dels fets. La
+  // instrucció ho ha de dir amb aquestes paraules.
+  'cometes ni símbols, i escrit SEMPRE en la llengua indicada entre claudàtors,',
+  'encara que el material de context estigui en una altra llengua. No el',
+  'tradueixis paraula per paraula: escriu-lo de nou en aquella llengua.',
   'COS: de 4 a 6 frases i entre 80 i 150 paraules, amb paraules TEVES. Ha',
   'd’explicar què ha passat, qui hi intervé, on o quan si consta al context, i',
   'quin és el pas següent o el límit conegut. Utilitza almenys tres fets concrets',
   'del context. NO inventis xifres, dades, cites, llocs ni noms. Si no hi ha prou',
   'fets per escriure un cos rigorós, escriu exactament INFORMACIO_INSUFICIENT al',
   'cos: és preferible no publicar que omplir amb frases buides.',
-  'Mateixa llengua que el titular. Sense cometes ni opinions.',
+  'Escrit SEMPRE en la llengua indicada entre claudàtors, encara que el context',
+  'estigui en una altra llengua. Sense cometes ni opinions.',
   'Si el tipus és VERIFICACIÓ, estructura el cos amb afirmació comprovada,',
   'veredicte i evidència; conserva amb precisió la negació i no presentis el',
   'rumor desmentit com un fet. Si és AGENDA o OPORTUNITAT, prioritza dates,',
@@ -55,11 +92,59 @@ const REWRITE_SYSTEM = [
   'Si és DADES, conserva exactament les xifres, unitats i períodes de referència.',
   'IMPACTE: una frase específica que expliqui per què aquesta peça importa al',
   'lector. No comencis amb "Permet conèixer", "Informa sobre" ni "Aporta una',
-  'comprovació". Mateixa llengua, sense cometes.',
+  'comprovació". Escrit SEMPRE en la llengua indicada entre claudàtors, encara',
+  'que el context estigui en una altra llengua. Sense cometes.',
   'IMATGE: una escena visual concreta EN ANGLÈS per dibuixar la notícia; descriu',
   'objectes i entorn (exemple: "a modern tram on a tree-lined city avenue at',
   'sunrise"). Sense noms propis, sense marques, sense persones reals identificables',
   'i sense cap text. Simbòlica i serena, màxim 12 paraules.',
+  // LA REGLA DE LA LLENGUA, AL FINAL I AMB EXEMPLE.
+  //
+  // Dir-ho un cop enmig del prompt no bastava: amb un titular i 1.400
+  // caràcters de context en anglès, el model seguia la llengua del material i
+  // escrivia en anglès, encara que la peça anés marcada [català]. Va tornar a
+  // passar amb la instrucció ja corregida.
+  //
+  // Per això va al final (és l'última cosa que llegeix) i amb un exemple
+  // d'entrada anglesa i sortida catalana, que és el senyal que de debò
+  // convenç un model petit.
+  // DE QUI ÉS LA FEINA (14-08-2026).
+  //
+  // Una peça del MIT Technology Review va sortir dient "Quan vam preguntar als
+  // joves…", com si l'entrevista l'haguéssim feta nosaltres. No és un detall
+  // d'estil: és atribuir-se el treball de camp d'un altre mitjà, i va
+  // directament contra el Circuit B, que exigeix peça pròpia amb la font ben
+  // acreditada.
+  // Què vol dir cada circuit. La marca sola no aplica cap regla: el model no
+  // sap què és un "circuit B" si no li diem.
+  'QUÈ VOL DIR EL CIRCUIT de cada peça:',
+  'circuit A és una font institucional d’accés obert (agències espacials,',
+  'revistes científiques amb llicència lliure): se’n poden adaptar els fets amb',
+  'fidelitat i citant-la.',
+  'circuit B és qualsevol altre mitjà: NO se’n pot republicar ni traduir el',
+  'text. La peça ha de ser teva, escrita a partir dels FETS, amb la font ben',
+  'acreditada i com a molt una citació curta i entrecomillada.',
+  'En tots dos casos, mai copiïs frases senceres del context.',
+  'DE QUI ÉS LA FEINA: la investigació, les entrevistes i el treball de camp',
+  'SÓN DE LA FONT que es marca a cada peça, no nostres. Escriu SEMPRE en',
+  'tercera persona i atribueix-los-hi de manera explícita: "MIT Technology',
+  'Review va preguntar a…", "segons l’estudi publicat a…", "l’equip de…".',
+  'MAI escriguis "vam preguntar", "hem parlat amb", "la nostra enquesta" ni cap',
+  'altra forma que faci semblar que la feina és nostra. Nosaltres expliquem el',
+  'que ha trobat una altra persona; no ho hem trobat nosaltres.',
+  'REGLA MÉS IMPORTANT DE TOTES, per damunt de qualsevol altra:',
+  'el titular, el cos i l’impacte s’han d’escriure EN LA LLENGUA marcada entre',
+  'claudàtors a cada peça. Gairebé sempre serà [català]. El titular original i',
+  'el context estaran gairebé sempre en ANGLÈS: és material de treball, no un',
+  'model d’estil. No copiïs la seva llengua.',
+  'Exemple. Entrada: "1. [català; CONSTRUCTIVA] Scientists find new method to',
+  'clean water with sunlight | context: A team developed a low-cost solar',
+  'device that purifies water in rural areas."',
+  'Sortida correcta: "1 titular: Un dispositiu solar de baix cost potabilitza',
+  'aigua en zones rurals" i el cos i l’impacte també en català.',
+  'Sortida INCORRECTA: qualsevol titular, cos o impacte en anglès.',
+  '(L’única excepció és la línia "imatge:", que va sempre en anglès perquè és',
+  'una instrucció per a un generador d’imatges, no un text per al lector.)',
 ].join(' ')
 
 const LANG_NAMES = {
@@ -97,6 +182,48 @@ function cleanTitle(raw) {
     .replace(/^[\s|·:—–-]+/, '') // fora separadors/símbols al principi
     .replace(/[\s|·:—–.]+$/, '') // ...i al final
     .trim()
+}
+
+// Darrera xarxa de seguretat per a errors lingüístics molt concrets que hem
+// observat en titulars publicats. Les substitucions són deliberadament
+// conservadores: no reescrivim paraules correctes com "la darrera edició" i
+// no toquem peces que s'hagin de publicar en una altra llengua.
+export function polishTitle(raw, language = 'ca') {
+  const title = String(raw || '')
+  if (!String(language || '').toLowerCase().startsWith('ca')) return title
+
+  return title
+    .replace(/\bdarrera\s+(seu|seva|seus|seves)\b/giu, 'darrere $1')
+    .replace(/\bnickelat\b/giu, 'niquelat')
+    .replace(/\bdefia\b/giu, 'desafia')
+}
+
+// Correccions de prosa que provenen de casos reals de producció i que es poden
+// aplicar sense reinterpretar els fets. Com amb els titulars, la llengua de
+// sortida mana i les substitucions són prou específiques per no actuar sobre
+// usos legítims d'altres paraules.
+export function polishProse(raw, language = 'ca') {
+  const prose = String(raw || '')
+  if (!String(language || '').toLowerCase().startsWith('ca')) return prose
+
+  return prose
+    .replace(
+      /\bordinadors quàntics, una màquina complexa\b/giu,
+      'ordinadors quàntics, màquines complexes',
+    )
+    .replace(
+      /\bunits d(['’])informació(?=\s|[.,;:!?]|$)/giu,
+      'unitats d$1informació',
+    )
+    .replace(
+      /\b(la)\s+(activitat|atenció|evolució|estructura|oportunitat)(?=\s|[.,;:!?]|$)/giu,
+      (_match, article, noun) =>
+        `${article === 'La' ? 'L' : 'l'}'${noun}`,
+    )
+    .replace(
+      /\bl\s+(activitat|atenció|evolució|estructura|oportunitat)(?=\s|[.,;:!?]|$)/giu,
+      "l'$1",
+    )
 }
 
 // Titulars de fins a 20 paraules. Els oficials —convocatòries, estudis— sovint
@@ -170,13 +297,40 @@ function cleanBrief(raw) {
 // cleanBrief, que és per a l'escena d'imatge en anglès), només treu cometes,
 // guillemots i separadors sobrants.
 function cleanProse(raw, max) {
-  return String(raw || '')
+  const prose = String(raw || '')
     .replace(/[«»"“”]/g, '')
     .replace(/\s+/g, ' ')
     .replace(/^[\s|·:—–-]+/, '')
     .replace(/[\s|·]+$/, '')
     .trim()
-    .slice(0, max)
+
+  let safe = prose
+  if (safe.length > max) {
+    const hardCut = safe.slice(0, max).replace(/\s+\S*$/u, '').trim()
+    const sentenceMatches = [...hardCut.matchAll(/[.!?](?=\s|$)/gu)]
+    const sentenceEnd = sentenceMatches.at(-1)?.index
+    if (sentenceEnd !== undefined && sentenceEnd >= max * 0.55) {
+      safe = hardCut.slice(0, sentenceEnd + 1).trim()
+    } else {
+      safe = hardCut
+    }
+  }
+
+  if (!hasTruncatedEnding(safe)) return safe
+
+  // Si el model o una versió antiga del cau s'ha tallat en un connector,
+  // recuperem l'última proposició completa. En l'impacte real que va destapar
+  // aquesta regressió, això converteix "..., estudiants, i pot ... com la" en
+  // una frase completa acabada a "estudiants.".
+  const clauseEnd = Math.max(safe.lastIndexOf(','), safe.lastIndexOf(';'))
+  if (clauseEnd >= safe.length * 0.55) {
+    return `${safe.slice(0, clauseEnd).replace(/[\s,;:]+$/u, '').trim()}.`
+  }
+
+  for (let i = 0; i < 4 && hasTruncatedEnding(safe); i += 1) {
+    safe = safe.replace(/\s+\S+[\s,:;–—-]*$/u, '').trim()
+  }
+  return safe ? `${safe.replace(/[\s,;:]+$/u, '').trim()}.` : ''
 }
 
 async function aiOwnContentBatch(env, items) {
@@ -189,7 +343,9 @@ async function aiOwnContentBatch(env, items) {
   }
   const list = items
     .map((it, i) => {
-      const lang = LANG_NAMES[it.language] || 'català'
+      // "escriu en català" i no només "català": la marca ha de ser una ordre,
+      // no una etiqueta que es pugui llegir com "aquesta peça és catalana".
+      const lang = `escriu en ${LANG_NAMES[it.outputLanguage || it.language] || 'català'}`
       const type = typeLabels[it.editorialFormat] || typeLabels.constructive
       const title = String(it.title || '').replace(/\s+/g, ' ').slice(0, 160)
       // El context de la font s'aporta NOMÉS com a material factual intern; el
@@ -197,9 +353,18 @@ async function aiOwnContentBatch(env, items) {
       const context = String(it.sourceContext || it.summary || '')
         .replace(/\s+/g, ' ')
         .slice(0, 1400)
+      const font = String(it.source || '').replace(/\s+/g, ' ').trim()
+      // El CIRCUIT també s'hi envia: al B no es pot republicar ni traduir, i el
+      // redactor ho ha de saber en escriure. Abans es copiava a l'objecte
+      // intermedi i es perdia aquí, sense arribar mai al model.
+      const circuit = it.circuit === 'A' || it.circuit === 'B' ? it.circuit : null
+      const parts = [lang, type]
+      if (font) parts.push(`font: ${font}`)
+      if (circuit) parts.push(`circuit ${circuit}`)
+      const marca = `[${parts.join('; ')}]`
       return context
-        ? `${i + 1}. [${lang}; ${type}] ${title}\n   context: ${context}`
-        : `${i + 1}. [${lang}; ${type}] ${title}`
+        ? `${i + 1}. ${marca} ${title}\n   context: ${context}`
+        : `${i + 1}. ${marca} ${title}`
     })
     .join('\n')
   const out = await runTextModel(env, {
@@ -232,8 +397,13 @@ async function aiOwnContentBatch(env, items) {
 
 // Una línia de camp: "1 cos: ...", "1. cos: ...", "**cos**: ..." o simplement
 // "cos: ...". El número és OPCIONAL a propòsit.
+//
+// També s'accepta que el model repeteixi la marca de l'entrada abans del nom
+// del camp: "1. [escriu en català] titular: …". Sense això es perdien TOTS els
+// camps d'aquella peça i quedava sense text — una peça bona perduda per una
+// floritura del model.
 const FIELD_LINE =
-  /^[\s*#>–—-]*(?:(\d{1,2})\s*[.)]?\s*)?\**\s*(titular|cos|impacte|imatge)\**\s*[:–-]\s*\**\s*(.*?)\**\s*$/i
+  /^[\s*#>–—-]*(?:(\d{1,2})\s*[.)]?\s*)?(?:\[[^\]]*\]\s*)?\**\s*(titular|cos|impacte|imatge)\**\s*[:–-]\s*\**\s*(.*?)\**\s*$/i
 
 // Llegeix la resposta del model línia a línia.
 //
@@ -286,7 +456,7 @@ export function parseOwnContentBatch(text, count) {
   return raw.map((entry) => ({
     title: entry.titular ? cleanTitle(entry.titular) : null,
     body: entry.cos ? cleanProse(entry.cos, 1600) : null,
-    impact: entry.impacte ? cleanProse(entry.impacte, 200) : null,
+    impact: entry.impacte ? cleanProse(entry.impacte, 320) : null,
     brief: entry.imatge ? cleanBrief(entry.imatge) : null,
   }))
 }
@@ -297,12 +467,21 @@ export function parseOwnContentBatch(text, count) {
 export async function applyOwnContent(stories, env) {
   const kv = env?.LIVE_NEWS_KV
   const entries = stories.map((s) => {
+    const outputLanguage = s.outputLanguage || s.language || 'ca'
     const existingBody = Array.isArray(s.body)
       ? s.body.filter(Boolean).join(' ')
       : ''
     const existingOwn =
       s.ownContent && s.title && existingBody
-        ? { title: s.title, body: existingBody, impact: s.impact || '', brief: '' }
+        ? {
+            title: s.title,
+            body: polishProse(cleanProse(existingBody, 1600), outputLanguage),
+            impact: polishProse(
+              cleanProse(s.impact || '', 320),
+              outputLanguage,
+            ),
+            brief: '',
+          }
         : null
     const own =
       existingOwn &&
@@ -323,12 +502,25 @@ export async function applyOwnContent(stories, env) {
 
   // 1) Contingut ja generat (cache)
   if (kv) {
-    const cached = await Promise.all(entries.map((e) => kv.get(KV_PREFIX + e.id)))
+    const cached = await Promise.all(entries.map((e) => kv.get(cacheKeyFor(e.story, e.id))))
     entries.forEach((e, i) => {
       if (e.own) return
       if (!cached[i]) return
       try {
-        const candidate = JSON.parse(cached[i])
+        const stored = JSON.parse(cached[i])
+        const outputLanguage =
+          e.story.outputLanguage || e.story.language || 'ca'
+        const candidate = {
+          ...stored,
+          body: polishProse(
+            cleanProse(stored?.body || '', 1600),
+            outputLanguage,
+          ),
+          impact: polishProse(
+            cleanProse(stored?.impact || '', 320),
+            outputLanguage,
+          ),
+        }
         e.own = isUsableRewrite({
           ...e.story,
           title: candidate?.title,
@@ -352,12 +544,25 @@ export async function applyOwnContent(stories, env) {
       try {
         const generated = await aiOwnContentBatch(
           env,
+          // `outputLanguage` és la llengua en què s'ha d'ESCRIURE; `language`
+          // és la de la font. Aquí només es passava la segona, i com que
+          // aiOwnContentBatch fa `outputLanguage || language`, el model rebia
+          // literalment "[escriu en anglès]" mentre el sistema li deia que
+          // escrivís en català. Dues ordres contràries: d'aquí venia que unes
+          // vegades sortís en català i altres en anglès.
           group.map((e) => ({
             title: e.story.title,
             language: e.story.language,
+            outputLanguage: e.story.outputLanguage,
             editorialFormat: e.story.editorialFormat,
             summary: e.story.summary,
             sourceContext: e.story.sourceContext,
+            // La FONT i el CIRCUIT també, o el redactor no sap de qui és la
+            // feina que explica. Sense això, una peça del MIT Technology
+            // Review va sortir dient "Quan vam preguntar als joves…", com si
+            // l'entrevista l'haguéssim feta nosaltres.
+            source: e.story.source,
+            circuit: e.story.circuit || e.story.sourceCircuit,
           })),
         )
         await Promise.all(
@@ -367,8 +572,14 @@ export async function applyOwnContent(stories, env) {
             const candidate = {
               title: g.title,
               brief: g.brief || '',
-              body: g.body || '',
-              impact: g.impact || '',
+              body: polishProse(
+                g.body || '',
+                e.story.outputLanguage || e.story.language || 'ca',
+              ),
+              impact: polishProse(
+                g.impact || '',
+                e.story.outputLanguage || e.story.language || 'ca',
+              ),
             }
             const rewritten = {
               ...e.story,
@@ -388,7 +599,7 @@ export async function applyOwnContent(stories, env) {
             }
             e.own = candidate
             return kv
-              ? kv.put(KV_PREFIX + e.id, JSON.stringify(e.own), { expirationTtl: CACHE_TTL_SECONDS })
+              ? kv.put(cacheKeyFor(e.story, e.id), JSON.stringify(e.own), { expirationTtl: CACHE_TTL_SECONDS })
               : null
           }),
         )
@@ -404,11 +615,20 @@ export async function applyOwnContent(stories, env) {
   //    NO publica les que no en tenen (evita targetes buides "Una bona notícia · X").
   return entries.map((e) => {
     const own = e.own || {}
+    const outputLanguage =
+      e.story.outputLanguage || e.story.language || 'ca'
     const hasOwnContent = Boolean(own.title && own.body)
     // Escurçat just abans de publicar: la peça no es perd mai per un titular
     // llarg, i el que arriba a la portada sempre té una llargada de titular.
-    const title = shortenTitle(own.title || genericTitle(e.story))
-    const body = own.body ? [own.body] : []
+    const title = shortenTitle(
+      polishTitle(
+        own.title || genericTitle(e.story),
+        e.story.outputLanguage || e.story.language || 'ca',
+      ),
+    )
+    const body = own.body
+      ? [polishProse(cleanProse(own.body, 1600), outputLanguage)]
+      : []
     // Encara que hi hagi brief per a la IA, passem sempre títol i categoria:
     // són el que compon la targeta de reserva si la generació no arriba.
     const imageUrl = storyImagePath(e.story.url, {
@@ -422,11 +642,47 @@ export async function applyOwnContent(stories, env) {
       ...publicStory,
       title,
       summary: '',
+      // ...PERÒ L'AJUDANT EL NECESSITA (15-08-2026).
+      //
+      // Esborrant la font aquí, la guàrdia de fets es quedava sense res amb
+      // què comparar i deixava passar qualsevol cosa: una peça que atribuïa
+      // una missió conjunta a "NASA i Nintendo" no aixecava cap sospita,
+      // perquè només es comparava el text amb ell mateix.
+      //
+      // Es conserva en un camp propi que NO es publica (l'esborra
+      // `senseMaterialDeTreball` abans de desar la peça i abans del lot
+      // públic). Serveix només per decidir.
+      reviewSourceContext: String(
+        e.story.sourceContext || e.story.summary || '',
+      ).slice(0, 2000),
+      reviewSourceTitle: e.story.title || '',
       body,
-      impact: own.impact || '',
-      imageUrl,
-      imageCredit: 'El Bon Diari (il·lustració IA)',
-      imageAttributionUrl: '',
+      impact: polishProse(
+        cleanProse(own.impact || '', 320),
+        outputLanguage,
+      ),
+      // Només Circuit A pot conservar la imatge institucional. Sempre passa
+      // imageRules; Circuit B usa inevitablement la il·lustració pròpia.
+      imageUrl:
+        e.story.circuit === 'A' && hasVerifiedImageRights(e.story)
+          ? e.story.imageUrl
+          : imageUrl,
+      imageAlt:
+        e.story.circuit === 'A' && hasVerifiedImageRights(e.story)
+          ? e.story.imageAlt
+          : `Il·lustració editorial de la notícia: ${title}`,
+      imageCredit:
+        e.story.circuit === 'A' && hasVerifiedImageRights(e.story)
+          ? e.story.imageCredit
+          : 'El Bon Diari (il·lustració IA)',
+      imageAttributionUrl:
+        e.story.circuit === 'A' && hasVerifiedImageRights(e.story)
+          ? e.story.imageAttributionUrl
+          : '',
+      ...(e.story.circuit === 'A' && hasVerifiedImageRights(e.story)
+        ? { imageRights: e.story.imageRights }
+        : { imageRights: undefined }),
+      language: e.story.outputLanguage || e.story.language,
       ownContent: hasOwnContent,
     }
   })

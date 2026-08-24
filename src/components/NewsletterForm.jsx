@@ -72,11 +72,11 @@ export default function NewsletterForm({ defaultLanguage = 'ca', variant = 'full
             ? 'Rep solucions, verificacions i informació útil. Gratis, sense soroll ni publicitat.'
             : "Una selecció breu de peces constructives, verificacions i informació pràctica. T'arriba al correu cada matí a les 7, sense soroll ni publicitat. Et pots donar de baixa en qualsevol moment amb un sol clic."}
         </p>
-        {typeof subscriberCount === 'number' && subscriberCount > 0 ? (
+        {/* Amb poques desenes de subscriptors la xifra desanima més que no
+            convenç; només la mostrem quan ja és un senyal fort. */}
+        {typeof subscriberCount === 'number' && subscriberCount >= 20 ? (
           <p className="newsletter-block__count" aria-live="polite">
-            {subscriberCount === 1
-              ? "Ja hi som una persona. Vols ser la segona?"
-              : `Ja hi som ${formatCount(subscriberCount)} lectors.`}
+            {`Ja hi som ${formatCount(subscriberCount)} lectors.`}
           </p>
         ) : null}
         <form className="newsletter-block__form" onSubmit={handleSubmit} noValidate>

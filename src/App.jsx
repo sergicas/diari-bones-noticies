@@ -1,4 +1,4 @@
-import { useEffect, useState, lazy, Suspense } from 'react'
+import { useEffect, useRef, useState, lazy, Suspense } from 'react'
 import { flushSync } from 'react-dom'
 import './App.css'
 import './styles/professional-shell.css'
@@ -23,7 +23,6 @@ import {
   defaultDistanceFilter,
   getDistanceBand,
   selectGeographicRescue,
-  sortByDistanceAndDate,
 } from './lib/distance.js'
 import {
   editorialSections,
@@ -76,10 +75,19 @@ const activeEditionMaxStories = 25
 // com a secció pròpia (/hemeroteca), amb la data original ben visible.
 const serviceEditionFormats = new Set(['verification', 'data', 'opportunity'])
 const maxStoredFeedStories = 40
+const deferredSeedLoadMs = 4000
 
-const seedArticlesPromise = import('./data/articles.js').then((m) =>
-  m.seedArticles.map((story) => normalizeStory(story)).filter(Boolean),
-)
+let seedArticlesPromise = null
+
+function loadSeedArticles() {
+  if (!seedArticlesPromise) {
+    seedArticlesPromise = import('./data/articles.js').then((m) =>
+      m.seedArticles.map((story) => normalizeStory(story)).filter(Boolean),
+    )
+  }
+
+  return seedArticlesPromise
+}
 
 function normalizePathname(pathname) {
   const cleanPathname = pathname || '/'
@@ -304,6 +312,7 @@ function normalizeStory(story) {
 
   const imageAnalysis = classifyImage(resolvedImageUrl)
   const hasPhoto = hasOriginalPhoto({
+    ...story,
     imageUrl: resolvedImageUrl,
     imageAlt: story.imageAlt,
     imageCredit: story.imageCredit,
@@ -559,6 +568,8 @@ function App() {
     initialFilterState.distanceFilter,
   )
   const [currentPath, setCurrentPath] = useState(getCurrentPath)
+  const mainRef = useRef(null)
+  const previousPagePathRef = useRef(getPathnameFromPath(currentPath))
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [lastRefreshAt, setLastRefreshAt] = useState(() =>
     loadStoredTimestamp(refreshStorageKey),
@@ -645,6 +656,13 @@ function waitForSwController() {
       })
       .catch((error) => {
         console.warn('No s’ha pogut carregar l’hemeroteca permanent.', error)
+        loadSeedArticles()
+          .then((articles) => {
+            if (!isCancelled) setSeedStories(articles)
+          })
+          .catch((seedError) => {
+            console.warn('No s’ha pogut carregar el catàleg editorial.', seedError)
+          })
       })
 
     return () => {
@@ -654,19 +672,46 @@ function waitForSwController() {
 
   useEffect(() => {
     let isCancelled = false
+    let idleCallbackId = null
+    let timeoutId = null
 
-    seedArticlesPromise
-      .then((articles) => {
-        if (!isCancelled) setSeedStories(articles)
-      })
-      .catch((error) => {
-        console.warn('No s’ha pogut carregar el catàleg editorial.', error)
-      })
+    const hydrateSeedCatalog = () => {
+      loadSeedArticles()
+        .then((articles) => {
+          if (!isCancelled) setSeedStories(articles)
+        })
+        .catch((error) => {
+          console.warn('No s’ha pogut carregar el catàleg editorial.', error)
+        })
+    }
+
+    if (route.page === 'story') {
+      hydrateSeedCatalog()
+    } else {
+      timeoutId = window.setTimeout(() => {
+        timeoutId = null
+        if (isCancelled) return
+
+        if ('requestIdleCallback' in window) {
+          idleCallbackId = window.requestIdleCallback(hydrateSeedCatalog, {
+            timeout: 2000,
+          })
+        } else {
+          hydrateSeedCatalog()
+        }
+      }, deferredSeedLoadMs)
+    }
 
     return () => {
       isCancelled = true
+      if (idleCallbackId !== null) {
+        window.cancelIdleCallback(idleCallbackId)
+      }
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId)
+      }
     }
-  }, [])
+  }, [route.page])
 
   useEffect(() => {
     const handlePopState = () => {
@@ -685,22 +730,30 @@ function waitForSwController() {
   }, [])
 
   useEffect(() => {
+    const nextPagePath = getPathnameFromPath(currentPath)
+    if (previousPagePathRef.current === nextPagePath) return
+
+    previousPagePathRef.current = nextPagePath
+    const frame = window.requestAnimationFrame(() => {
+      mainRef.current?.focus({ preventScroll: true })
+    })
+
+    return () => window.cancelAnimationFrame(frame)
+  }, [currentPath])
+
+  useEffect(() => {
     let isCancelled = false
 
     async function updateFromRadar() {
       try {
-        const [payload, editorialStories] = await Promise.all([
-          fetchLivePositiveNewsPayload(),
-          seedArticlesPromise,
-        ])
+        const payload = await fetchLivePositiveNewsPayload()
 
         if (isCancelled) {
           return
         }
 
         setLiveStories((currentStories) =>
-          mergeLiveStories(currentStories, payload.stories, editorialStories)
-            .stories,
+          mergeLiveStories(currentStories, payload.stories).stories,
         )
 
         const updatedAt = payload.updatedAt || new Date().toISOString()
@@ -841,7 +894,7 @@ function waitForSwController() {
     normalizedQuery === '' &&
     !isServiceSection
   ) {
-    const general = [...activeStories].sort(sortByDistanceAndDate)
+    const general = [...activeStories].sort(sortByPublishedAtDesc)
     if (general.length > 0) {
       filteredStories = general
       sectionShowingGeneral = true
@@ -855,16 +908,13 @@ function waitForSwController() {
     (story) =>
       editionReferenceTime - getStoryTimestamp(story) <= featuredStoryMaxAgeMs,
   )
-  const nearestAvailableBand = headlineEligibleStories[0]
-    ? getDistanceBand(headlineEligibleStories[0])
-    : null
-
+  // La destacada es tria per criteri editorial, no per proximitat. Abans havia
+  // de ser de la banda geogràfica més propera disponible: en un diari de
+  // proximitat tenia sentit, però en un diari especialitzat d'abast mundial
+  // feia que una exposició a Mataró encapçalés la portada per damunt d'una
+  // observació del telescopi Webb.
   const featuredStory =
-    headlineEligibleStories.find(
-      (story) =>
-        story.featured &&
-        getDistanceBand(story).rank === nearestAvailableBand?.rank,
-    ) ??
+    headlineEligibleStories.find((story) => story.featured) ??
     headlineEligibleStories[0] ??
     null
 
@@ -882,8 +932,16 @@ function waitForSwController() {
     archiveStories,
     activeDistanceOption.maxRank,
   ).filter(matchesFilters)
+  // UN DIARI ESPECIALITZAT S'ORDENA PER DATA, NO PER DISTÀNCIA (14-08-2026).
+  //
+  // L'ordre per proximitat és una resta de quan El Bon Diari era un diari de
+  // proximitat. La barra geogràfica ja es va retirar en fer el gir, però
+  // l'ordre no: el servidor enviava l'edició nova i el navegador la reordenava
+  // posant al davant tot el que fos de Mataró. La portada semblava encallada
+  // en l'edició vella quan en realitat era ben ordenada... per un criteri que
+  // ja no és el d'aquest diari.
   const portadaStories = [...remainingStories, ...geographicRescue].sort(
-    sortByDistanceAndDate,
+    sortByPublishedAtDesc,
   )
   // Pàgina pròpia d'un tema (/tema/<slug>): una "portada petita" de l'àmbit.
   // Es nodreix de TOT (recent + hemeroteca) del tema perquè no quedi buida; la
@@ -932,7 +990,7 @@ function waitForSwController() {
             (getStorySection(story).id === getStorySection(currentStory).id ||
               story.origin === currentStory.origin),
         )
-        .sort(sortByDistanceAndDate)
+        .sort(sortByPublishedAtDesc)
         .slice(0, 3)
     : []
   const requestedArchiveTopic =
@@ -1106,19 +1164,18 @@ function waitForSwController() {
     }
 
     if (scroll) {
-      window.scrollTo({ top: 0, behavior: 'smooth' })
+      window.scrollTo({
+        top: 0,
+        behavior: prefersReducedMotion ? 'auto' : 'smooth',
+      })
     }
   }
 
   async function refreshRadar() {
     try {
-      const [payload, editorialStories] = await Promise.all([
-        fetchLivePositiveNewsPayload(),
-        seedArticlesPromise,
-      ])
+      const payload = await fetchLivePositiveNewsPayload()
       setLiveStories((currentStories) =>
-        mergeLiveStories(currentStories, payload.stories, editorialStories)
-          .stories,
+        mergeLiveStories(currentStories, payload.stories).stories,
       )
       const updatedAt = payload.updatedAt || new Date().toISOString()
       const nextAt =
@@ -1146,14 +1203,10 @@ function waitForSwController() {
     setIsRefreshing(true)
 
     try {
-      const [payload, editorialStories] = await Promise.all([
-        fetchLivePositiveNewsPayload(),
-        seedArticlesPromise,
-      ])
+      const payload = await fetchLivePositiveNewsPayload()
 
       setLiveStories((currentStories) =>
-        mergeLiveStories(currentStories, payload.stories, editorialStories)
-          .stories,
+        mergeLiveStories(currentStories, payload.stories).stories,
       )
 
       const updatedAt = payload.updatedAt || new Date().toISOString()
@@ -1189,7 +1242,12 @@ function waitForSwController() {
             onRefresh={handleRefresh}
           />
 
-          <main id="contingut" className="site-main">
+          <main
+            ref={mainRef}
+            id="contingut"
+            className="site-main"
+            tabIndex="-1"
+          >
             <ErrorBoundary>
               <Suspense fallback={<div className="section-block"><h2>Carregant vista…</h2></div>}>
                 {route.page === 'story' ? (

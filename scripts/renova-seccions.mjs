@@ -10,6 +10,8 @@
 //
 // Ús: node scripts/renova-seccions.mjs   (o: npm run seccions)
 
+import { esperaFeina, esperaLotVisible } from './lib/esperaRefresc.mjs'
+
 const BASE = process.env.BONDIARI_URL || 'https://bondiari.sergicas.workers.dev'
 const REFRESH_TOKEN = process.env.BONDIARI_REFRESH_TOKEN
 
@@ -47,6 +49,23 @@ async function main() {
   console.log(`→ Forçant renovació de seccions (${new Date().toLocaleString('ca-ES', { timeZone: 'Europe/Madrid' })})`)
 
   // 1. Força el refresc complet de tots els feeds.
+  //
+  // Des del 14-08-2026 l'endpoint ENCUA la feina i respon 202. Abans, aquest
+  // script donava el refresc per fet a l'instant i tot seguit llegia el lot
+  // VELL: l'informe de salut de les seccions sortia amb dades d'abans.
+  const llegeixLot = async () => {
+    const r = await fetch(`${BASE}/api/live-news`, {
+      headers: { 'cache-control': 'no-cache' },
+    })
+    if (!r.ok) throw new Error(`HTTP ${r.status}`)
+    return r.json()
+  }
+  // Se sondeja la FEINA encuada, no la data del lot; i després s'espera que el
+  // lot públic reflecteixi de debò l'edició nova. Les dues esperes són a
+  // lib/esperaRefresc.mjs i cap de les dues acaba dient que sí sense estar-ne
+  // segura: abans, en exhaurir-se el temps, aquest script imprimia igualment
+  // "✓ Radar refrescat" amb el lot vell a la mà.
+  let lot
   try {
     const r = await fetch(`${BASE}/api/refresh-news`, {
       method: 'POST',
@@ -54,14 +73,23 @@ async function main() {
     })
     if (!r.ok) throw new Error(`HTTP ${r.status}`)
     const j = await r.json()
-    console.log(`✓ Radar refrescat: ${j.count} notícies al lot.`)
+    let resultat = null
+    if (j.queued) {
+      const feina = await esperaFeina(j.statusUrl, REFRESH_TOKEN)
+      resultat = feina.result || null
+    }
+    if (resultat?.cache === 'transient') {
+      throw new Error("el lot públic no s'ha pogut desar (transient)")
+    }
+    lot = await esperaLotVisible(llegeixLot, resultat?.updatedAt)
+    console.log(`✓ Radar refrescat: ${(lot.stories || []).length} notícies al lot.`)
   } catch (e) {
     console.error('✗ No s\'ha pogut refrescar el radar:', e.message)
     process.exit(1)
   }
 
-  // 2. Llegeix el lot.
-  const stories = (await (await fetch(`${BASE}/api/live-news`)).json()).stories || []
+  // 2. El lot ja el tenim.
+  const stories = lot.stories || []
 
   // 3. Informe per secció.
   console.log('\n── Salut de les seccions ──')

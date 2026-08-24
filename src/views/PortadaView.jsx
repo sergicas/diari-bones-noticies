@@ -176,6 +176,8 @@ export function PortadaView({
 
       </section>
 
+      <NewsletterForm />
+
       {todayStories.length > 0 ? (
         <section className="section-block editorial-highlights">
           <div className="section-heading">
@@ -214,8 +216,6 @@ export function PortadaView({
           </div>
         </section>
       ) : null}
-
-      <NewsletterForm />
 
       <section
         id="resultats-portada"

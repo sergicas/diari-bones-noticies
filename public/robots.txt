@@ -1,6 +1,64 @@
+# Condicions d'accés a bondiari.com
+#
+# Els senyals de contingut (contentsignals.org) diuen què es pot fer amb el que
+# es publica aquí:
+#   search   = indexar els textos i enllaçar-los des d'un cercador
+#   ai-train = fer-los servir per entrenar o afinar models d'intel·ligència artificial
+#   use      = com pot consumir el contingut un sistema d'IA
+#
+# "ai-train=no" és una RESERVA EXPRESSA DE DRETS a l'empara de l'article 4 de la
+# Directiva (UE) 2019/790 sobre els drets d'autor al mercat únic digital.
+# Es pot llegir El Bon Diari, indexar-lo i citar-lo amb l'enllaç; no es pot fer
+# servir per entrenar models.
+
 User-agent: *
+Content-Signal: search=yes,ai-train=no,use=reference
 Allow: /
 Disallow: /estadistiques
+Disallow: /revisio
+
+# Rastrejadors que recullen textos per entrenar models d'IA.
+User-agent: GPTBot
+Disallow: /
+
+User-agent: ClaudeBot
+Disallow: /
+
+User-agent: CCBot
+Disallow: /
+
+User-agent: Bytespider
+Disallow: /
+
+User-agent: TikTokSpider
+Disallow: /
+
+User-agent: Amazonbot
+Disallow: /
+
+User-agent: meta-externalagent
+Disallow: /
+
+User-agent: FacebookBot
+Disallow: /
+
+User-agent: PetalBot
+Disallow: /
+
+User-agent: Google-CloudVertexBot
+Disallow: /
+
+User-agent: Timpibot
+Disallow: /
+
+# Aquests dos no són rastrejadors: són l'etiqueta amb què Google i Apple
+# pregunten si poden fer servir el que ja han indexat per entrenar la seva IA.
+User-agent: Google-Extended
+Disallow: /
+
+User-agent: Applebot-Extended
+Disallow: /
 
 Sitemap: https://bondiari.com/sitemap.xml
 Sitemap: https://bondiari.com/news-sitemap.xml
+Sitemap: https://bondiari.com/sitemap-hemeroteca.xml

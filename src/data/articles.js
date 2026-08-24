@@ -1,5 +1,4 @@
 import { storyImagePath } from '../lib/story-image-path.js'
-import { keepAllowedEditorialTopic } from '../lib/category.js'
 
 const seedArticlesRaw = [
   {
@@ -2133,6 +2132,189 @@ const seedArticlesRaw = [
       "Per a El Bon Diari, el Consell de la Dona de la UFEC és una bona notícia que ha de validar-se amb dades. La paritat estructural a l'esport català no és un debat de quotes simbòliques; és una qüestió de qui decideix calendaris, dotació pressupostària i orientació estratègica de tot un sistema. Tindrem un primer balanç el 2027. La hipòtesi positiva és que un òrgan permanent canvia més coses que una comissió temporal.",
     ],
   },
+  // Tanda llavor validada el 13-08-2026. Aquestes peces no són hemeroteca
+  // llegada: entren amb topic, circuit i traçabilitat editorial explícits.
+  {
+    id: 'webb-aigua-pols-sagittarius-a-2026',
+    title: 'Webb detecta aigua i pols molt a prop del forat negre central de la Via Làctia',
+    category: 'Ciència',
+    topic: 'Astronomia',
+    location: 'Univers',
+    summary:
+      'Webb ha observat aigua i pols rica en oxigen a l’entorn d’IRS 3, una estrella situada a 0,55 anys llum de Sagittarius A*, el forat negre supermassiu central de la Via Làctia.',
+    impact:
+      'L’observació mostra que la matèria que alimenta noves estrelles i planetes pot persistir fins i tot en un entorn galàctic extrem.',
+    source: 'ESA/Webb',
+    sourceCredit: 'ESA/Webb, NASA & CSA, F. Peißker, J. Lu, F. Yusef-Zadeh, N. B. Sabha i C. Chan',
+    url: 'https://esawebb.org/news/weic2617/',
+    originalUrl: 'https://esawebb.org/news/weic2617/',
+    circuit: 'A',
+    sourceCircuit: 'A',
+    sourceTopic: 'Astronomia',
+    reuseLicense: 'CC BY 4.0',
+    licenseProofUrl: 'https://esawebb.org/copyright/',
+    imageUrl: 'https://cdn.esawebb.org/archives/images/screen/weic2617a.jpg',
+    imageAlt:
+      'Entorn polsós de l’estrella IRS 3 a prop del centre de la Via Làctia, observat amb Webb.',
+    imageCredit: 'ESA/Webb, NASA & CSA, F. Peißker, J. Lu, F. Yusef-Zadeh, N. B. Sabha i C. Chan',
+    imageAttributionUrl: 'https://esawebb.org/news/weic2617/',
+    imageRights: {
+      verified: true,
+      license: 'CC BY 4.0',
+      proofUrl: 'https://esawebb.org/copyright/',
+      thirdPartyLicenseStatus: 'institution-covered',
+    },
+    readTime: '3 min',
+    sourcePublishedAt: '2026-08-11T09:00:00Z',
+    publishedAt: '2026-08-13T11:50:00Z',
+    featured: true,
+    origin: 'editorial',
+    editorialSeed: true,
+    legacyArchive: false,
+    ownContent: true,
+    editorialFormat: 'constructive',
+    kicker: 'Matèria que resisteix al centre galàctic',
+    body: [
+      'Les observacions del telescopi James Webb han mostrat que, en l’entorn extrem del forat negre supermassiu Sagittarius A*, encara s’hi poden formar i conservar materials essencials. L’equip ha estudiat l’estrella envellida IRS 3, situada a uns 0,55 anys llum del centre galàctic, amb l’instrument d’infraroig mitjà MIRI.',
+      'L’espectre hi identifica pols rica en oxigen i, per primera vegada en aquesta envolta estel·lar, aigua. IRS 3 perd gas amb el vent estel·lar i aporta matèria que pot acabar alimentant futures generacions d’estrelles i planetes. El resultat no descriu un procés de vida, sinó una observació que ajuda a entendre com es recicla la matèria fins i tot al centre d’una galàxia.',
+    ],
+  },
+  {
+    id: 'geoneutrins-calor-mantell-terra-2026',
+    title: 'Els geoneutrins obren una finestra nova sobre la calor que mou la Terra',
+    category: 'Ciència',
+    topic: 'Ciència',
+    location: 'Món',
+    summary:
+      'Detectors subterranis com SNO+ i JUNO poden afegir dades sobre els geoneutrins, partícules que ajuden a estudiar la calor radioactiva de l’interior terrestre.',
+    impact:
+      'Les mesures poden afinar la imatge de com es distribueixen els elements que contribueixen al motor tectònic del planeta.',
+    source: 'Quanta Magazine',
+    sourceCredit: 'Quanta Magazine',
+    url: 'https://www.quantamagazine.org/neutrinos-from-deep-inside-earth-provide-a-new-picture-of-the-mantle-20260807/',
+    originalUrl: 'https://www.quantamagazine.org/neutrinos-from-deep-inside-earth-provide-a-new-picture-of-the-mantle-20260807/',
+    circuit: 'B',
+    sourceCircuit: 'B',
+    reuseLicense: 'Pista: redacció original obligatòria',
+    imageBrief: 'a calm cross-section of Earth underground, a spherical neutrino detector and delicate particle trails, no text',
+    readTime: '3 min',
+    sourcePublishedAt: '2026-08-07T09:00:00Z',
+    publishedAt: '2026-08-13T11:40:00Z',
+    featured: false,
+    origin: 'editorial',
+    editorialSeed: true,
+    legacyArchive: false,
+    ownContent: true,
+    editorialFormat: 'constructive',
+    kicker: 'Partícules que travessen la Terra',
+    body: [
+      'Uns detectors enterrats a gran profunditat intenten captar geoneutrins: partícules molt esquives que s’originen en processos radioactius de l’interior terrestre. La seva lectura pot ajudar a estimar com es distribueixen els elements que contribueixen a la calor del mantell, una peça clau del motor tectònic del planeta.',
+      'El detector SNO+, al Canadà, fa servir una esfera amb líquid centellejador i una capa d’aigua i roca per reduir el soroll de la radiació exterior. A la Xina, l’experiment JUNO preveu afegir mesures a aquesta xarxa internacional. És una recerca encara gradual: no ofereix una imatge directa del mantell, però suma dades d’un lloc on no podem arribar amb perforacions.',
+    ],
+  },
+  {
+    id: 'limostatina-creixement-larves-nutrients-2026',
+    title: 'Un senyal de l’intestí ajuda les larves a ajustar el creixement quan escassegen nutrients',
+    category: 'Ciència',
+    topic: 'Biotecnologia',
+    location: 'Recerca',
+    summary:
+      'Un estudi amb Drosophila descriu com la limostatina intestinal coordina intestí, teixit adipós i cervell quan disminueixen els aminoàcids disponibles.',
+    impact:
+      'El treball aclareix un mecanisme de biologia del desenvolupament i no permet extreure conclusions clíniques en persones.',
+    source: 'PLOS Biology',
+    sourceCredit: 'Longwei Bai, Jacques Montagne, Cathy Isaura Ramos i François Leulier / PLOS Biology',
+    url: 'https://doi.org/10.1371/journal.pbio.3003911',
+    originalUrl: 'https://journals.plos.org/plosbiology/article?id=10.1371/journal.pbio.3003911',
+    doi: '10.1371/journal.pbio.3003911',
+    circuit: 'A',
+    sourceCircuit: 'A',
+    reuseLicense: 'CC BY 4.0',
+    licenseProofUrl: 'https://journals.plos.org/plosbiology/s/journal-information',
+    imageBrief: 'a Drosophila larval intestine with gentle signals leading to a schematic brain and abstract molecules, no text',
+    readTime: '3 min',
+    sourcePublishedAt: '2026-08-11T10:00:00Z',
+    publishedAt: '2026-08-13T11:30:00Z',
+    featured: false,
+    origin: 'editorial',
+    editorialSeed: true,
+    legacyArchive: false,
+    ownContent: true,
+    editorialFormat: 'constructive',
+    kicker: 'Quan l’alimentació regula el desenvolupament',
+    body: [
+      'Un estudi amb larves de Drosophila descriu un circuit que connecta intestí, teixit adipós i cervell quan disminueixen els aminoàcids disponibles. Les autores i autors identifiquen la limostatina com una hormona intestinal que redueix el senyal d’un pèptid similar a la insulina i, així, frena el ritme de desenvolupament.',
+      'Aquesta pausa regulada ajuda les larves a mantenir la viabilitat en condicions de restricció nutricional. El treball delimita un mecanisme de biologia del desenvolupament en mosques; no és un tractament ni permet inferir efectes en persones. La seva utilitat és fer més visible com els òrgans coordinen respostes davant canvis en l’alimentació.',
+    ],
+  },
+  {
+    id: 'hegel-desacords-conversa-publica-2026',
+    title: 'Pensar els desacords com a processos pot fer més precisa la conversa pública',
+    category: 'Cultura',
+    topic: 'Filosofia',
+    location: 'Idees',
+    summary:
+      'Una guia sobre Hegel obre una manera d’examinar desacords sense convertir-los en una competició amb un únic guanyador.',
+    impact:
+      'La proposta pot ajudar a separar fets i interpretacions i a identificar què deixa fora cada argument.',
+    source: 'Psyche',
+    sourceCredit: 'Psyche',
+    url: 'https://psyche.co/guides/how-to-think-like-a-hegelian',
+    originalUrl: 'https://psyche.co/guides/how-to-think-like-a-hegelian',
+    circuit: 'B',
+    sourceCircuit: 'B',
+    sourceTopic: 'Filosofia',
+    reuseLicense: 'Pista: redacció original obligatòria',
+    imageBrief: 'two contrasting geometric forms converging into a third open shape, thoughtful editorial illustration, no text and no portraits',
+    readTime: '3 min',
+    sourcePublishedAt: '2026-08-10T09:00:00Z',
+    publishedAt: '2026-08-13T11:20:00Z',
+    featured: false,
+    origin: 'editorial',
+    editorialSeed: true,
+    legacyArchive: false,
+    ownContent: true,
+    editorialFormat: 'constructive',
+    kicker: 'Filosofia per mirar millor els arguments',
+    body: [
+      'Una guia de Psyche sobre Hegel ofereix una ocasió per acostar una idea filosòfica sense convertir-la en una fórmula. El punt de partida és que una tensió entre dues posicions no s’ha de llegir sempre com un combat amb un únic guanyador: també pot revelar límits de cada mirada i forçar una comprensió més àmplia.',
+      'Aquesta manera de pensar no elimina els desacords ni decideix qüestions polítiques o personals. Sí que pot ajudar a formular millor què afirma cadascú, quines experiències deixa fora i què canviaria una conclusió. La peça presenta Hegel com una eina per examinar arguments, no com un manual de solucions ràpides.',
+    ],
+  },
+  {
+    id: 'revistes-literaries-comunitat-escriptors-2026',
+    title: 'Un petit enviament de revistes literàries prova maneres d’obrir lectors i submissions',
+    category: 'Cultura',
+    topic: 'Literatura',
+    location: 'Literatura',
+    summary:
+      'Chill Subs i The Georgia Review van enviar números de la revista a trenta escriptores i escriptors per explicar la seva feina editorial i obrir conversa.',
+    impact:
+      'La prova mostra que fer circular revistes pot despertar interès, però no substitueix una comunitat sostinguda de lectors i autores.',
+    source: 'Literary Hub',
+    sourceCredit: 'Literary Hub',
+    url: 'https://lithub.com/what-happens-when-you-mail-30-writers-free-lit-mags/',
+    originalUrl: 'https://lithub.com/what-happens-when-you-mail-30-writers-free-lit-mags/',
+    circuit: 'B',
+    sourceCircuit: 'B',
+    sourceTopic: 'Literatura',
+    reuseLicense: 'Pista: redacció original obligatòria',
+    imageBrief: 'open envelopes, literary magazines without readable titles and an abstract handwritten letter on a table, no text',
+    readTime: '3 min',
+    sourcePublishedAt: '2026-08-12T09:00:00Z',
+    publishedAt: '2026-08-13T11:10:00Z',
+    featured: false,
+    origin: 'editorial',
+    editorialSeed: true,
+    legacyArchive: false,
+    ownContent: true,
+    editorialFormat: 'constructive',
+    kicker: 'La comunitat també es construeix per correu',
+    body: [
+      'El projecte Chill Subs i The Georgia Review van enviar tres números endarrerits de la revista a trenta escriptores i escriptors, acompanyats de cartes dels editors sobre lectura i enviament de manuscrits. L’experiment va mobilitzar una llista d’espera de 1.527 persones i va fer créixer la seva newsletter, però no va generar subscripcions entre les participants durant la prova.',
+      'El resultat és interessant justament perquè no és triomfalista: fer circular objectes culturals i explicar criteris editorials pot ampliar l’interès, però no substitueix una comunitat sostinguda ni un model econòmic. Per al lector, és una finestra a la feina invisible de les revistes: trobar textos adequats, explicar què publiquen i construir una relació amb qui escriu.',
+    ],
+  },
 ]
 
 // BLINDATGE DE DRETS D'AUTOR (hemeroteca): igual que el radar en viu, els
@@ -2141,15 +2323,31 @@ const seedArticlesRaw = [
 export const seedArticles = seedArticlesRaw
   .map((article) => ({
     ...article,
-    imageUrl: storyImagePath(article.url, {
-      title: article.title,
-      category: article.category,
-    }),
-    imageCredit: 'El Bon Diari (il·lustració IA)',
-    imageAttributionUrl: '',
+    // Només la fotografia ESA/Webb d'aquesta tanda conserva la seva imatge
+    // externa: és institucional, CC BY i porta la prova de drets. La resta
+    // (incloses les peces de Circuit B) rep una il·lustració editorial pròpia.
+    imageUrl:
+      article.imageRights?.verified === true
+        ? article.imageUrl
+        : storyImagePath(article.url, {
+            title: article.title,
+            category: article.category,
+            brief: article.imageBrief,
+          }),
+    imageCredit:
+      article.imageRights?.verified === true
+        ? article.imageCredit
+        : 'El Bon Diari (il·lustració IA)',
+    imageAttributionUrl:
+      article.imageRights?.verified === true ? article.imageAttributionUrl : '',
+    imageAlt:
+      article.imageAlt || `Il·lustració editorial per a ${article.title}.`,
+    legacyArchive: article.legacyArchive ?? true,
   }))
-  // L'hemeroteca segueix exactament la mateixa línia temàtica que el radar:
-  // les peces d'altres àmbits es conserven al fitxer font per poder-les
-  // recuperar, però deixen de publicar-se, indexar-se i aparèixer al feed.
-  .map((article) => keepAllowedEditorialTopic(article))
-  .filter(Boolean)
+  // Peces anteriors al pivot: es conserven a l'hemeroteca i a les URL de
+  // detall, però no se'ls infereix cap tema nou de manera retroactiva.
+
+// Les peces llavor aprovades viuen també al catàleg editorial del Worker sense
+// escriure a D1 durant el build. Així tenen exactament el mateix contracte de
+// dades (tema, crèdit, drets i contingut propi) que una peça persistent.
+export const editorialSeedStories = seedArticles.filter((article) => article.editorialSeed)

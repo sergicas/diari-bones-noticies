@@ -21,6 +21,17 @@ const PHOTO_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp', '.avif', '.gif']
 // Worker. És una imatge original i única per peça (cap risc de drets d'autor):
 // compta com a imatge vàlida a tots els efectes. Vegeu src/server/storyImage.js.
 const GENERATED_IMAGE_PREFIX = '/api/story-image/'
+const INCOMPATIBLE_THIRD_PARTY_RIGHTS = new Set([
+  'separate-license',
+  'incompatible-license',
+])
+
+// Política única per a imatges institucionals: si la institució publica la
+// imatge sencera sota CC BY 4.0 o domini públic, els crèdits de tercers que
+// ja hi consten queden coberts. Només es rebutja una imatge quan la seva fitxa
+// diu explícitament que una part té una llicència separada o incompatible.
+export const INSTITUTION_IMAGE_RIGHTS_POLICY =
+  'Es confia en la llicència CC BY 4.0 (o domini públic) amb què la institució publica la imatge SENCERA; els fons de tercers que la institució ja ha acreditat i alliberat hi queden coberts. Només es rebutja si el crèdit diu explícitament que una part té llicència separada o incompatible.'
 
 function isNonEmptyString(value) {
   return typeof value === 'string' && value.trim().length > 0
@@ -55,11 +66,47 @@ export function classifyImage(url) {
   return 'unknown'
 }
 
-// Es conserva el nom per compatibilitat amb el frontend, però la comprovació
-// inclou també les il·lustracions generades, originals i úniques per peça.
-export function hasOriginalPhoto(story) {
+export function isGeneratedEditorialImage(story) {
+  return classifyImage(story?.imageUrl) === 'generated'
+}
+
+export function hasExplicitlyIncompatibleThirdPartyRights(story) {
+  return INCOMPATIBLE_THIRD_PARTY_RIGHTS.has(
+    story?.imageRights?.thirdPartyLicenseStatus,
+  )
+}
+
+export function hasPermissiveImageLicense(license) {
+  const normalized = String(license || '').toLowerCase().replace(/\s+/g, ' ')
+  return /\bcc\s*[- ]?by(?:\s*[- ]?sa)?\b|\bcc0\b|public domain|domini públic|pdm\b|gnu free documentation|free art license/.test(
+    normalized,
+  )
+}
+
+// Un crèdit identifica la font, però no concedeix permís de reutilització.
+// Qualsevol foto externa necessita una fitxa explícita de drets, amb una
+// llicència lliure i l'enllaç que en permet comprovar l'origen.
+export function hasVerifiedImageRights(story) {
+  const rights = story?.imageRights
+  if (!rights || typeof rights !== 'object') return false
+  return (
+    rights.verified === true &&
+    isNonEmptyString(rights.license) &&
+    hasPermissiveImageLicense(rights.license) &&
+    isNonEmptyString(rights.proofUrl) &&
+    !hasExplicitlyIncompatibleThirdPartyRights(story)
+  )
+}
+
+export function canPublishStoryImage(story) {
   const kind = classifyImage(story?.imageUrl)
-  return kind === 'photo' || kind === 'generated'
+  return kind === 'generated' || (kind === 'photo' && hasVerifiedImageRights(story))
+}
+
+// Es conserva el nom per compatibilitat amb el frontend i els scripts; una
+// "imatge original" és una il·lustració pròpia o una foto externa verificada.
+export function hasOriginalPhoto(story) {
+  return canPublishStoryImage(story)
 }
 
 export function validateArticleImage(article) {
@@ -87,6 +134,12 @@ export function validateArticleImage(article) {
       break
     default:
       break
+  }
+
+  if (kind === 'photo' && !hasVerifiedImageRights(article)) {
+    errors.push(
+      'foto externa sense imageRights verificats (cal llicència lliure, URL de prova i cap excepció incompatible)',
+    )
   }
 
   if (!isNonEmptyString(article?.imageAlt)) {

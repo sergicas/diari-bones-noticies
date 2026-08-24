@@ -2,99 +2,93 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://bondiari.com/</loc>
-    <lastmod>2026-07-28</lastmod>
+    <lastmod>2026-08-13</lastmod>
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
     <loc>https://bondiari.com/manifest</loc>
-    <lastmod>2026-07-28</lastmod>
+    <lastmod>2026-08-13</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://bondiari.com/hemeroteca</loc>
-    <lastmod>2026-07-28</lastmod>
+    <lastmod>2026-08-13</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://bondiari.com/temes</loc>
-    <lastmod>2026-07-28</lastmod>
+    <lastmod>2026-08-13</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://bondiari.com/tema/cultura</loc>
-    <lastmod>2026-07-28</lastmod>
-    <changefreq>daily</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://bondiari.com/tema/esports</loc>
-    <lastmod>2026-07-28</lastmod>
-    <changefreq>daily</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
     <loc>https://bondiari.com/tema/ciencia</loc>
-    <lastmod>2026-07-28</lastmod>
+    <lastmod>2026-08-13</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://bondiari.com/tema/tecnologia</loc>
-    <lastmod>2026-07-28</lastmod>
+    <lastmod>2026-08-13</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://bondiari.com/tema/societat</loc>
-    <lastmod>2026-07-28</lastmod>
+    <loc>https://bondiari.com/tema/ia</loc>
+    <lastmod>2026-08-13</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://bondiari.com/tema/religio</loc>
-    <lastmod>2026-07-28</lastmod>
+    <loc>https://bondiari.com/tema/biotecnologia</loc>
+    <lastmod>2026-08-13</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://bondiari.com/tema/solidaritat</loc>
-    <lastmod>2026-07-28</lastmod>
+    <loc>https://bondiari.com/tema/astronomia</loc>
+    <lastmod>2026-08-13</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://bondiari.com/tema/educacio</loc>
-    <lastmod>2026-07-28</lastmod>
+    <loc>https://bondiari.com/tema/longevitat</loc>
+    <lastmod>2026-08-13</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://bondiari.com/tema/economia</loc>
-    <lastmod>2026-07-28</lastmod>
+    <loc>https://bondiari.com/tema/filosofia</loc>
+    <lastmod>2026-08-13</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://bondiari.com/tema/politica</loc>
-    <lastmod>2026-07-28</lastmod>
+    <loc>https://bondiari.com/tema/literatura</loc>
+    <lastmod>2026-08-13</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://bondiari.com/sobre</loc>
-    <lastmod>2026-07-28</lastmod>
+    <lastmod>2026-08-13</lastmod>
     <changefreq>yearly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://bondiari.com/privacitat</loc>
-    <lastmod>2026-07-28</lastmod>
+    <lastmod>2026-08-13</lastmod>
     <changefreq>yearly</changefreq>
     <priority>0.4</priority>
+  </url>
+  <url>
+    <loc>https://bondiari.com/noticia/banderes-blaves-catalunya-2026</loc>
+    <lastmod>2026-05-06</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
   </url>
   <url>
     <loc>https://bondiari.com/noticia/pressupostos-2026-serveis-publics-catalunya</loc>
@@ -111,6 +105,30 @@
   <url>
     <loc>https://bondiari.com/noticia/ia-responsable-administracio-catalunya</loc>
     <lastmod>2026-05-17</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://bondiari.com/noticia/dependencia-pla-cura-catalunya</loc>
+    <lastmod>2026-04-27</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://bondiari.com/noticia/cribratge-colon-74-anys-catalunya</loc>
+    <lastmod>2026-03-31</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://bondiari.com/noticia/finques-naturals-restauracio-catalunya</loc>
+    <lastmod>2026-02-02</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://bondiari.com/noticia/fauna-marina-cram-catalunya-2025</loc>
+    <lastmod>2026-01-20</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
@@ -223,6 +241,24 @@
     <priority>0.7</priority>
   </url>
   <url>
+    <loc>https://bondiari.com/noticia/iemen-1600-detinguts-acord-amman</loc>
+    <lastmod>2026-05-15</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://bondiari.com/noticia/catalunya-restauracio-dunes-calafell</loc>
+    <lastmod>2026-04-18</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://bondiari.com/noticia/burros-bombers-tivissa</loc>
+    <lastmod>2026-04-30</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
     <loc>https://bondiari.com/noticia/nature-set-tecnologies-2026</loc>
     <lastmod>2026-01-21</lastmod>
     <changefreq>monthly</changefreq>
@@ -271,6 +307,30 @@
     <priority>0.7</priority>
   </url>
   <url>
+    <loc>https://bondiari.com/noticia/tarragona-greenbelt-26-zones-verdes</loc>
+    <lastmod>2026-04-16</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://bondiari.com/noticia/africa-forward-23000-milions-nairobi</loc>
+    <lastmod>2026-05-12</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://bondiari.com/noticia/onu-cort-internacional-clima-141-vots</loc>
+    <lastmod>2026-05-21</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://bondiari.com/noticia/ferrocarril-akhalkalaki-kars-armenia-turquia</loc>
+    <lastmod>2026-05-24</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
     <loc>https://bondiari.com/noticia/cancer-pancreatic-arn-missatger-2026</loc>
     <lastmod>2026-05-12</lastmod>
     <changefreq>monthly</changefreq>
@@ -301,6 +361,12 @@
     <priority>0.7</priority>
   </url>
   <url>
+    <loc>https://bondiari.com/noticia/balenes-franques-atlantic-nord-2026</loc>
+    <lastmod>2026-06-02</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
     <loc>https://bondiari.com/noticia/sjn-premis-periodisme-solucions-2026</loc>
     <lastmod>2025-12-04</lastmod>
     <changefreq>monthly</changefreq>
@@ -315,6 +381,12 @@
   <url>
     <loc>https://bondiari.com/noticia/esa-smile-vega-c-tempesta-solar-2026</loc>
     <lastmod>2026-04-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://bondiari.com/noticia/rewilding-paisatges-recuperats-2026</loc>
+    <lastmod>2026-06-07</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
@@ -361,6 +433,24 @@
     <priority>0.7</priority>
   </url>
   <url>
+    <loc>https://bondiari.com/noticia/cop30-belem-paquet-climatic</loc>
+    <lastmod>2025-11-22</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://bondiari.com/noticia/tractat-alta-mar-entra-en-vigor</loc>
+    <lastmod>2025-09-20</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://bondiari.com/noticia/oms-acord-pandemic-historic</loc>
+    <lastmod>2025-05-20</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
     <loc>https://bondiari.com/noticia/el-prat-101-habitatges-cooperatius</loc>
     <lastmod>2026-01-31</lastmod>
     <changefreq>monthly</changefreq>
@@ -393,6 +483,36 @@
   <url>
     <loc>https://bondiari.com/noticia/ufec-consell-dona-esport-catala-2026</loc>
     <lastmod>2026-02-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://bondiari.com/noticia/webb-aigua-pols-sagittarius-a-2026</loc>
+    <lastmod>2026-08-13</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://bondiari.com/noticia/geoneutrins-calor-mantell-terra-2026</loc>
+    <lastmod>2026-08-13</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://bondiari.com/noticia/limostatina-creixement-larves-nutrients-2026</loc>
+    <lastmod>2026-08-13</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://bondiari.com/noticia/hegel-desacords-conversa-publica-2026</loc>
+    <lastmod>2026-08-13</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://bondiari.com/noticia/revistes-literaries-comunitat-escriptors-2026</loc>
+    <lastmod>2026-08-13</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
