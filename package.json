@@ -9,6 +9,7 @@
     "db:migrate:local": "wrangler d1 migrations apply EDITORIAL_DB --local",
     "db:migrate:staging": "wrangler d1 migrations apply EDITORIAL_DB --remote --env staging",
     "db:migrate:production": "wrangler d1 migrations apply EDITORIAL_DB --remote --env=\"\"",
+    "audit:security": "npm audit --audit-level=high",
     "check:articles": "node scripts/check-articles.mjs",
     "check:bundle": "node scripts/check-bundle.mjs",
     "audit:production": "npm audit --omit=dev --audit-level=high",
@@ -18,7 +19,7 @@
     "deploy": "npm run verify && wrangler deploy --env=\"\"",
     "deploy:staging": "npm run verify && wrangler deploy --env staging",
     "lint": "eslint .",
-    "verify": "npm run lint && npm test && npm run check:articles && npm run build && npm run check:worker && npm run check:worker:staging",
+    "verify": "npm run lint && npm run audit:security && npm test && npm run check:articles && npm run build && npm run check:worker && npm run check:worker:staging",
     "preview": "vite preview",
     "refresh": "node scripts/refresh-news.mjs",
     "archive:backfill": "node --env-file-if-exists=.dev.vars scripts/backfill-archive.mjs",
@@ -57,6 +58,10 @@
     "wrangler": "^4.125.0"
   },
   "overrides": {
+    "@capacitor/assets": {
+      "@capacitor/cli": "$@capacitor/cli",
+      "sharp": "0.35.3"
+    },
     "xcode": {
       "uuid": "11.1.1"
     }
