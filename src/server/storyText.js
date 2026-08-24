@@ -198,6 +198,34 @@ export function polishTitle(raw, language = 'ca') {
     .replace(/\bdefia\b/giu, 'desafia')
 }
 
+// Correccions de prosa que provenen de casos reals de producció i que es poden
+// aplicar sense reinterpretar els fets. Com amb els titulars, la llengua de
+// sortida mana i les substitucions són prou específiques per no actuar sobre
+// usos legítims d'altres paraules.
+export function polishProse(raw, language = 'ca') {
+  const prose = String(raw || '')
+  if (!String(language || '').toLowerCase().startsWith('ca')) return prose
+
+  return prose
+    .replace(
+      /\bordinadors quàntics, una màquina complexa\b/giu,
+      'ordinadors quàntics, màquines complexes',
+    )
+    .replace(
+      /\bunits d(['’])informació(?=\s|[.,;:!?]|$)/giu,
+      'unitats d$1informació',
+    )
+    .replace(
+      /\b(la)\s+(activitat|atenció|evolució|estructura|oportunitat)(?=\s|[.,;:!?]|$)/giu,
+      (_match, article, noun) =>
+        `${article === 'La' ? 'L' : 'l'}'${noun}`,
+    )
+    .replace(
+      /\bl\s+(activitat|atenció|evolució|estructura|oportunitat)(?=\s|[.,;:!?]|$)/giu,
+      "l'$1",
+    )
+}
+
 // Titulars de fins a 20 paraules. Els oficials —convocatòries, estudis— sovint
 // són més llargs, i abans això tombava tota la peça encara que el cos fos bo.
 // Aquí s'escurça pel primer tall NATURAL que hi hagi abans del límit (dos
@@ -439,6 +467,7 @@ export function parseOwnContentBatch(text, count) {
 export async function applyOwnContent(stories, env) {
   const kv = env?.LIVE_NEWS_KV
   const entries = stories.map((s) => {
+    const outputLanguage = s.outputLanguage || s.language || 'ca'
     const existingBody = Array.isArray(s.body)
       ? s.body.filter(Boolean).join(' ')
       : ''
@@ -446,8 +475,11 @@ export async function applyOwnContent(stories, env) {
       s.ownContent && s.title && existingBody
         ? {
             title: s.title,
-            body: cleanProse(existingBody, 1600),
-            impact: cleanProse(s.impact || '', 320),
+            body: polishProse(cleanProse(existingBody, 1600), outputLanguage),
+            impact: polishProse(
+              cleanProse(s.impact || '', 320),
+              outputLanguage,
+            ),
             brief: '',
           }
         : null
@@ -476,10 +508,18 @@ export async function applyOwnContent(stories, env) {
       if (!cached[i]) return
       try {
         const stored = JSON.parse(cached[i])
+        const outputLanguage =
+          e.story.outputLanguage || e.story.language || 'ca'
         const candidate = {
           ...stored,
-          body: cleanProse(stored?.body || '', 1600),
-          impact: cleanProse(stored?.impact || '', 320),
+          body: polishProse(
+            cleanProse(stored?.body || '', 1600),
+            outputLanguage,
+          ),
+          impact: polishProse(
+            cleanProse(stored?.impact || '', 320),
+            outputLanguage,
+          ),
         }
         e.own = isUsableRewrite({
           ...e.story,
@@ -532,8 +572,14 @@ export async function applyOwnContent(stories, env) {
             const candidate = {
               title: g.title,
               brief: g.brief || '',
-              body: g.body || '',
-              impact: g.impact || '',
+              body: polishProse(
+                g.body || '',
+                e.story.outputLanguage || e.story.language || 'ca',
+              ),
+              impact: polishProse(
+                g.impact || '',
+                e.story.outputLanguage || e.story.language || 'ca',
+              ),
             }
             const rewritten = {
               ...e.story,
@@ -569,6 +615,8 @@ export async function applyOwnContent(stories, env) {
   //    NO publica les que no en tenen (evita targetes buides "Una bona notícia · X").
   return entries.map((e) => {
     const own = e.own || {}
+    const outputLanguage =
+      e.story.outputLanguage || e.story.language || 'ca'
     const hasOwnContent = Boolean(own.title && own.body)
     // Escurçat just abans de publicar: la peça no es perd mai per un titular
     // llarg, i el que arriba a la portada sempre té una llargada de titular.
@@ -578,7 +626,9 @@ export async function applyOwnContent(stories, env) {
         e.story.outputLanguage || e.story.language || 'ca',
       ),
     )
-    const body = own.body ? [cleanProse(own.body, 1600)] : []
+    const body = own.body
+      ? [polishProse(cleanProse(own.body, 1600), outputLanguage)]
+      : []
     // Encara que hi hagi brief per a la IA, passem sempre títol i categoria:
     // són el que compon la targeta de reserva si la generació no arriba.
     const imageUrl = storyImagePath(e.story.url, {
@@ -607,7 +657,10 @@ export async function applyOwnContent(stories, env) {
       ).slice(0, 2000),
       reviewSourceTitle: e.story.title || '',
       body,
-      impact: cleanProse(own.impact || '', 320),
+      impact: polishProse(
+        cleanProse(own.impact || '', 320),
+        outputLanguage,
+      ),
       // Només Circuit A pot conservar la imatge institucional. Sempre passa
       // imageRules; Circuit B usa inevitablement la il·lustració pròpia.
       imageUrl:

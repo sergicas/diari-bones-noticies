@@ -75,6 +75,8 @@ const GENERIC_IMPACT_PATTERNS = [
   /^actualitza un indicador p[uú]blic\b/i,
   /^el radar autom[aà]tic\b/i,
   /^aquesta (?:not[ií]cia|pe[çc]a) (?:[ée]s|es) [uú]til perqu[eè] informa\b/i,
+  /\b(?:pot|podria) revolucionar\b/i,
+  /\bpot tenir un impacte significatiu\b/i,
 ]
 
 function plainText(value) {

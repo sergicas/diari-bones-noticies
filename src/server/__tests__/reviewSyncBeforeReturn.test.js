@@ -115,15 +115,15 @@ afterEach(() => {
 describe('les aprovades surten encara que el radar no trobi res', () => {
   it('publica la peça pendent i la marca, tot i la sortida anticipada', async () => {
     const jaPublicada = {
+      ...pecaValida('vella'),
       url: 'https://example.com/vella',
       title: 'Una peça que ja era al diari',
-      publishedAt: new Date().toISOString(),
     }
     const aprovada = {
+      ...pecaValida('aprovada'),
       id: 'aprovada-1',
       url: 'https://example.com/aprovada',
       title: 'Peça aprovada que encara no havia sortit',
-      publishedAt: new Date().toISOString(),
     }
     const kv = kvDeMentida({
       updatedAt: new Date().toISOString(),
@@ -191,10 +191,10 @@ describe('les aprovades surten encara que el radar no trobi res', () => {
     // Marcar-la sense pàgina pròpia deixaria una peça al lot que dona 404 en
     // obrir-la. Val més que esperi i es torni a intentar.
     const aprovada = {
+      ...pecaValida('aprovada-avariada'),
       id: 'aprovada-3',
       url: 'https://example.com/aprovada-3',
       title: 'Peça aprovada amb el detall avariat',
-      publishedAt: new Date().toISOString(),
     }
     const kv = kvDeMentida({
       updatedAt: new Date().toISOString(),
@@ -259,18 +259,18 @@ describe('les aprovades surten encara que el radar no trobi res', () => {
 
   it('el que retorna el radar ja inclou la peça recuperada', async () => {
     const aprovada = {
+      ...pecaValida('aprovada-retornada'),
       id: 'aprovada-2',
       url: 'https://example.com/aprovada-2',
-      title: 'Una altra peça aprovada',
-      publishedAt: new Date().toISOString(),
+      title: 'Una altra peça aprovada per sortir al diari',
     }
     const kv = kvDeMentida({
       updatedAt: new Date().toISOString(),
       stories: [
         {
+          ...pecaValida('vella-retornada'),
           url: 'https://example.com/vella-2',
           title: 'Peça anterior',
-          publishedAt: new Date().toISOString(),
         },
       ],
     })

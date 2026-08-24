@@ -20,6 +20,7 @@ import {
   isTickerCacheFresh,
   storiesRequiringDetailPersistence,
   getLiveNewsPayload,
+  enforcePublicationInvariants,
   keepsEditorialClearance,
   isMaritimeRescue,
 } from '../liveNews.js'
@@ -1150,6 +1151,38 @@ describe('applyDiversityCap — sostre per font', () => {
 
   it('gestiona el cas buit sense petar', () => {
     expect(applyDiversityCap([], 5, 30)).toEqual([])
+  })
+
+  it('la porta final torna a aplicar qualitat i diversitat als lots antics', () => {
+    const valid = (source, idx, overrides = {}) => ({
+      url: `https://example.com/${source}/${idx}`,
+      title: `Una notícia constructiva completa número ${idx} del radar`,
+      source,
+      category: idx % 2 ? 'Ciència' : 'Cultura',
+      language: 'ca',
+      ownContent: true,
+      editorialFormat: 'constructive',
+      body: [
+        'La institució ha presentat aquesta setmana un programa amb quaranta places noves i dades públiques trimestrals. El projecte incorpora formació, seguiment i una avaluació independent que es publicarà cada any. Les entitats participants revisaran els resultats al cap de dotze mesos i explicaran públicament els canvis que calgui aplicar.',
+      ],
+      impact:
+        'Ofereix places noves i dades públiques per comprovar els resultats.',
+      ...overrides,
+    })
+    const oldBatch = [
+      ...Array.from({ length: 10 }, (_, i) => valid('Phys.org', i)),
+      valid('NASA', 11),
+      valid('Quanta', 12),
+      valid('Quanta', 13, {
+        impact: 'Aquesta recerca pot revolucionar el camp de la ciència.',
+      }),
+    ]
+
+    const result = enforcePublicationInvariants(oldBatch)
+    expect(result.filter((story) => story.source === 'Phys.org')).toHaveLength(3)
+    expect(result.some((story) => story.impact.includes('revolucionar'))).toBe(
+      false,
+    )
   })
 })
 

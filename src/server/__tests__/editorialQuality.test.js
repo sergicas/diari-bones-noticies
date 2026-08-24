@@ -10,6 +10,7 @@ import {
 import {
   applyOwnContent,
   parseOwnContentBatch,
+  polishProse,
   polishTitle,
   shortenTitle,
 } from '../storyText.js'
@@ -109,6 +110,28 @@ describe('barrera de qualitat editorial', () => {
         }),
       ).issues,
     ).toContain('truncated-impact')
+  })
+
+  it('rebutja la promesa hiperbòlica de revolucionar un camp', () => {
+    expect(
+      evaluateEditorialQuality(
+        qualityStory({
+          impact:
+            'Aquesta investigació pot revolucionar el camp de la informàtica i resoldre problemes complexos.',
+        }),
+      ).issues,
+    ).toContain('generic-impact')
+  })
+
+  it('rebutja la fórmula vaga d’impacte significatiu', () => {
+    expect(
+      evaluateEditorialQuality(
+        qualityStory({
+          impact:
+            'Aquesta teoria pot tenir un impacte significatiu en la comprensió de la matèria.',
+        }),
+      ).issues,
+    ).toContain('generic-impact')
   })
 
   it('filtra i informa dels rebutjos sense modificar les peces bones', () => {
@@ -239,6 +262,15 @@ describe('final complet dels textos editorials', () => {
       'Aquesta nova tècnica pot reduir significativament el cost dels experiments de terahertz, fent-los més accessibles per a investigadors i estudiants.',
     )
     expect(hasTruncatedEnding(piece.impact)).toBe(false)
+  })
+
+  it('corregeix les errades gramaticals observades sense tocar altres llengües', () => {
+    const original =
+      "Els ordinadors quàntics, una màquina complexa, utilitzen qubits, que són units d'informació quàntica. La evolució depèn de la estructura i l activitat."
+    expect(polishProse(original, 'ca')).toBe(
+      "Els ordinadors quàntics, màquines complexes, utilitzen qubits, que són unitats d'informació quàntica. L'evolució depèn de l'estructura i l'activitat.",
+    )
+    expect(polishProse(original, 'en')).toBe(original)
   })
 })
 

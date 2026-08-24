@@ -2159,6 +2159,35 @@ function ensureCategoryCoverage(capped, pool, limit) {
   return result
 }
 
+// Invariants de l'ÚLTIMA porta de publicació. Totes les sortides del radar
+// —incloses les de reserva quan hi ha peces pendents de revisió— han de passar
+// pel mateix llistó. Sense aquest pas, `stale-awaiting-review` podia recuperar
+// un lot antic de 16 peces amb 10 de la mateixa font i textos que ja no
+// superaven les regles editorials vigents.
+export function enforcePublicationInvariants(
+  stories,
+  limit = targetStoryLimit,
+) {
+  const qualityStories = selectPublishableStories(
+    Array.isArray(stories) ? stories : [],
+  )
+  const languageBalanced = capPerLanguage(
+    qualityStories,
+    maxStoriesPerLanguage,
+  )
+  const categoryBalanced = capPerCategory(languageBalanced)
+  const storiesWithCoverage = ensureCategoryCoverage(
+    applyDiversityCap(categoryBalanced, maxStoriesPerSource, limit),
+    categoryBalanced,
+    limit,
+  )
+  return applyDiversityCap(
+    storiesWithCoverage,
+    maxStoriesPerSource,
+    limit,
+  )
+}
+
 export async function getLiveNewsPayload(
   kv,
   { force = false, env, allowRefresh = true } = {},
@@ -2263,7 +2292,9 @@ export async function getLiveNewsPayload(
     //
     // Es fa a la porta única de publicació perquè cap camí no se la pugui
     // saltar.
-    let stories = storiesEntrada.map(senseMaterialDeTreball)
+    let stories = enforcePublicationInvariants(storiesEntrada).map(
+      senseMaterialDeTreball,
+    )
     const idsRetirats = new Set(aRetirar.map((r) => r.id))
     let retiratsConfirmats = []
     // Les retirades surten del lot abans d'escriure'l, i de tots els detalls:
@@ -2396,21 +2427,7 @@ export async function getLiveNewsPayload(
   // Acotem les llengües foranes ABANS de la diversitat per font, perquè el
   // català i el castellà mai no quedin fora encara que un dia hi hagi allau de
   // notícies europees.
-  const languageBalanced = capPerLanguage(preDiversity, maxStoriesPerLanguage)
-  const balanced = capPerCategory(languageBalanced)
-  const storiesWithCoverage = ensureCategoryCoverage(
-    applyDiversityCap(balanced, maxStoriesPerSource, targetStoryLimit),
-    balanced,
-    targetStoryLimit,
-  )
-  // `ensureCategoryCoverage` pot afegir una candidata després del primer tall.
-  // El sostre es torna a aplicar al final perquè sigui un invariant de la
-  // publicació, també quan en el futur canviïn les categories garantides.
-  const finalStories = applyDiversityCap(
-    storiesWithCoverage,
-    maxStoriesPerSource,
-    targetStoryLimit,
-  )
+  const finalStories = enforcePublicationInvariants(preDiversity)
 
   // BLINDATGE DE DRETS D'AUTOR: sigui quin sigui l'origen de la peça (fresca
   // d'aquest refresc o arrossegada d'un lot anterior amb el codi antic),
