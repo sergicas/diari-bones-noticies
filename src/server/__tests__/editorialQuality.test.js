@@ -3,6 +3,7 @@ import {
   countWords,
   editorialQualityProfile,
   evaluateEditorialQuality,
+  hasTruncatedEnding,
   isPublishableStory,
   selectPublishableStories,
 } from '../editorialQuality.js'
@@ -94,6 +95,20 @@ describe('barrera de qualitat editorial', () => {
     )
     expect(result.passes).toBe(false)
     expect(result.issues).toContain('generic-body')
+  })
+
+  it('rebutja un cos o un impacte tallat en un connector', () => {
+    expect(hasTruncatedEnding('La tècnica pot tenir aplicacions com la')).toBe(
+      true,
+    )
+    expect(
+      evaluateEditorialQuality(
+        qualityStory({
+          impact:
+            'La tècnica abarateix els experiments i pot tenir aplicacions com la',
+        }),
+      ).issues,
+    ).toContain('truncated-impact')
   })
 
   it('filtra i informa dels rebutjos sense modificar les peces bones', () => {
@@ -205,6 +220,25 @@ describe('poliment lingüístic dels titulars', () => {
     expect(polishTitle('La darrera edició amplia la cobertura', 'es')).toBe(
       'La darrera edició amplia la cobertura',
     )
+  })
+})
+
+describe('final complet dels textos editorials', () => {
+  it('recupera una frase completa quan un impacte antic acaba tallat', () => {
+    const [piece] = parseOwnContentBatch(
+      [
+        '1 titular: Un nou material abarateix els polaritzadors de terahertz',
+        '1 cos: Un equip ha desenvolupat una alternativa amb làmines d’alumini.',
+        "1 impacte: Aquesta nova tècnica pot reduir significativament el cost dels experiments de terahertz, fent-los més accessibles per a investigadors i estudiants, i pot tenir aplicacions en camps com la",
+        '1 imatge: aluminum foil in an optics laboratory',
+      ].join('\n'),
+      1,
+    )
+
+    expect(piece.impact).toBe(
+      'Aquesta nova tècnica pot reduir significativament el cost dels experiments de terahertz, fent-los més accessibles per a investigadors i estudiants.',
+    )
+    expect(hasTruncatedEnding(piece.impact)).toBe(false)
   })
 })
 

@@ -18,6 +18,7 @@ import { hasVerifiedImageRights } from '../lib/imageRules.js'
 import { runTextModel } from './ai/textModel.js'
 import {
   evaluateEditorialQuality,
+  hasTruncatedEnding,
   isUsableRewrite,
 } from './editorialQuality.js'
 
@@ -268,13 +269,40 @@ function cleanBrief(raw) {
 // cleanBrief, que és per a l'escena d'imatge en anglès), només treu cometes,
 // guillemots i separadors sobrants.
 function cleanProse(raw, max) {
-  return String(raw || '')
+  const prose = String(raw || '')
     .replace(/[«»"“”]/g, '')
     .replace(/\s+/g, ' ')
     .replace(/^[\s|·:—–-]+/, '')
     .replace(/[\s|·]+$/, '')
     .trim()
-    .slice(0, max)
+
+  let safe = prose
+  if (safe.length > max) {
+    const hardCut = safe.slice(0, max).replace(/\s+\S*$/u, '').trim()
+    const sentenceMatches = [...hardCut.matchAll(/[.!?](?=\s|$)/gu)]
+    const sentenceEnd = sentenceMatches.at(-1)?.index
+    if (sentenceEnd !== undefined && sentenceEnd >= max * 0.55) {
+      safe = hardCut.slice(0, sentenceEnd + 1).trim()
+    } else {
+      safe = hardCut
+    }
+  }
+
+  if (!hasTruncatedEnding(safe)) return safe
+
+  // Si el model o una versió antiga del cau s'ha tallat en un connector,
+  // recuperem l'última proposició completa. En l'impacte real que va destapar
+  // aquesta regressió, això converteix "..., estudiants, i pot ... com la" en
+  // una frase completa acabada a "estudiants.".
+  const clauseEnd = Math.max(safe.lastIndexOf(','), safe.lastIndexOf(';'))
+  if (clauseEnd >= safe.length * 0.55) {
+    return `${safe.slice(0, clauseEnd).replace(/[\s,;:]+$/u, '').trim()}.`
+  }
+
+  for (let i = 0; i < 4 && hasTruncatedEnding(safe); i += 1) {
+    safe = safe.replace(/\s+\S+[\s,:;–—-]*$/u, '').trim()
+  }
+  return safe ? `${safe.replace(/[\s,;:]+$/u, '').trim()}.` : ''
 }
 
 async function aiOwnContentBatch(env, items) {
@@ -400,7 +428,7 @@ export function parseOwnContentBatch(text, count) {
   return raw.map((entry) => ({
     title: entry.titular ? cleanTitle(entry.titular) : null,
     body: entry.cos ? cleanProse(entry.cos, 1600) : null,
-    impact: entry.impacte ? cleanProse(entry.impacte, 200) : null,
+    impact: entry.impacte ? cleanProse(entry.impacte, 320) : null,
     brief: entry.imatge ? cleanBrief(entry.imatge) : null,
   }))
 }
@@ -416,7 +444,12 @@ export async function applyOwnContent(stories, env) {
       : ''
     const existingOwn =
       s.ownContent && s.title && existingBody
-        ? { title: s.title, body: existingBody, impact: s.impact || '', brief: '' }
+        ? {
+            title: s.title,
+            body: cleanProse(existingBody, 1600),
+            impact: cleanProse(s.impact || '', 320),
+            brief: '',
+          }
         : null
     const own =
       existingOwn &&
@@ -442,7 +475,12 @@ export async function applyOwnContent(stories, env) {
       if (e.own) return
       if (!cached[i]) return
       try {
-        const candidate = JSON.parse(cached[i])
+        const stored = JSON.parse(cached[i])
+        const candidate = {
+          ...stored,
+          body: cleanProse(stored?.body || '', 1600),
+          impact: cleanProse(stored?.impact || '', 320),
+        }
         e.own = isUsableRewrite({
           ...e.story,
           title: candidate?.title,
@@ -540,7 +578,7 @@ export async function applyOwnContent(stories, env) {
         e.story.outputLanguage || e.story.language || 'ca',
       ),
     )
-    const body = own.body ? [own.body] : []
+    const body = own.body ? [cleanProse(own.body, 1600)] : []
     // Encara que hi hagi brief per a la IA, passem sempre títol i categoria:
     // són el que compon la targeta de reserva si la generació no arriba.
     const imageUrl = storyImagePath(e.story.url, {
@@ -569,7 +607,7 @@ export async function applyOwnContent(stories, env) {
       ).slice(0, 2000),
       reviewSourceTitle: e.story.title || '',
       body,
-      impact: own.impact || '',
+      impact: cleanProse(own.impact || '', 320),
       // Només Circuit A pot conservar la imatge institucional. Sempre passa
       // imageRules; Circuit B usa inevitablement la il·lustració pròpia.
       imageUrl:
