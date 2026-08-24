@@ -1,3 +1,5 @@
+import { claimDailyNotification } from './dailyNotification.js'
+
 // Notificacions push (Web Push, PWA) per a El Bon Diari.
 // - handlePushSubscribe / handlePushUnsubscribe: guarden/treuen la subscripció
 //   del navegador a STATS_KV (prefix "push:").
@@ -13,6 +15,7 @@ export const VAPID_PUBLIC_KEY =
   'BCeqTqgGgg7f_acgcxXQC7_1IbJMYB9VPvV-i3VWgUVziV1Mrq9O4QJasPMBjyoT8_CleNWZoYOVHl2tGg9Mvvc'
 
 const PUSH_PREFIX = 'push:'
+const DAILY_OPTION = 'daily'
 
 // --- utils base64url ---------------------------------------------------------
 function b64urlToBytes(s) {
@@ -77,6 +80,13 @@ export async function handlePushSubscribe(request, env) {
   try {
     const body = await request.json()
     const sub = body?.subscription || body
+    const option = body?.subscription ? body.option : DAILY_OPTION
+    if (option !== DAILY_OPTION) {
+      return new Response(JSON.stringify({ ok: false, error: 'bad-option' }), {
+        status: 400,
+        headers: { 'content-type': 'application/json' },
+      })
+    }
     if (!isValidSubscription(sub)) {
       return new Response(JSON.stringify({ ok: false, error: 'bad-subscription' }), {
         status: 400,
@@ -87,6 +97,7 @@ export async function handlePushSubscribe(request, env) {
       endpoint: sub.endpoint,
       p256dh: sub.keys.p256dh,
       auth: sub.keys.auth,
+      option,
       createdAt: new Date().toISOString(),
     }
     await env.STATS_KV.put(subKey(sub.endpoint), JSON.stringify(record))
@@ -111,7 +122,21 @@ export async function handlePushUnsubscribe(request, env) {
   try {
     const body = await request.json()
     const endpoint = body?.endpoint || body?.subscription?.endpoint
-    if (endpoint) await env.STATS_KV.delete(subKey(endpoint))
+    if (!endpoint || endpoint.length > 2048) {
+      return new Response(JSON.stringify({ ok: false, error: 'bad-endpoint' }), {
+        status: 400,
+        headers: { 'content-type': 'application/json' },
+      })
+    }
+    try {
+      if (new URL(endpoint).protocol !== 'https:') throw new Error('bad-endpoint')
+    } catch {
+      return new Response(JSON.stringify({ ok: false, error: 'bad-endpoint' }), {
+        status: 400,
+        headers: { 'content-type': 'application/json' },
+      })
+    }
+    await env.STATS_KV.delete(subKey(endpoint))
     return new Response(JSON.stringify({ ok: true }), {
       headers: { 'content-type': 'application/json' },
     })
@@ -235,7 +260,7 @@ async function sendOne(env, sub, payloadBytes) {
 
 // Envia una notificació {title, body, url, icon} a tots els subscriptors.
 // Neteja les subscripcions caducades (404/410). Best-effort: no llança.
-export async function sendPushToAll(env, notification) {
+export async function sendPushToAll(env, notification, delivery = {}) {
   if (!env.VAPID_PRIVATE_KEY) {
     console.warn('[push] VAPID_PRIVATE_KEY no configurada; no s\'envia res.')
     return { sent: 0, failed: 0, removed: 0 }
@@ -249,11 +274,23 @@ export async function sendPushToAll(env, notification) {
     }),
   )
   const subs = await listSubscriptions(env)
+  if (!delivery.day || !delivery.storyId) {
+    console.warn('[push] falta la clau diària de lliurament; no s\'envia res.')
+    return { sent: 0, failed: 0, removed: 0, skipped: 'missing-delivery-key' }
+  }
   let sent = 0
   let failed = 0
   let removed = 0
   for (const sub of subs) {
+    if (sub.option && sub.option !== DAILY_OPTION) continue
     try {
+      const claim = await claimDailyNotification(env, {
+        day: delivery.day,
+        channel: 'web',
+        recipient: sub.endpoint,
+        storyId: delivery.storyId,
+      })
+      if (!claim.claimed) continue
       const status = await sendOne(env, sub, payload)
       if (status === 404 || status === 410) {
         await env.STATS_KV.delete(sub.key)

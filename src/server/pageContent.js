@@ -239,7 +239,7 @@ const STATIC_BODIES = {
     '<h2>Butlletí (newsletter)</h2>',
     '<p>Si t’hi subscrius, es desa el teu correu per enviar-te el butlletí; te’n pots donar de baixa en qualsevol moment des de l’enllaç de cada enviament.</p>',
     '<h2>Notificacions push</h2>',
-    '<p>Són opcionals i només s’activen si hi dones permís explícit al navegador o a l’app.</p>',
+    '<p>El servidor guarda només la subscripció de l’aparell i l’opció triada. Els avisos són opcionals, tenen un topall d’un al dia i la baixa esborra la subscripció.</p>',
     '<h2>Els teus drets</h2>',
     '<p>Pots demanar accés, rectificació o supressió de qualsevol dada escrivint a sergicas@gmail.com.</p>',
     '</main>',
@@ -250,6 +250,14 @@ const STATIC_BODIES = {
     '<p>Aquest és el marc amb què El Bon Diari tria solucions, verificacions i informació pràctica, i explica quin valor té per a qui ho llegeix.</p>',
     '<h2>Com publiquem sense caure en l’optimisme buit</h2>',
     '<p>Cada peça ha d’aportar evidència comprovable, context honest i, sempre que es pugui, una acció o un aprenentatge replicable. No publiquem bones notícies per quedar bé: publiquem allò que funciona i es pot verificar amb fonts transparents.</p>',
+    '</main>',
+  ].join(''),
+  '/preferencies': [
+    '<main class="ssr-content">',
+    '<h1>Els meus interessos</h1>',
+    '<p>Tria temes i territoris per realçar peces sense canviar mai l’ordre editorial de la portada. Les preferències es guarden només al teu dispositiu.</p>',
+    '<h2>Notificacions sense soroll</h2>',
+    '<p>Pots rebre la peça del dia, amb un màxim d’un avís diari, o mantenir-les desactivades.</p>',
     '</main>',
   ].join(''),
 }

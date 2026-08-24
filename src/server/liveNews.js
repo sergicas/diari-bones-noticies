@@ -2018,8 +2018,15 @@ export async function collectLivePositiveNews(env, { seenUrls } = {}) {
 
   const filtered = ordered
     .map((story) => {
-      const { editorialScore: _score, ...rest } = story
-      return rest
+      const { editorialScore, ...rest } = story
+      // El porter d'IA continua decidint SI/NO. Entre les peces que supera,
+      // aquesta puntuació editorial estable mesura solidesa del material,
+      // nivell de la font i context disponible; el repartiment del matí la fa
+      // servir per escollir «La peça del dia» sense una segona crida al model.
+      return {
+        ...rest,
+        editorialImpactScore: sourceMaterialScore(story) + Number(editorialScore || 0),
+      }
     })
     .slice(0, collectionPoolSize)
 

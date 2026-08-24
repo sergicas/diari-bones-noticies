@@ -1,3 +1,5 @@
+import { claimDailyNotification } from './dailyNotification.js'
+
 // Notificacions push NATIVES d'iOS via APNs (Apple Push Notification service).
 // És un canal diferent del Web Push (push.js): iOS fa servir un device token i
 // l'API HTTP/2 d'APNs, amb un JWT signat amb una clau .p8 (ES256).
@@ -10,6 +12,7 @@
 //   - APNS_SANDBOX     : "1" per provar amb builds d'Xcode/TestFlight; buit/absent per producció.
 
 const APNS_PREFIX = 'apns:'
+const DAILY_OPTION = 'daily'
 
 function b64urlFromBytes(bytes) {
   let bin = ''
@@ -46,16 +49,48 @@ export async function handleApnsRegister(request, env) {
   try {
     const body = await request.json()
     const token = (body?.token || '').trim()
+    const option = body?.option
     if (!/^[a-f0-9]{64}$/i.test(token)) {
       return new Response(JSON.stringify({ ok: false, error: 'bad-token' }), {
         status: 400,
         headers: { 'content-type': 'application/json' },
       })
     }
+    if (option !== DAILY_OPTION) {
+      return new Response(JSON.stringify({ ok: false, error: 'bad-option' }), {
+        status: 400,
+        headers: { 'content-type': 'application/json' },
+      })
+    }
     await env.STATS_KV.put(
       tokenKey(token),
-      JSON.stringify({ token, createdAt: new Date().toISOString() }),
+      JSON.stringify({ token, option, createdAt: new Date().toISOString() }),
     )
+    return new Response(JSON.stringify({ ok: true }), {
+      headers: { 'content-type': 'application/json' },
+    })
+  } catch {
+    return new Response(JSON.stringify({ ok: false }), { status: 500 })
+  }
+}
+
+export async function handleApnsUnregister(request, env) {
+  if (request.method !== 'POST') {
+    return new Response(JSON.stringify({ ok: false, error: 'method-not-allowed' }), {
+      status: 405,
+      headers: { allow: 'POST', 'content-type': 'application/json' },
+    })
+  }
+  try {
+    const body = await request.json()
+    const token = (body?.token || '').trim()
+    if (!/^[a-f0-9]{64}$/i.test(token)) {
+      return new Response(JSON.stringify({ ok: false, error: 'bad-token' }), {
+        status: 400,
+        headers: { 'content-type': 'application/json' },
+      })
+    }
+    await env.STATS_KV.delete(tokenKey(token))
     return new Response(JSON.stringify({ ok: true }), {
       headers: { 'content-type': 'application/json' },
     })
@@ -69,7 +104,12 @@ async function listTokens(env) {
   let cursor
   do {
     const page = await env.STATS_KV.list({ prefix: APNS_PREFIX, cursor })
-    for (const k of page.keys) tokens.push(k.name.slice(APNS_PREFIX.length))
+    for (const k of page.keys) {
+      const record = await env.STATS_KV.get(k.name, 'json')
+      if (record?.option === DAILY_OPTION) {
+        tokens.push(record?.token || k.name.slice(APNS_PREFIX.length))
+      }
+    }
     cursor = page.list_complete ? undefined : page.cursor
   } while (cursor)
   return tokens
@@ -95,7 +135,7 @@ async function buildApnsJwt(env) {
 
 // Envia una notificació {title, body, url} a tots els dispositius iOS registrats.
 // Neteja els tokens caducats (410 / BadDeviceToken). Best-effort: no llança.
-export async function sendApnsToAll(env, notification) {
+export async function sendApnsToAll(env, notification, delivery = {}) {
   if (!env.APNS_PRIVATE_KEY || !env.APNS_KEY_ID || !env.APNS_TEAM_ID || !env.APNS_TOPIC) {
     console.warn('[apns] falta configuració APNs; no s\'envia res.')
     return { sent: 0, failed: 0, removed: 0 }
@@ -111,11 +151,22 @@ export async function sendApnsToAll(env, notification) {
   })
 
   const tokens = await listTokens(env)
+  if (!delivery.day || !delivery.storyId) {
+    console.warn('[apns] falta la clau diària de lliurament; no s\'envia res.')
+    return { sent: 0, failed: 0, removed: 0, skipped: 'missing-delivery-key' }
+  }
   let sent = 0
   let failed = 0
   let removed = 0
   for (const token of tokens) {
     try {
+      const claim = await claimDailyNotification(env, {
+        day: delivery.day,
+        channel: 'apns',
+        recipient: token,
+        storyId: delivery.storyId,
+      })
+      if (!claim.claimed) continue
       const res = await fetch(`https://${host}/3/device/${token}`, {
         method: 'POST',
         headers: {

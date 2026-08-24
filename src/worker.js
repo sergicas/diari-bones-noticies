@@ -21,7 +21,7 @@ import { handleReviewRoutes } from './server/reviewPage.js'
 import { handleNewsSitemap } from './server/newsSitemap.js'
 import { handleArchiveSitemap } from './server/archiveSitemap.js'
 import { handlePushSubscribe, handlePushUnsubscribe } from './server/push.js'
-import { handleApnsRegister } from './server/apns.js'
+import { handleApnsRegister, handleApnsUnregister } from './server/apns.js'
 import { handleStoryImage } from './server/storyImage.js'
 import {
   backfillEditorialArchive,
@@ -695,6 +695,7 @@ async function route(request, env, ctx) {
   if (path === '/api/push/subscribe') return handlePushSubscribe(request, env)
   if (path === '/api/push/unsubscribe') return handlePushUnsubscribe(request, env)
   if (path === '/api/push/register-apns') return handleApnsRegister(request, env)
+  if (path === '/api/push/unregister-apns') return handleApnsUnregister(request, env)
 
   // Sala de revisió privada: cap peça nova no es publica fins que una persona
   // l'ha llegida aquí. Va abans que qualsevol altra pàgina perquè /revisio no
