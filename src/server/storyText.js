@@ -183,6 +183,20 @@ function cleanTitle(raw) {
     .trim()
 }
 
+// Darrera xarxa de seguretat per a errors lingüístics molt concrets que hem
+// observat en titulars publicats. Les substitucions són deliberadament
+// conservadores: no reescrivim paraules correctes com "la darrera edició" i
+// no toquem peces que s'hagin de publicar en una altra llengua.
+export function polishTitle(raw, language = 'ca') {
+  const title = String(raw || '')
+  if (!String(language || '').toLowerCase().startsWith('ca')) return title
+
+  return title
+    .replace(/\bdarrera\s+(seu|seva|seus|seves)\b/giu, 'darrere $1')
+    .replace(/\bnickelat\b/giu, 'niquelat')
+    .replace(/\bdefia\b/giu, 'desafia')
+}
+
 // Titulars de fins a 20 paraules. Els oficials —convocatòries, estudis— sovint
 // són més llargs, i abans això tombava tota la peça encara que el cos fos bo.
 // Aquí s'escurça pel primer tall NATURAL que hi hagi abans del límit (dos
@@ -520,7 +534,12 @@ export async function applyOwnContent(stories, env) {
     const hasOwnContent = Boolean(own.title && own.body)
     // Escurçat just abans de publicar: la peça no es perd mai per un titular
     // llarg, i el que arriba a la portada sempre té una llargada de titular.
-    const title = shortenTitle(own.title || genericTitle(e.story))
+    const title = shortenTitle(
+      polishTitle(
+        own.title || genericTitle(e.story),
+        e.story.outputLanguage || e.story.language || 'ca',
+      ),
+    )
     const body = own.body ? [own.body] : []
     // Encara que hi hagi brief per a la IA, passem sempre títol i categoria:
     // són el que compon la targeta de reserva si la generació no arriba.

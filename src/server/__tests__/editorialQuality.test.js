@@ -9,6 +9,7 @@ import {
 import {
   applyOwnContent,
   parseOwnContentBatch,
+  polishTitle,
   shortenTitle,
 } from '../storyText.js'
 
@@ -176,6 +177,34 @@ describe('titular llarg — s’escurça, no tomba la peça', () => {
     )
     expect(result.metrics.sentences).toBe(2)
     expect(result.issues).toEqual([])
+  })
+})
+
+describe('poliment lingüístic dels titulars', () => {
+  it('corregeix els errors detectats a la portada del 24-08-2026', () => {
+    expect(
+      polishTitle(
+        'El llac Bonneville va deixar darrera seu un paisatge únic',
+        'ca',
+      ),
+    ).toBe('El llac Bonneville va deixar darrere seu un paisatge únic')
+    expect(
+      polishTitle(
+        "La bretxa superconductora d'un nickelat ultraprim defia les expectatives",
+        'ca',
+      ),
+    ).toBe(
+      "La bretxa superconductora d'un niquelat ultraprim desafia les expectatives",
+    )
+  })
+
+  it('conserva els usos catalans correctes i les altres llengües', () => {
+    expect(polishTitle('La darrera edició amplia la cobertura', 'ca')).toBe(
+      'La darrera edició amplia la cobertura',
+    )
+    expect(polishTitle('La darrera edició amplia la cobertura', 'es')).toBe(
+      'La darrera edició amplia la cobertura',
+    )
   })
 })
 
