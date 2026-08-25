@@ -51,40 +51,46 @@ async function registerNativePush({ requestPermission }) {
         15000,
       )
 
-      void PushNotifications.addListener('registration', async (token) => {
-        try {
-          const previousToken = localStorage.getItem(NATIVE_PUSH_TOKEN_KEY)
-          const response = await fetch('/api/push/register-apns', {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ token: token.value, option: 'daily' }),
-          })
-          if (!response.ok) throw new Error('apns-registration-rejected')
-          localStorage.setItem(NATIVE_PUSH_TOKEN_KEY, token.value)
-          localStorage.setItem(NATIVE_PUSH_OPTION_KEY, 'daily')
-          if (previousToken && previousToken !== token.value) {
-            void fetch('/api/push/unregister-apns', {
+      const setupRegistration = async () => {
+        await PushNotifications.addListener('registration', async (token) => {
+          try {
+            const previousToken = localStorage.getItem(NATIVE_PUSH_TOKEN_KEY)
+            const response = await fetch('/api/push/register-apns', {
               method: 'POST',
               headers: { 'content-type': 'application/json' },
-              body: JSON.stringify({ token: previousToken }),
+              body: JSON.stringify({ token: token.value, option: 'daily' }),
             })
+            if (!response.ok) throw new Error('apns-registration-rejected')
+            localStorage.setItem(NATIVE_PUSH_TOKEN_KEY, token.value)
+            localStorage.setItem(NATIVE_PUSH_OPTION_KEY, 'daily')
+            if (previousToken && previousToken !== token.value) {
+              void fetch('/api/push/unregister-apns', {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ token: previousToken }),
+              })
+            }
+            window.clearTimeout(timeout)
+            finish(resolve, { enabled: true })
+          } catch (error) {
+            window.clearTimeout(timeout)
+            finish(reject, error)
           }
-          window.clearTimeout(timeout)
-          finish(resolve, { enabled: true })
-        } catch (error) {
+        })
+        await PushNotifications.addListener('registrationError', (error) => {
           window.clearTimeout(timeout)
           finish(reject, error)
-        }
-      })
-      void PushNotifications.addListener('registrationError', (error) => {
+        })
+        await PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
+          const url = action?.notification?.data?.url
+          if (url) window.location.href = url
+        })
+        await PushNotifications.register()
+      }
+      void setupRegistration().catch((error) => {
         window.clearTimeout(timeout)
         finish(reject, error)
       })
-      void PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
-        const url = action?.notification?.data?.url
-        if (url) window.location.href = url
-      })
-      void PushNotifications.register()
     })
   })()
 
