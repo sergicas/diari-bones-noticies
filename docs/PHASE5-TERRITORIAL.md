@@ -73,8 +73,9 @@ bindings ja existents.
 
 Cada col·lector fa una única petició. No hi ha reintents ni fan-out per element.
 El límit de tres és una invariant de l’aplicació, independent del pressupost
-global del Worker, que també serveix el pipeline editorial. Les respostes es
-limiten a 10 elements d’Agenda i 6 de RAISC; Idescat demana només 3 indicadors.
+global del Worker, que també serveix el pipeline editorial. El fetch d’Agenda
+demana 10 elements i el payload públic n’exposa com a màxim 6 per font; RAISC
+també en retorna com a màxim 6 i Idescat demana només 3 indicadors.
 
 ## Fonts oficials verificades
 
