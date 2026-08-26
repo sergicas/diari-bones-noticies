@@ -54,6 +54,7 @@ const ManifestView = lazy(() => import('./views/ManifestView.jsx'))
 const AboutView = lazy(() => import('./views/AboutView.jsx'))
 const DiagnosticView = lazy(() => import('./views/DiagnosticView.jsx'))
 const PreferencesView = lazy(() => import('./views/PreferencesView.jsx'))
+const TerritorialView = lazy(() => import('./views/TerritorialView.jsx'))
 
 const siteName = 'El Bon Diari'
 const siteUrl = 'https://bondiari.com'
@@ -151,6 +152,10 @@ function getRoute(path) {
 
   if (normalizedPath === '/estadistiques') {
     return { page: 'stats' }
+  }
+
+  if (normalizedPath === '/territori') {
+    return { page: 'territorial' }
   }
 
   if (normalizedPath === '/diagnostic' || normalizedPath === '/diagnosi') {
@@ -640,6 +645,7 @@ function waitForSwController() {
           import('./views/AboutView.jsx'),
           import('./views/DiagnosticView.jsx'),
           import('./views/PreferencesView.jsx'),
+          import('./views/TerritorialView.jsx'),
         ])
       } catch {
         // Ignorar fallades en offline inicial
@@ -1065,6 +1071,10 @@ function waitForSwController() {
       nextTitle = `Els meus interessos · ${siteName}`
       nextDescription =
         'Preferències locals de temes, territoris i notificacions, sense alterar l’ordre editorial de la portada.'
+    } else if (route.page === 'territorial') {
+      nextTitle = `Proximitat territorial · ${siteName}`
+      nextDescription =
+        'Agenda cultural, concessions públiques i indicadors oficials del Barcelonès i el Maresme.'
     } else if (route.page === 'home' && activeCategory !== 'Totes') {
       nextTitle = `${activeCategory} | ${siteName}`
       nextDescription = `Peces de la secció ${activeCategory}, filtrades amb criteri editorial i proximitat.`
@@ -1356,6 +1366,8 @@ function waitForSwController() {
                     onNavigate={navigate}
                   />
                 ) : null}
+
+                {route.page === 'territorial' ? <TerritorialView /> : null}
 
                 {route.page === 'diagnostic' ? <DiagnosticView /> : null}
               </Suspense>

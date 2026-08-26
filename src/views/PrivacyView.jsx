@@ -96,8 +96,10 @@ export function PrivacyView({ onNavigate }) {
             Fem servir l’emmagatzematge local del navegador o de l’app només per
             recordar preferències teves (temes i territoris d’interès, mida de
             lletra, llegibilitat, exclusió del comptador o estat dels avisos).
-            Els interessos de lectura es queden al teu dispositiu i no s’envien
-            enlloc.
+            Els interessos de lectura es queden al teu dispositiu. A la vista de
+            proximitat, el servidor rep només el codi de comarca quan demanes les
+            dades oficials; no el desa com a perfil i no fa servir la IP,
+            geolocalització ni permisos d’ubicació per decidir-la.
           </p>
         </section>
 

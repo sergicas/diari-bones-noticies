@@ -38,6 +38,7 @@ const lazyChunkPrefixes = [
   'ManifestView-',
   'AboutView-',
   'DiagnosticView-',
+  'TerritorialView-',
 ]
 
 for (const prefix of lazyChunkPrefixes) {
