@@ -38,6 +38,23 @@ npm run verify
 npm run deploy:staging
 ```
 
+### Smoke territorial de staging
+
+La fase territorial no necessita secrets ni migracions. Després del
+desplegament reversible, comprova les dues comarques, el hit de KV i la
+validació d’entrada:
+
+```bash
+curl -i 'https://bondiari-staging.sergicas.workers.dev/api/territorial?comarca=13'
+curl -i 'https://bondiari-staging.sergicas.workers.dev/api/territorial?comarca=21'
+curl -i 'https://bondiari-staging.sergicas.workers.dev/api/territorial?comarca=21'
+curl -i 'https://bondiari-staging.sergicas.workers.dev/api/territorial?comarca=99'
+```
+
+La segona petició a `21` ha de retornar `X-Bondiari-Cache: hit`; `99` ha de
+retornar `400`. Revisa també `/territori` amb teclat i els estats de càrrega,
+error parcial i buit descrits a `docs/PHASE5-TERRITORIAL.md`.
+
 ## Producció
 
 1. Confirma que la branca està verda a CI.

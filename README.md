@@ -108,6 +108,11 @@ El centre privat que resumeix si el sistema funciona correctament és a
 `/diagnostic`. La guia d’ús i els llindars d’alerta són a
 [`docs/PHASE3-CENTRE-OPERACIONS.md`](docs/PHASE3-CENTRE-OPERACIONS.md).
 
+La vista `/territori` consulta sota demanda l’Agenda Cultural, RAISC i Idescat
+per al Barcelonès i el Maresme, amb preferència local i sense geolocalització.
+El contracte, els TTL, el pressupost de subpeticions i els límits de qualitat
+són a [`docs/PHASE5-TERRITORIAL.md`](docs/PHASE5-TERRITORIAL.md).
+
 ## Refresc manual protegit
 
 L’endpoint `/api/refresh-news` només accepta `POST` amb un Bearer token. Crea el

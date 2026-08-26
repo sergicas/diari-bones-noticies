@@ -240,6 +240,8 @@ const STATIC_BODIES = {
     '<p>Si t’hi subscrius, es desa el teu correu per enviar-te el butlletí; te’n pots donar de baixa en qualsevol moment des de l’enllaç de cada enviament.</p>',
     '<h2>Notificacions push</h2>',
     '<p>El servidor guarda només la subscripció de l’aparell i l’opció triada. Els avisos són opcionals, tenen un topall d’un al dia i la baixa esborra la subscripció.</p>',
+    '<h2>Preferència de comarca</h2>',
+    '<p>La comarca preferida es guarda només al navegador. El servidor rep el codi 13 o 21 sota demanda per consultar les fonts oficials, sense desar-lo com a perfil i sense usar la IP ni geolocalització.</p>',
     '<h2>Els teus drets</h2>',
     '<p>Pots demanar accés, rectificació o supressió de qualsevol dada escrivint a sergicas@gmail.com.</p>',
     '</main>',
@@ -258,6 +260,14 @@ const STATIC_BODIES = {
     '<p>Tria temes i territoris per realçar peces sense canviar mai l’ordre editorial de la portada. Les preferències es guarden només al teu dispositiu.</p>',
     '<h2>Notificacions sense soroll</h2>',
     '<p>Pots rebre la peça del dia, amb un màxim d’un avís diari, o mantenir-les desactivades.</p>',
+    '</main>',
+  ].join(''),
+  '/territori': [
+    '<main class="ssr-content">',
+    '<h1>Proximitat territorial</h1>',
+    '<p>Agenda cultural, concessions públiques i indicadors oficials del Barcelonès i el Maresme.</p>',
+    '<h2>La comarca la tries tu</h2>',
+    '<p>La preferència es guarda només al navegador. No fem servir la IP ni geolocalització, i les fonts oficials es consulten sota demanda amb memòria cau pròpia.</p>',
     '</main>',
   ].join(''),
 }

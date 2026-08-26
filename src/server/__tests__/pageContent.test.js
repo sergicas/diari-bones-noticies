@@ -97,6 +97,13 @@ describe('renderContentPage', () => {
     expect(html).toContain('Creative Commons')
   })
 
+  it('serveix una base indexable i privada per a /territori', async () => {
+    const res = await renderContentPage(req('/territori'), makeEnv())
+    const html = await res.text()
+    expect(html).toContain('Proximitat territorial')
+    expect(html).toContain('No fem servir la IP ni geolocalització')
+  })
+
   it('serveix una pàgina de tema vàlida', async () => {
     const res = await renderContentPage(req('/tema/filosofia'), makeEnv())
     expect(res).not.toBeNull()

@@ -58,6 +58,14 @@ const staticPages = [
     priority: '0.7',
     changefreq: 'daily',
   },
+  {
+    path: '/territori',
+    title: `Proximitat territorial · ${siteName}`,
+    description:
+      'Agenda cultural, concessions públiques i indicadors oficials del Barcelonès i el Maresme.',
+    priority: '0.7',
+    changefreq: 'daily',
+  },
   // Una pàgina pròpia per a cada tema editorial.
   ...EDITORIAL_TOPIC_INDEX.map((topic) => ({
     path: `/tema/${topic.id}`,

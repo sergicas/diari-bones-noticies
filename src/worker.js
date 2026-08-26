@@ -37,6 +37,7 @@ import {
   handlePipelineBatch,
 } from './server/pipelineQueue.js'
 import { buildOperationalHealth } from './server/operationsHealth.js'
+import { handleTerritorialRequest } from './server/territorial.js'
 
 function jsonResponse(body, init = {}) {
   return new Response(JSON.stringify(body), {
@@ -617,6 +618,7 @@ async function route(request, env, ctx) {
   if (path === '/api/feed-health') return handleFeedHealth(request, env)
   if (path === '/api/pipeline-health') return handlePipelineHealth(request, env)
   if (path === '/api/pipeline-trigger') return handlePipelineTrigger(request, env)
+  if (path === '/api/territorial') return handleTerritorialRequest(request, env)
 
   // Il·lustració editorial pròpia de cada peça (generada per IA i cachejada).
   // Substitueix les fotos de premsa de tercers: cap risc de drets d'autor.

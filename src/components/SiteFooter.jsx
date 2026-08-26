@@ -8,6 +8,7 @@ export default function SiteFooter({ children, onNavigate }) {
     { href: '/estadistiques', label: 'Estadístiques' },
     { href: '/sobre', label: 'Sobre el diari' },
     { href: '/privacitat', label: 'Privacitat' },
+    { href: '/territori', label: 'Proximitat territorial' },
     { href: '/preferencies', label: 'Els meus interessos' },
   ]
 
