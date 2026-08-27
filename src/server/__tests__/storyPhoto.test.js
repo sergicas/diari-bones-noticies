@@ -193,6 +193,18 @@ describe('fotografia temàtica institucional', () => {
   it('reconeix només temes visuals explícitament admesos', () => {
     expect(thematicPhotoRuleFor(eclipseStory)?.query).toBe('solar eclipse')
     expect(
+      thematicPhotoRuleFor({
+        title: "Els pares influeixen en l'evolució dels seus fills, mostren experiments amb escarabats",
+        category: 'Ciència',
+      })?.query,
+    ).toBe('beetle insect')
+    expect(
+      thematicPhotoRuleFor({
+        title: 'Dogs blink more often when seeing owners blink',
+        category: 'Ciència',
+      })?.query,
+    ).toBe('domestic dog')
+    expect(
       thematicPhotoRuleFor({ title: 'Una nova teoria filosòfica', category: 'Cultura' }),
     ).toBeNull()
   })

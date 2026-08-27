@@ -81,7 +81,7 @@ const PLACE_PHOTO_EXCLUDED_FORMATS = new Set([
 // Incrementar aquesta versió fa que les peces que havien esgotat una cerca
 // amb una política antiga es tornin a comprovar una sola vegada. Evita haver
 // de buidar KV i, alhora, impedeix repetir subpeticions a cada refresc.
-export const PHOTO_SEARCH_VERSION = 2
+export const PHOTO_SEARCH_VERSION = 4
 
 const NASA_USAGE_GUIDELINES_URL =
   'https://www.nasa.gov/nasa-brand-center/images-and-media/'
@@ -136,6 +136,20 @@ const THEMATIC_PHOTO_RULES = [
     query: 'North Atlantic right whale',
     pattern: /\b(balena\s+franca|north\s+atlantic\s+right\s+whale)\b/i,
     terms: ['right whale', 'north atlantic right whale'],
+  },
+  {
+    // Tema prou inequívoc per emprar una fotografia d'arxiu de l'animal.
+    // La coincidència de metadades de Commons continua essent obligatòria.
+    id: 'beetle',
+    query: 'beetle insect',
+    pattern: /\b(escarabats?|cole[oò]pters?|beetles?)\b/i,
+    terms: ['beetle', 'coleoptera'],
+  },
+  {
+    id: 'dog',
+    query: 'domestic dog',
+    pattern: /\b(gossos?|canins?|dogs?)\b/i,
+    terms: ['domestic dog', 'dog', 'canis familiaris'],
   },
 ]
 
