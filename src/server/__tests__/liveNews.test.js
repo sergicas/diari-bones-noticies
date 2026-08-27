@@ -23,6 +23,8 @@ import {
   enforcePublicationInvariants,
   keepsEditorialClearance,
   isMaritimeRescue,
+  compactSeenEntries,
+  excludePreviouslyProcessedStories,
 } from '../liveNews.js'
 import {
   ALLOWED_EDITORIAL_TOPICS,
@@ -114,6 +116,47 @@ describe('quota KV — escriptures acotades', () => {
       ...cached,
       cache: 'stale-readonly',
     })
+  })
+})
+
+describe('edició diària — cap candidata processada no bloqueja les noves', () => {
+  it('exclou abans del tall tot el que ja consta a D1', () => {
+    const stories = [
+      { id: 'rebutjada', url: 'https://example.com/rebutjada' },
+      { id: 'pendent', url: 'https://example.com/pendent' },
+      { id: 'publicada', url: 'https://example.com/publicada' },
+      { id: 'nova', url: 'https://example.com/nova' },
+    ]
+    const decisions = new Map([
+      ['rebutjada', { status: 'rejected' }],
+      ['pendent', { status: 'captured' }],
+      ['publicada', { status: 'published', autoDecision: 'approve' }],
+    ])
+
+    expect(excludePreviouslyProcessedStories(stories, decisions)).toEqual([
+      stories[3],
+    ])
+  })
+
+  it('deduplica la memòria curta i conserva la marca més recent', () => {
+    const now = Date.parse('2026-08-27T12:00:00.000Z')
+    const recent = now - 60_000
+    const newer = now - 30_000
+    const expired = now - 15 * 24 * 60 * 60 * 1000
+
+    expect(
+      compactSeenEntries(
+        [
+          { url: 'https://example.com/repetida', firstSeenAt: recent },
+          { url: 'https://example.com/repetida', firstSeenAt: newer },
+          { url: 'https://example.com/caducada', firstSeenAt: expired },
+          { url: '', firstSeenAt: now },
+        ],
+        now,
+      ),
+    ).toEqual([
+      { url: 'https://example.com/repetida', firstSeenAt: newer },
+    ])
   })
 })
 

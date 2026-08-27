@@ -77,6 +77,13 @@ export function buildManualRefreshQueueMessage({
   }
 }
 
+export function dailyEditionNeedsRetry(message, payload) {
+  return (
+    message?.distribution === 'daily' &&
+    Number(payload?.publishedCount || 0) < 1
+  )
+}
+
 function isPipelineMessage(value) {
   return Boolean(
     value &&
@@ -145,6 +152,13 @@ async function processRefreshMessage(env, message) {
   if (payload.cache === 'transient') {
     throw new Error('no s’ha pogut desar el lot públic (transient)')
   }
+  // El cron del matí no es pot donar per bo amb una edició reciclada. Cada
+  // reintent avança el pool perquè les candidates processades ja han quedat
+  // memoritzades; així la cua prova el següent grup fins que publica almenys
+  // una notícia nova o deixa una fallada visible després de tots els intents.
+  if (dailyEditionNeedsRetry(message, payload)) {
+    throw new Error('l’edició diària no ha publicat cap notícia nova')
+  }
   const edition = await persistEditorialEdition(env, payload, {
     slot: message.slot,
     trigger: 'queue',
@@ -160,6 +174,7 @@ async function processRefreshMessage(env, message) {
     storyCount: edition.storyCount,
     cache: payload.cache || null,
     updatedAt: payload.updatedAt || null,
+    publishedCount: Number(payload.publishedCount || 0),
     distribution,
   }
   await completePipelineJob(env, message.idempotencyKey, result)
