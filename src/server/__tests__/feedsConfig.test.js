@@ -54,6 +54,27 @@ describe('rssFeeds catalog integrity', () => {
     expect(byName.has('NOIRLab')).toBe(false)
   })
 
+  it('amplia el radar amb fonts editorials originals sense reobrir generalistes', () => {
+    const byName = new Map(rssFeeds.map((feed) => [feed.name, feed]))
+    const ampliades = [
+      'Mètode', 'Diari de la Sanitat', 'Casal dels Infants', "Diari de l'Educació",
+      'The Conversation (ES)', 'Positive News', 'Good News Network',
+      'Reasons to be Cheerful', 'The Conversation', 'Science Daily',
+      'BBC Science', 'Guardian Science', 'BBC Technology', 'Guardian Culture',
+      'Smithsonian',
+    ]
+
+    for (const name of ampliades) {
+      expect(byName.get(name), name).toMatchObject({
+        circuit: 'B',
+        activation: { required: true, licenseConfirmed: true },
+      })
+      expect(byName.get(name)?.enabled, name).not.toBe(false)
+    }
+
+    expect(rssFeeds.filter((feed) => feed.enabled !== false)).toHaveLength(30)
+  })
+
   // El sostre per llengua de la portada fa que només el català (sense límit) i
   // el castellà (fins a 6) puguin fer créixer l'edició; l'anglès es queda en 3 i
   // el francès, l'italià i el portuguès en 1. Per això aquestes dues llengües es

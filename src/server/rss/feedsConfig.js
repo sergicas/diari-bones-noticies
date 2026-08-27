@@ -42,6 +42,16 @@ export const maxStoriesPerLanguage = NOMES_FONTS_DEL_GIR
 
 export const sections = []
 
+// Les fonts d'aquest circuit només serveixen per detectar fets i pistes. La
+// peça final sempre és una redacció pròpia en català, sense reutilitzar-ne ni
+// el text ni les imatges. Centralitzar-ho evita activar un mitjà editorial amb
+// una llicència de reutilització equivocada.
+const circuitEditorialOriginal = {
+  circuit: 'B',
+  reuseLicense: 'Pista: redacció original obligatòria',
+  activation: { required: true, licenseConfirmed: true },
+}
+
 // Catàleg complet de fonts. El que el radar consulta de debò és `rssFeeds`,
 // que es deriva d'aquesta llista just després de tancar-la.
 const catalegDeFonts = [
@@ -257,6 +267,8 @@ const catalegDeFonts = [
     language: 'ca',
     defaultCategory: 'Ciència',
     forceCategory: true,
+    sourceTopic: 'Ciència',
+    ...circuitEditorialOriginal,
   },
   {
     name: 'Diari de la Sanitat',
@@ -264,6 +276,8 @@ const catalegDeFonts = [
     language: 'ca',
     defaultCategory: 'Salut',
     forceCategory: true,
+    sourceTopic: 'Salut',
+    ...circuitEditorialOriginal,
   },
   // Gent que treballa pels altres. De setze organitzacions provades el
   // 27-07-2026, l'única catalana amb feed viu i peces que entren (2/10).
@@ -275,6 +289,8 @@ const catalegDeFonts = [
     language: 'ca',
     defaultCategory: 'Solidaritat',
     forceCategory: true,
+    sourceTopic: 'Solidaritat',
+    ...circuitEditorialOriginal,
   },
   {
     name: "Diari de l'Educació",
@@ -282,6 +298,8 @@ const catalegDeFonts = [
     language: 'ca',
     defaultCategory: 'Educació',
     forceCategory: true,
+    sourceTopic: 'Educació',
+    ...circuitEditorialOriginal,
   },
 
   // ===================== CASTELLÀ (només obert/gratuït) =====================
@@ -299,34 +317,34 @@ const catalegDeFonts = [
   // de la font. Provades a mà (10/08/2026): fresques, sense articles morts;
   // Xataka té alguna oferta comercial ocasional, ja coberta pel filtre
   // d'advertorial/paraules d'oferta existent.
-  { name: 'The Conversation (ES)', url: 'https://theconversation.com/es/articles.atom', language: 'es', defaultCategory: 'Coneixement' },
+  { name: 'The Conversation (ES)', url: 'https://theconversation.com/es/articles.atom', language: 'es', defaultCategory: 'Coneixement', sourceTopic: 'Coneixement', ...circuitEditorialOriginal },
   { name: 'Xataka', url: 'https://www.xataka.com/index.xml', language: 'es', defaultCategory: 'Actualitat' },
 
   // ===================== ANGLÈS =====================
   { name: 'BBC', url: 'https://feeds.bbci.co.uk/news/world/rss.xml', language: 'en', defaultCategory: 'Món', core: true },
   // Diaris de bones notícies (ja curats: passen sense exigir paraula positiva).
-  { name: 'Positive News', url: 'https://www.positive.news/feed/', language: 'en', defaultCategory: 'Món', lenient: true, curated: true, core: true },
-  { name: 'Good News Network', url: 'https://www.goodnewsnetwork.org/feed/', language: 'en', defaultCategory: 'Món', lenient: true, curated: true },
-  { name: 'Reasons to be Cheerful', url: 'https://reasonstobecheerful.world/feed/', language: 'en', defaultCategory: 'Món', lenient: true, curated: true },
+  { name: 'Positive News', url: 'https://www.positive.news/feed/', language: 'en', defaultCategory: 'Món', lenient: true, curated: true, core: true, sourceTopic: 'Solucions', ...circuitEditorialOriginal },
+  { name: 'Good News Network', url: 'https://www.goodnewsnetwork.org/feed/', language: 'en', defaultCategory: 'Món', lenient: true, curated: true, sourceTopic: 'Solucions', ...circuitEditorialOriginal },
+  { name: 'Reasons to be Cheerful', url: 'https://reasonstobecheerful.world/feed/', language: 'en', defaultCategory: 'Món', lenient: true, curated: true, sourceTopic: 'Solucions', ...circuitEditorialOriginal },
   { name: 'The Guardian', url: 'https://www.theguardian.com/world/rss', language: 'en', defaultCategory: 'Món' },
   { name: 'CNN', url: 'http://rss.cnn.com/rss/edition.rss', language: 'en', defaultCategory: 'Món' },
   { name: 'Al Jazeera', url: 'https://www.aljazeera.com/xml/rss/all.xml', language: 'en', defaultCategory: 'Món' },
   { name: 'NPR', url: 'https://feeds.npr.org/1001/rss.xml', language: 'en', defaultCategory: 'Món' },
   { name: 'Sky News', url: 'https://feeds.skynews.com/feeds/rss/world.xml', language: 'en', defaultCategory: 'Món' },
   { name: 'The Independent', url: 'https://www.independent.co.uk/news/world/rss', language: 'en', defaultCategory: 'Món' },
-  { name: 'The Conversation', url: 'https://theconversation.com/articles.atom', language: 'en', defaultCategory: 'Coneixement' },
-  { name: 'Science Daily', url: 'https://www.sciencedaily.com/rss/all.xml', language: 'en', defaultCategory: 'Ciència', forceCategory: true },
+  { name: 'The Conversation', url: 'https://theconversation.com/articles.atom', language: 'en', defaultCategory: 'Coneixement', sourceTopic: 'Coneixement', ...circuitEditorialOriginal },
+  { name: 'Science Daily', url: 'https://www.sciencedaily.com/rss/all.xml', language: 'en', defaultCategory: 'Ciència', forceCategory: true, sourceTopic: 'Ciència', ...circuitEditorialOriginal },
   {
     name: 'Phys.org', url: 'https://phys.org/rss-feed/', language: 'en', outputLanguage: 'ca', defaultCategory: 'Ciència', forceCategory: true,
     circuit: 'B', reuseLicense: 'Pista: redacció original obligatòria', activation: { required: true, licenseConfirmed: true },
   },
-  { name: 'BBC Science', url: 'https://feeds.bbci.co.uk/news/science_and_environment/rss.xml', language: 'en', defaultCategory: 'Ciència', forceCategory: true },
-  { name: 'Guardian Science', url: 'https://www.theguardian.com/science/rss', language: 'en', defaultCategory: 'Ciència', forceCategory: true },
-  { name: 'BBC Technology', url: 'https://feeds.bbci.co.uk/news/technology/rss.xml', language: 'en', defaultCategory: 'Tecnologia', forceCategory: true },
+  { name: 'BBC Science', url: 'https://feeds.bbci.co.uk/news/science_and_environment/rss.xml', language: 'en', defaultCategory: 'Ciència', forceCategory: true, sourceTopic: 'Ciència', ...circuitEditorialOriginal },
+  { name: 'Guardian Science', url: 'https://www.theguardian.com/science/rss', language: 'en', defaultCategory: 'Ciència', forceCategory: true, sourceTopic: 'Ciència', ...circuitEditorialOriginal },
+  { name: 'BBC Technology', url: 'https://feeds.bbci.co.uk/news/technology/rss.xml', language: 'en', defaultCategory: 'Tecnologia', forceCategory: true, sourceTopic: 'Tecnologia', ...circuitEditorialOriginal },
   { name: 'TechCrunch', url: 'https://techcrunch.com/feed/', language: 'en', defaultCategory: 'Tecnologia', forceCategory: true },
   { name: 'The Verge', url: 'https://www.theverge.com/rss/index.xml', language: 'en', defaultCategory: 'Tecnologia', forceCategory: true },
-  { name: 'Guardian Culture', url: 'https://www.theguardian.com/culture/rss', language: 'en', defaultCategory: 'Cultura', forceCategory: true },
-  { name: 'Smithsonian', url: 'https://www.smithsonianmag.com/rss/latest_articles/', language: 'en', defaultCategory: 'Cultura', forceCategory: true },
+  { name: 'Guardian Culture', url: 'https://www.theguardian.com/culture/rss', language: 'en', defaultCategory: 'Cultura', forceCategory: true, sourceTopic: 'Cultura', ...circuitEditorialOriginal },
+  { name: 'Smithsonian', url: 'https://www.smithsonianmag.com/rss/latest_articles/', language: 'en', defaultCategory: 'Cultura', forceCategory: true, sourceTopic: 'Cultura', ...circuitEditorialOriginal },
   { name: 'Euronews', url: 'https://www.euronews.com/rss?level=theme&name=news', language: 'en', defaultCategory: 'Europa' },
 
   // ===================== PORTUGUÈS (només obert/gratuït) =====================
