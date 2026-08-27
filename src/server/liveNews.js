@@ -2549,13 +2549,29 @@ export async function getLiveNewsPayload(
     }
   }
 
-  // Fase 4: foto real de Wikimedia Commons només per a peces centrades en un
-  // lloc concret. Els actes conserven la il·lustració pròpia; si Commons falla,
-  // el radar no s'atura mai per una foto.
+  // Foto real amb porta de drets fail-closed: primer es preserven les imatges
+  // institucionals ja verificades; després es prova NASA per temes espacials i
+  // Commons per llocs o temes explícitament admesos. Si qualsevol proveïdor
+  // falla, el radar conserva la il·lustració i continua publicant.
   try {
-    await attachRealPhotos(publishedStories)
+    const found = await attachRealPhotos(publishedStories)
+    console.log(
+      JSON.stringify({
+        event: 'photo.enrichment.completed',
+        stories: publishedStories.length,
+        found,
+        verifiedPhotos: publishedStories.filter(
+          (story) => story.imageRights?.verified === true,
+        ).length,
+      }),
+    )
   } catch (error) {
-    console.warn('[fotos] No s’han pogut cercar fotos reals', error?.message)
+    console.warn(
+      JSON.stringify({
+        event: 'photo.enrichment.failed',
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    )
   }
 
   // Marquem com a "vistes" NOMÉS les noves que de debò entren al lot. Una

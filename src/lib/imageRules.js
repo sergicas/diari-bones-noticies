@@ -78,9 +78,18 @@ export function hasExplicitlyIncompatibleThirdPartyRights(story) {
 
 export function hasPermissiveImageLicense(license) {
   const normalized = String(license || '').toLowerCase().replace(/\s+/g, ' ')
-  return /\bcc\s*[- ]?by(?:\s*[- ]?sa)?\b|\bcc0\b|public domain|domini públic|pdm\b|gnu free documentation|free art license/.test(
-    normalized,
-  )
+  // CC BY-NC i CC BY-ND contenen literalment "CC BY", però no són
+  // llicències lliures: la primera prohibeix l'ús comercial i la segona les
+  // adaptacions. Es rebutgen abans de comprovar les variants permeses perquè
+  // una coincidència parcial no les pugui deixar passar.
+  if (
+    /(?:^|[-\s])(?:nc|nd)(?:[-\s\d.]|$)|non[-\s]?commercial|no[-\s]?derivatives?/.test(
+      normalized,
+    )
+  ) {
+    return false
+  }
+  return /\bcc\s*[- ]?by(?:\s*[- ]?sa)?(?:\s*\d(?:\.\d)?)?\b|\bcc0(?:\s*\d(?:\.\d)?)?\b|public domain|domini públic|pdm\b|gnu free documentation|free art license/.test(normalized)
 }
 
 // Un crèdit identifica la font, però no concedeix permís de reutilització.
