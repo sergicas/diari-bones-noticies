@@ -2005,7 +2005,7 @@ export async function collectLivePositiveNews(env, { seenUrls } = {}) {
       )
     })
 
-  // `seen-urls-v4` és una acceleració de KV, no la font de veritat. D1 conserva
+  // `seen-urls-v5` és una acceleració de KV, no la font de veritat. D1 conserva
   // totes les decisions editorials i impedeix que una rebutjada o una peça ja
   // publicada torni a gastar IA i, sobretot, a expulsar les notícies noves del
   // tall de `collectionPoolSize`.
@@ -2073,9 +2073,10 @@ async function setCachedPayload(kv, stories) {
 
 // --- Memòria d'URLs ja servides (perquè cada dia hi hagi peces noves) -----
 
-// v4 permet reavaluar les URL de l'edició antiga amb els nous criteris de
-// qualitat i el context de font ampliat.
-const seenUrlsKey = 'seen-urls-v4'
+// v5 recupera les candidates que v4 havia marcat com a processades abans que
+// poguessin rebre contingut propi. D1 continua impedint reprocessar qualsevol
+// decisió editorial o publicació ja persistent.
+const seenUrlsKey = 'seen-urls-v5'
 const seenUrlsRetentionMs = 14 * 24 * 60 * 60 * 1000
 const minFreshStoriesForFullRefresh = 10
 
@@ -2208,15 +2209,16 @@ function ensureCategoryCoverage(capped, pool, limit) {
 // pel mateix llistó. Sense aquest pas, `stale-awaiting-review` podia recuperar
 // un lot antic de 16 peces amb 10 de la mateixa font i textos que ja no
 // superaven les regles editorials vigents.
-export function enforcePublicationInvariants(
+// Ordena i acota el lot de treball abans de redactar-lo. En aquest punt les
+// candidates encara són material RSS cru i, per definició, no tenen
+// `ownContent` ni un cos editorial complet. Aplicar-hi `selectPublishableStories`
+// les eliminava totes abans que `applyOwnContent` pogués escriure-les.
+export function balancePublicationMix(
   stories,
   limit = targetStoryLimit,
 ) {
-  const qualityStories = selectPublishableStories(
-    Array.isArray(stories) ? stories : [],
-  )
   const languageBalanced = capPerLanguage(
-    qualityStories,
+    Array.isArray(stories) ? stories : [],
     maxStoriesPerLanguage,
   )
   const categoryBalanced = capPerCategory(languageBalanced)
@@ -2228,6 +2230,19 @@ export function enforcePublicationInvariants(
   return applyDiversityCap(
     storiesWithCoverage,
     maxStoriesPerSource,
+    limit,
+  )
+}
+
+// Porta final: quan el text ja és propi, a més de diversitat exigeix tota la
+// qualitat editorial. Aquesta funció continua blindant lots antics i totes les
+// escriptures públiques de `tancaEdicio`.
+export function enforcePublicationInvariants(
+  stories,
+  limit = targetStoryLimit,
+) {
+  return balancePublicationMix(
+    selectPublishableStories(Array.isArray(stories) ? stories : []),
     limit,
   )
 }
@@ -2477,7 +2492,7 @@ export async function getLiveNewsPayload(
   // Acotem les llengües foranes ABANS de la diversitat per font, perquè el
   // català i el castellà mai no quedin fora encara que un dia hi hagi allau de
   // notícies europees.
-  const finalStories = enforcePublicationInvariants(preDiversity)
+  const finalStories = balancePublicationMix(preDiversity)
 
   // BLINDATGE DE DRETS D'AUTOR: sigui quin sigui l'origen de la peça (fresca
   // d'aquest refresc o arrossegada d'un lot anterior amb el codi antic),
