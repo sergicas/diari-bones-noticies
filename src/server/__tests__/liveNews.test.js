@@ -20,6 +20,7 @@ import {
   isTickerCacheFresh,
   storiesRequiringDetailPersistence,
   getLiveNewsPayload,
+  balancePublicationMix,
   enforcePublicationInvariants,
   keepsEditorialClearance,
   isMaritimeRescue,
@@ -1226,6 +1227,23 @@ describe('applyDiversityCap — sostre per font', () => {
     expect(result.some((story) => story.impact.includes('revolucionar'))).toBe(
       false,
     )
+  })
+
+  it('no descarta les candidates RSS abans que es redactin amb contingut propi', () => {
+    const rawCandidates = [
+      {
+        url: 'https://example.com/troballa-nova',
+        title: 'Un equip identifica una nova via per protegir els oceans',
+        source: 'Guardian Science',
+        category: 'Ciència',
+        language: 'en',
+        outputLanguage: 'ca',
+      },
+    ]
+
+    expect(balancePublicationMix(rawCandidates)).toEqual(rawCandidates)
+    // La porta final continua fallant tancada mentre encara no hi ha cos propi.
+    expect(enforcePublicationInvariants(rawCandidates)).toEqual([])
   })
 })
 
