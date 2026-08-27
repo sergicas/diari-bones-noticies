@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   buildManualRefreshQueueMessage,
   buildRefreshQueueMessage,
+  dailyEditionNeedsRetry,
   handlePipelineBatch,
 } from '../pipelineQueue.js'
 
@@ -29,6 +30,27 @@ describe('editorial queue pipeline', () => {
       distribution: 'none',
       idempotencyKey: 'manual:test',
     })
+  })
+
+  it('reintenta el cron del matí fins que hi ha una notícia nova', () => {
+    expect(
+      dailyEditionNeedsRetry(
+        { distribution: 'daily' },
+        { publishedCount: 0 },
+      ),
+    ).toBe(true)
+    expect(
+      dailyEditionNeedsRetry(
+        { distribution: 'daily' },
+        { publishedCount: 1 },
+      ),
+    ).toBe(false)
+    expect(
+      dailyEditionNeedsRetry(
+        { distribution: 'none' },
+        { publishedCount: 0 },
+      ),
+    ).toBe(false)
   })
 
   it('retries invalid messages instead of acknowledging them', async () => {

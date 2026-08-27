@@ -1876,6 +1876,16 @@ function sourceMaterialScore(story) {
   return tierScore + localScore + Math.min(5, Math.floor(contextWords / 40))
 }
 
+// D1 és la memòria editorial permanent. Una URL que ja hi consta —aprovada,
+// pendent o rebutjada— no pot tornar a ocupar el tall de candidates noves.
+//
+// La memòria curta de KV caduca al cap de catorze dies. Sense aquesta segona
+// barrera, les rebutjades tornaven a entrar de trenta en trenta, omplien tot el
+// pool abans d'arribar a les notícies del dia i deixaven la portada congelada.
+export function excludePreviouslyProcessedStories(stories, decisions = new Map()) {
+  return (stories || []).filter((story) => !decisions.has(candidateId(story)))
+}
+
 // `seenUrls`: notícies que ja s'han publicat alguna vegada (clau seen-urls, 14
 // dies). S'aparten AQUÍ, abans de jutjar i abans de retallar la reserva.
 //
@@ -1964,7 +1974,7 @@ export async function collectLivePositiveNews(env, { seenUrls } = {}) {
   // paraula clau primer), perquè la IA gasti el pressupost de crides en les més
   // probables de sortir.
   const alreadyPublished = seenUrls instanceof Set ? seenUrls : new Set()
-  const recents = [...uniqueStories.values()]
+  const candidatesWithinWindow = [...uniqueStories.values()]
     // Barrera temàtica permanent: cap peça no arriba al porter de positivitat
     // si no és Cultura, Esports, Ciència, Tecnologia, Societat, Religió,
     // Solidaritat o Educació. També reclassifica etiquetes tècniques com
@@ -1994,6 +2004,19 @@ export async function collectLivePositiveNews(env, { seenUrls } = {}) {
         timeRight - timeLeft
       )
     })
+
+  // `seen-urls-v4` és una acceleració de KV, no la font de veritat. D1 conserva
+  // totes les decisions editorials i impedeix que una rebutjada o una peça ja
+  // publicada torni a gastar IA i, sobretot, a expulsar les notícies noves del
+  // tall de `collectionPoolSize`.
+  const previousDecisions = await readDecisions(
+    env,
+    candidatesWithinWindow.map(candidateId),
+  )
+  const recents = excludePreviouslyProcessedStories(
+    candidatesWithinWindow,
+    previousDecisions,
+  )
 
   // La IA revisa les candidates: veta les dolentes que han colat per paraula clau
   // i rescata les bones neutres. Una positiva encara no jutjada es mostra provi-
@@ -2066,11 +2089,25 @@ async function loadSeenEntries(kv) {
   }
 }
 
-async function saveSeenEntries(kv, entries) {
-  const cutoff = Date.now() - seenUrlsRetentionMs
-  const pruned = entries.filter((entry) => Number(entry.firstSeenAt) > cutoff)
+export function compactSeenEntries(entries, now = Date.now()) {
+  const cutoff = now - seenUrlsRetentionMs
+  const byUrl = new Map()
+  for (const entry of entries || []) {
+    const url = String(entry?.url || '').trim()
+    const firstSeenAt = Number(entry?.firstSeenAt)
+    if (!url || !Number.isFinite(firstSeenAt) || firstSeenAt <= cutoff) continue
+    const previous = byUrl.get(url)
+    if (!previous || firstSeenAt > previous.firstSeenAt) {
+      byUrl.set(url, { url, firstSeenAt })
+    }
+  }
+  return [...byUrl.values()]
+}
+
+async function saveSeenEntries(kv, entries, now = Date.now()) {
+  const compacted = compactSeenEntries(entries, now)
   try {
-    await kv.put(seenUrlsKey, JSON.stringify({ entries: pruned }))
+    await kv.put(seenUrlsKey, JSON.stringify({ entries: compacted }))
   } catch (error) {
     console.warn('No s’ha pogut escriure la memòria d’URLs vistes', error)
   }
@@ -2397,7 +2434,13 @@ export async function getLiveNewsPayload(
       etiqueta: 'stale',
       nomesSiCanvia: true,
     })
-    return { ...payload, cache: 'stale' }
+    return {
+      ...payload,
+      cache: 'stale',
+      freshCount: freshStories.length,
+      processedCount: 0,
+      publishedCount: 0,
+    }
   }
 
   // (El marcatge de "vistes" es fa MÉS AVALL, només per a les que de debò entren
@@ -2482,6 +2525,9 @@ export async function getLiveNewsPayload(
       return {
         ...payload,
         cache: 'stale-incomplete',
+        freshCount: freshStories.length,
+        processedCount: 0,
+        publishedCount: 0,
         qualityRejectedCount,
         qualityRejectedByIssue,
       }
@@ -2557,21 +2603,31 @@ export async function getLiveNewsPayload(
   approvedStories.push(...passada.aprovades)
   perSincronitzar.push(...passada.aprovades)
 
-  // Es marquen `pendingStories` SENCERES: totes han quedat desades a la sala i
-  // no se n'ha descartat cap per semblar repetida. Si no es marquessin, el
-  // radar les tornaria a recollir i a fer escriure a cada passada, cremant
-  // quota per proposar el que ja espera que algú el llegeixi.
-  const shownFreshUrls = [...approvedStories, ...pendingStories]
-    .filter((story) => freshUrlSet.has(story.url))
-    .map((story) => story.url)
-  if (shownFreshUrls.length > 0) {
+  // Una candidata que ja ha completat aquesta passada no pot tornar a ocupar
+  // el pool: això inclou explícitament les rebutjades. Abans només es recordaven
+  // aprovades i pendents; trenta descartades quedaven reciclant-se per sempre i
+  // no deixaven arribar les notícies del dia.
+  const processedFreshUrls = [...new Set(freshStories.map((story) => story.url))]
+  if (processedFreshUrls.length > 0) {
     const now = Date.now()
     const updatedSeen = [
       ...seenEntries,
-      ...shownFreshUrls.map((url) => ({ url, firstSeenAt: now })),
+      ...processedFreshUrls.map((url) => ({ url, firstSeenAt: now })),
     ]
-    await saveSeenEntries(kv, updatedSeen)
+    await saveSeenEntries(kv, updatedSeen, now)
   }
+
+  // Aquesta és la mesura honesta de novetat pública: URL que entra ara al lot
+  // i que no hi era abans de començar la passada. No compta candidates, dubtes
+  // ni una reescriptura del mateix lot antic.
+  const cachedUrls = new Set(cachedStories.map((story) => story.url))
+  const newlyPublishedUrls = [
+    ...new Set(
+      approvedStories
+        .filter((story) => !cachedUrls.has(story.url))
+        .map((story) => story.url),
+    ),
+  ]
 
   try {
     // MAI un diari en blanc. Si un dia no hi ha res aprovat —perquè ningú no ha
@@ -2590,19 +2646,26 @@ export async function getLiveNewsPayload(
         etiqueta: 'stale-awaiting-review',
         nomesSiCanvia: true,
       })
-      return { ...payload, cache: 'stale-awaiting-review' }
+      return {
+        ...payload,
+        cache: 'stale-awaiting-review',
+        freshCount: freshStories.length,
+        processedCount: processedFreshUrls.length,
+        publishedCount: 0,
+      }
     }
     // Una sola porta: desa els detalls, escriu el lot i marca. Els detalls que
     // toquen són els de les peces que entren per primer cop (les arrossegades
     // ja tenen la còpia, i reescriure-les cremava quota de KV sense canviar
     // res) més, sempre, les aprovades que s'estan recuperant.
     const payload = await tancaEdicio(approvedStories, {
-      detallDe: storiesRequiringDetailPersistence(approvedStories, shownFreshUrls),
+      detallDe: storiesRequiringDetailPersistence(approvedStories, newlyPublishedUrls),
       etiqueta: 'refresh',
+      nomesSiCanvia: newlyPublishedUrls.length === 0,
     })
     await updateEditorialStats(kv, {
       reviewed: reviewedThisPass,
-      published: shownFreshUrls.length,
+      published: newlyPublishedUrls.length,
     })
 
     const cronDurationMs = Date.now() - runStartTime
@@ -2611,7 +2674,8 @@ export async function getLiveNewsPayload(
       runStartTime,
       cronDurationMs,
       reviewedThisPass,
-      publishedCount: shownFreshUrls.length,
+      processedCount: processedFreshUrls.length,
+      publishedCount: newlyPublishedUrls.length,
       totalStories: approvedStories.length,
       pendingReviewCount: pendingStories.length,
       qualityRejectedCount,
@@ -2641,15 +2705,19 @@ export async function getLiveNewsPayload(
     }
 
     const cacheLabel =
-      freshStories.length >= minFreshStoriesForFullRefresh
+      newlyPublishedUrls.length >= minFreshStoriesForFullRefresh
         ? 'refresh-fresh'
-        : freshStories.length > 0
+        : newlyPublishedUrls.length > 0
         ? 'refresh-merged'
+        : freshStories.length > 0
+        ? 'refresh-no-publication'
         : 'refresh-no-new'
     return {
       ...payload,
       cache: cacheLabel,
       freshCount: freshStories.length,
+      processedCount: processedFreshUrls.length,
+      publishedCount: newlyPublishedUrls.length,
       totalCandidates: allStories.length,
       reviewedThisPass,
       cronDurationMs,
@@ -2667,6 +2735,9 @@ export async function getLiveNewsPayload(
       // peces sense revisar les publicaria per la porta del darrere.
       stories: approvedStories,
       cache: 'transient',
+      freshCount: freshStories.length,
+      processedCount: processedFreshUrls.length,
+      publishedCount: newlyPublishedUrls.length,
       qualityRejectedCount,
       qualityRejectedByIssue,
     }
