@@ -2,10 +2,14 @@
 
 import { describe, it, expect } from 'vitest'
 import {
+  PHOTO_SEARCH_VERSION,
   extractPlace,
   isPlacePhotoEligible,
+  thematicPhotoRuleFor,
   buildCommonsSearchUrl,
   pickBestCommonsPhoto,
+  buildNasaSearchUrl,
+  pickBestNasaPhoto,
   attachRealPhotos,
   sanitizeStoryPhoto,
 } from '../storyPhoto.js'
@@ -28,6 +32,31 @@ function photoPage(title, overrides = {}) {
           LicenseShortName: { value: 'CC BY-SA 4.0' },
         },
         ...overrides,
+      },
+    ],
+  }
+}
+
+function nasaResponse(items) {
+  return { collection: { items } }
+}
+
+function nasaPhoto(overrides = {}) {
+  return {
+    data: [
+      {
+        nasa_id: 'NHQ202404080308',
+        title: 'Total solar eclipse above Indianapolis',
+        description: 'The Moon passes in front of the Sun during a total solar eclipse.',
+        photographer: 'Bill Ingalls',
+        keywords: ['solar eclipse', 'Sun', 'Moon'],
+        ...overrides,
+      },
+    ],
+    links: [
+      {
+        render: 'image',
+        href: 'https://images-assets.nasa.gov/image/NHQ202404080308/NHQ202404080308~thumb.jpg',
       },
     ],
   }
@@ -135,9 +164,129 @@ describe('pickBestCommonsPhoto', () => {
     expect(pickBestCommonsPhoto(response, 'lloc')).toBeNull()
   })
 
+  it('rebutja una foto lliure si no coincideix amb el tema demanat', () => {
+    const response = commonsResponse([photoPage('File:Mountain landscape.jpg')])
+    expect(
+      pickBestCommonsPhoto(response, 'wetland', {
+        kind: 'topic',
+        requiredTerms: ['wetland'],
+      }),
+    ).toBeNull()
+  })
+
   it('retorna null si no hi ha resultats', () => {
     expect(pickBestCommonsPhoto({ query: { pages: {} } }, 'lloc')).toBeNull()
     expect(pickBestCommonsPhoto(null, 'lloc')).toBeNull()
+  })
+})
+
+describe('fotografia temàtica institucional', () => {
+  const eclipseStory = {
+    title: "La NASA estudia l'eclipsi solar per desvetllar la corona solar",
+    category: 'Ciència',
+    location: 'Europa',
+    source: 'Phys.org',
+    body: ['La Lluna projecta la seva ombra durant un eclipsi total.'],
+    imageUrl: '/api/story-image/feed-eclipse?s=x',
+  }
+
+  it('reconeix només temes visuals explícitament admesos', () => {
+    expect(thematicPhotoRuleFor(eclipseStory)?.query).toBe('solar eclipse')
+    expect(
+      thematicPhotoRuleFor({ title: 'Una nova teoria filosòfica', category: 'Cultura' }),
+    ).toBeNull()
+  })
+
+  it('construeix una consulta només d’imatges a la biblioteca oficial de NASA', () => {
+    const url = buildNasaSearchUrl('solar eclipse')
+    expect(url).toContain('images-api.nasa.gov/search')
+    expect(url).toContain('q=solar+eclipse')
+    expect(url).toContain('media_type=image')
+    expect(url).toContain('page_size=10')
+  })
+
+  it('rebutja material de tercers amb copyright i conserva un resultat NASA', () => {
+    const rule = thematicPhotoRuleFor(eclipseStory)
+    const photo = pickBestNasaPhoto(
+      nasaResponse([
+        nasaPhoto({ copyright: 'Third-party photographer' }),
+        nasaPhoto(),
+      ]),
+      rule,
+    )
+    expect(photo).toMatchObject({
+      source: 'nasa-images',
+      license: 'Public domain (NASA)',
+      topic: 'solar eclipse',
+    })
+    expect(photo.sourceUrl).toContain('images.nasa.gov/details/')
+    expect(photo.licenseProofUrl).toContain('nasa.gov/nasa-brand-center')
+  })
+
+  it('substitueix el dibuix per una foto NASA amb drets i crèdit verificables', async () => {
+    const stories = [{ ...eclipseStory, photoChecked: true }]
+    const found = await attachRealPhotos(stories, {
+      fetchFn: async (url) => {
+        expect(url).toContain('images-api.nasa.gov')
+        return { ok: true, json: async () => nasaResponse([nasaPhoto()]) }
+      },
+    })
+
+    expect(found).toBe(1)
+    expect(stories[0].imageUrl).toContain('images-assets.nasa.gov')
+    expect(stories[0].imageCredit).toContain('NASA Image and Video Library')
+    expect(stories[0].imageCredit).toContain('imatge d’arxiu')
+    expect(stories[0].imageAttributionUrl).toContain('images.nasa.gov/details/')
+    expect(stories[0].imageRights).toEqual({
+      verified: true,
+      license: 'Public domain (NASA)',
+      proofUrl: expect.stringContaining('nasa.gov/nasa-brand-center'),
+    })
+    expect(stories[0].photoSearchVersion).toBe(PHOTO_SEARCH_VERSION)
+  })
+
+  it('no repeteix una cerca temàtica ja completada amb la política actual', async () => {
+    let calls = 0
+    const stories = [
+      {
+        ...eclipseStory,
+        photoChecked: true,
+        photoSearchVersion: PHOTO_SEARCH_VERSION,
+      },
+    ]
+    await attachRealPhotos(stories, {
+      fetchFn: async () => {
+        calls += 1
+        return { ok: true, json: async () => nasaResponse([nasaPhoto()]) }
+      },
+    })
+    expect(calls).toBe(0)
+    expect(stories[0].imageUrl).toContain('/api/story-image/')
+  })
+
+  it('usa Commons per a un tema natural concret i el presenta com a arxiu', async () => {
+    const stories = [
+      {
+        title: 'Uns aiguamolls es recuperen i tornen a acollir fauna',
+        category: 'Medi ambient',
+        location: 'Món',
+        imageUrl: '/api/story-image/feed-wetland?s=x',
+      },
+    ]
+    const found = await attachRealPhotos(stories, {
+      fetchFn: async (url) => {
+        expect(url).toContain('commons.wikimedia.org')
+        expect(url).toContain('wetland')
+        return {
+          ok: true,
+          json: async () => commonsResponse([photoPage('File:Restored wetland.jpg')]),
+        }
+      },
+    })
+    expect(found).toBe(1)
+    expect(stories[0].imageUrl).toContain('upload.wikimedia.org')
+    expect(stories[0].imageCredit).toContain('imatge d’arxiu del tema')
+    expect(stories[0].photo.kind).toBe('topic')
   })
 })
 
