@@ -174,6 +174,27 @@ describe('pickBestCommonsPhoto', () => {
     ).toBeNull()
   })
 
+  it('rebutja un JPEG que en realitat és un model molecular', () => {
+    const response = commonsResponse([
+      photoPage('File:MOF-76.jpg', {
+        extmetadata: {
+          Artist: { value: 'Autoria científica' },
+          LicenseShortName: { value: 'CC BY-SA 4.0' },
+          ImageDescription: {
+            value: 'A 3D representation with atoms represented by spheres and blue polyhedra.',
+          },
+          Categories: { value: 'Metal-organic frameworks' },
+        },
+      }),
+    ])
+    expect(
+      pickBestCommonsPhoto(response, 'MOF crystal', {
+        kind: 'topic',
+        requiredTerms: ['MOF'],
+      }),
+    ).toBeNull()
+  })
+
   it('retorna null si no hi ha resultats', () => {
     expect(pickBestCommonsPhoto({ query: { pages: {} } }, 'lloc')).toBeNull()
     expect(pickBestCommonsPhoto(null, 'lloc')).toBeNull()
@@ -204,6 +225,24 @@ describe('fotografia temàtica institucional', () => {
         category: 'Ciència',
       })?.query,
     ).toBe('domestic dog')
+    expect(
+      thematicPhotoRuleFor({
+        title: 'Un catalitzador recobert de MOF converteix CO2 en CO',
+        category: 'Ciència',
+      })?.query,
+    ).toBe('MOF crystal')
+    expect(
+      thematicPhotoRuleFor({
+        title: "Les exploracions de càlcic del cor poden orientar l'ús d'estatines",
+        category: 'Salut',
+      })?.query,
+    ).toBe('coronary CT scan')
+    expect(
+      thematicPhotoRuleFor({
+        title: "Research reveals a 17th-century woman's burial with a padlock and iron sickle",
+        category: 'Cultura',
+      })?.query,
+    ).toBe('archaeological excavation grave')
     expect(
       thematicPhotoRuleFor({ title: 'Una nova teoria filosòfica', category: 'Cultura' }),
     ).toBeNull()
@@ -299,6 +338,84 @@ describe('fotografia temàtica institucional', () => {
     expect(stories[0].imageUrl).toContain('upload.wikimedia.org')
     expect(stories[0].imageCredit).toContain('imatge d’arxiu del tema')
     expect(stories[0].photo.kind).toBe('topic')
+  })
+
+  it('distingeix fotos, micrografies i imatges mèdiques en temes científics', async () => {
+    const stories = [
+      {
+        title: 'Un catalitzador recobert de MOF converteix CO2 en CO',
+        category: 'Ciència',
+        location: 'Món',
+      },
+      {
+        title: "Les exploracions de càlcic del cor poden orientar l'ús d'estatines",
+        category: 'Salut',
+        location: 'Món',
+      },
+      {
+        title: "Research reveals a 17th-century woman's burial with a padlock and iron sickle",
+        category: 'Cultura',
+        location: 'Món',
+      },
+    ]
+    const metadata = (description, categories, license = 'CC BY 4.0') => ({
+      Artist: { value: 'Autoria verificada' },
+      LicenseShortName: { value: license },
+      ImageDescription: { value: description },
+      Categories: { value: categories },
+    })
+    const found = await attachRealPhotos(stories, {
+      fetchFn: async (url) => {
+        if (url.includes('MOF+crystal')) {
+          return {
+            ok: true,
+            json: async () =>
+              commonsResponse([
+                photoPage('File:CSIRO microscope image of MOF crystals.jpg', {
+                  extmetadata: metadata(
+                    'Scanning electron microscope image of metal-organic framework crystals.',
+                    'Metal-organic frameworks',
+                  ),
+                }),
+              ]),
+          }
+        }
+        if (url.includes('coronary+CT+scan')) {
+          return {
+            ok: true,
+            json: async () =>
+              commonsResponse([
+                photoPage('File:Coronary CT Angiography Scan.jpg', {
+                  extmetadata: metadata(
+                    'Coronary computed tomography medical image.',
+                    'Coronary CT angiography',
+                  ),
+                }),
+              ]),
+          }
+        }
+        return {
+          ok: true,
+          json: async () =>
+            commonsResponse([
+              photoPage('File:Archaeological excavation of a grave.jpg', {
+                extmetadata: metadata(
+                  'Archaeological excavation of a grave.',
+                  'Archaeological excavations',
+                  'Public domain',
+                ),
+              }),
+            ]),
+        }
+      },
+    })
+
+    expect(found).toBe(3)
+    expect(stories[0].imageCredit).toContain('Micrografia:')
+    expect(stories[0].imageAlt).toContain('Micrografia d’arxiu')
+    expect(stories[1].imageCredit).toContain('Imatge mèdica:')
+    expect(stories[1].imageAlt).toContain('Imatge mèdica d’arxiu')
+    expect(stories[2].imageCredit).toContain('Foto:')
   })
 })
 
