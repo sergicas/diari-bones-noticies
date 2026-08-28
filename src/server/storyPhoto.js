@@ -62,6 +62,12 @@ const KNOWN_PLACES = [
 const BANNED_TITLE_WORDS =
   /escut|coat of arms|mapa|map of|locator|bandera|flag|logo|segell|seal|senyera|blas(o|ó)n|diagram|chart|plànol|plano|poster|patch|insignia|illustration|drawing|painting|artist.?s impression|render/i
 
+// Un JPEG també pot ser un esquema exportat. La descripció de Commons permet
+// distingir aquests models i gràfics de fotografies, micrografies o imatges
+// mèdiques obtingudes amb instruments.
+const BANNED_METADATA_WORDS =
+  /\b(crystal structure|ball-and-stick|molecular model|schematic|diagram|graph|plot|spectra|spectrum|polyhedra|3d representation)\b|represented by[^.]{0,80}\bspheres\b/i
+
 // Una foto genèrica del municipi no és una imatge prou relacionada amb un acte.
 // Incloem plurals i formats culturals, esportius i comunitaris habituals.
 const EVENT_WORDS =
@@ -81,7 +87,7 @@ const PLACE_PHOTO_EXCLUDED_FORMATS = new Set([
 // Incrementar aquesta versió fa que les peces que havien esgotat una cerca
 // amb una política antiga es tornin a comprovar una sola vegada. Evita haver
 // de buidar KV i, alhora, impedeix repetir subpeticions a cada refresc.
-export const PHOTO_SEARCH_VERSION = 4
+export const PHOTO_SEARCH_VERSION = 5
 
 const NASA_USAGE_GUIDELINES_URL =
   'https://www.nasa.gov/nasa-brand-center/images-and-media/'
@@ -150,6 +156,30 @@ const THEMATIC_PHOTO_RULES = [
     query: 'domestic dog',
     pattern: /\b(gossos?|canins?|dogs?)\b/i,
     terms: ['domestic dog', 'dog', 'canis familiaris'],
+  },
+  {
+    id: 'mof-crystals',
+    query: 'MOF crystal',
+    pattern: /\b(metal[- ]organic frameworks?|MOFs?|recobert(?:a)?\s+de\s+MOF)\b/i,
+    terms: ['metal-organic framework', 'MOF'],
+    creditLabel: 'Micrografia',
+    altPrefix: 'Micrografia d’arxiu',
+  },
+  {
+    id: 'coronary-ct',
+    query: 'coronary CT scan',
+    pattern:
+      /\b(coronary[^.]{0,80}(?:calcium|CT|scan)|(?:calci|calcium)[^.]{0,80}(?:cor|coronary)|exploracions?\s+de\s+c[aà]lcic\s+del\s+cor)\b/i,
+    terms: ['coronary', 'CT scan', 'computed tomography'],
+    creditLabel: 'Imatge mèdica',
+    altPrefix: 'Imatge mèdica d’arxiu',
+  },
+  {
+    id: 'archaeological-grave',
+    query: 'archaeological excavation grave',
+    pattern:
+      /\b(archaeolog[^.]{0,80}(?:grave|burial)|burial[^.]{0,80}(?:sickle|padlock)|sepultura[^.]{0,80}arqueol|enterrament[^.]{0,80}arqueol)\b/i,
+    terms: ['archaeological', 'excavation', 'grave'],
   },
 ]
 
@@ -285,6 +315,7 @@ export function pickBestCommonsPhoto(apiResponse, subject, options = {}) {
       stripHtml(meta.ImageDescription?.value),
       stripHtml(meta.Categories?.value),
     ].join(' ')
+    if (options.kind === 'topic' && BANNED_METADATA_WORDS.test(searchable)) continue
     const requiredTerms = options.requiredTerms || [subject]
     if (!includesAnyTerm(searchable, requiredTerms)) continue
 
@@ -296,9 +327,10 @@ export function pickBestCommonsPhoto(apiResponse, subject, options = {}) {
       place: options.kind === 'place' ? subject : undefined,
       topic: options.kind === 'topic' ? subject : undefined,
       kind: options.kind || 'place',
+      creditLabel: options.creditLabel || 'Foto',
       alt:
         options.kind === 'topic'
-          ? `Fotografia d'arxiu relacionada amb ${subject}`
+          ? `${options.altPrefix || "Fotografia d'arxiu"} relacionada amb ${subject}`
           : `Fotografia de ${subject}`,
       creditNote:
         options.kind === 'topic'
@@ -317,6 +349,8 @@ export async function findCommonsPhoto(
     timeoutMs = 6000,
     kind = 'place',
     requiredTerms,
+    creditLabel,
+    altPrefix,
   } = {},
 ) {
   const controller = new AbortController()
@@ -335,6 +369,8 @@ export async function findCommonsPhoto(
     return pickBestCommonsPhoto(data, subject, {
       kind,
       requiredTerms,
+      creditLabel,
+      altPrefix,
     })
   } catch {
     return null
@@ -388,6 +424,7 @@ export function pickBestNasaPhoto(apiResponse, rule) {
       sourceUrl: `https://images.nasa.gov/details/${encodeURIComponent(nasaId)}`,
       topic: rule.query,
       kind: 'topic',
+      creditLabel: 'Foto',
       alt: `Fotografia d'arxiu de NASA relacionada amb ${rule.query}`,
       creditNote: 'imatge d’arxiu del tema, no del fet concret',
       source: 'nasa-images',
@@ -434,7 +471,7 @@ function applyPhotoFields(story, photo) {
   story.imageAlt = photo.alt || `Fotografia de ${photo.place || photo.topic}`
   const repository =
     photo.source === 'nasa-images' ? 'NASA Image and Video Library' : 'Wikimedia Commons'
-  story.imageCredit = `Foto: ${photo.author} · ${photo.license} · ${repository} (${photo.creditNote})`
+  story.imageCredit = `${photo.creditLabel || 'Foto'}: ${photo.author} · ${photo.license} · ${repository} (${photo.creditNote})`
   story.imageAttributionUrl = photo.sourceUrl
   story.imageRights = {
     verified: true,
@@ -542,6 +579,8 @@ export async function attachRealPhotos(stories, options = {}) {
         fetchFn,
         kind: 'topic',
         requiredTerms: thematicRule.terms,
+        creditLabel: thematicRule.creditLabel,
+        altPrefix: thematicRule.altPrefix,
       })
     } else {
       photo = await findCommonsPhoto(place, {
