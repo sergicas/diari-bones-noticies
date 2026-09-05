@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  approvedPublishedStories,
   candidateId,
   decideCandidate,
   expireStaleCandidates,
@@ -81,6 +82,25 @@ function fakeKv(initial = null, { falla = () => false } = {}) {
 }
 
 describe('porta d’aprovació humana', () => {
+  it('recupera per a la reserva només peces amb aprovació explícita', async () => {
+    const aprovada = story({ topic: 'Literatura' })
+    const db = fakeDb({
+      rows: [
+        { payload_json: JSON.stringify(aprovada) },
+        { payload_json: '{json-trencat' },
+      ],
+    })
+
+    await expect(
+      approvedPublishedStories({ EDITORIAL_DB: db }),
+    ).resolves.toEqual([aprovada])
+
+    const lectura = db.calls.find((call) => call.query.includes('payload_json'))
+    expect(lectura.query).toContain("human_decision = 'approve'")
+    expect(lectura.query).toContain("auto_decision = 'approve'")
+    expect(lectura.query).toContain('withdrawal IS NULL')
+  })
+
   it('no deixa publicar cap peça nova sense una decisió explícita', () => {
     const stories = [story(), story({ id: 'peca-2', url: 'https://example.com/peca-2' })]
     const { approved, pending, rejected } = splitByReviewDecision(stories)

@@ -42,6 +42,7 @@ import {
 import { passadaDeLAjudant } from './assistantPass.js'
 import {
   candidateId,
+  approvedPublishedStories,
   markStoriesLive,
   markWithdrawn,
   senseMaterialDeTreball,
@@ -2340,6 +2341,7 @@ export async function getLiveNewsPayload(
   // es torna a intentar a la pròxima passada.
   const cachedStories = Array.isArray(cached?.stories) ? cached.stories : []
   const perSincronitzar = await pendingLiveStories(env)
+  const reservaAprovada = await approvedPublishedStories(env)
   const jaAlLot = new Set(cachedStories.map((story) => story.url))
   const recuperades = perSincronitzar.filter((story) => !jaAlLot.has(story.url))
   if (recuperades.length > 0) {
@@ -2500,7 +2502,8 @@ export async function getLiveNewsPayload(
   // a un mosaic divers i equilibrat, en lloc de substituir-se per la captura
   // d'avui. Les fresques van al davant (lideren les d'avui); el sostre per
   // llengua i la diversitat per font fan la resta.
-  const carryover = (cached?.stories || [])
+  const urlsArrossegades = new Set()
+  const carryover = [...(cached?.stories || []), ...reservaAprovada]
     .filter((s) => !freshUrlSet.has(s.url))
     // CADUCITAT: les notícies surten del lot quan passen de la finestra (4 dies),
     // perquè no s'arrosseguin eternament i fossilitzin la portada.
@@ -2513,6 +2516,13 @@ export async function getLiveNewsPayload(
     // desplegar una regla nova no les deixa visibles fins que caduquin.
     .map((story) => keepAllowedEditorialTopic(story))
     .filter(Boolean)
+    // D1 també conté el lot de KV. La primera còpia mana perquè és la que pot
+    // portar metadades actualitzades de l'edició visible.
+    .filter((story) => {
+      if (urlsArrossegades.has(story.url)) return false
+      urlsArrossegades.add(story.url)
+      return true
+    })
     .map(({ isFresh: _isFresh, ...rest }) => ({
       ...rest,
       editorialVersion: liveEditorialVersion,

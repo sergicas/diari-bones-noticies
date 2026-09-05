@@ -804,6 +804,43 @@ export async function pendingLiveStories(env) {
   }
 }
 
+/**
+ * Reserva de peces que ja van ser aprovades i publicades.
+ *
+ * El lot de KV és una finestra, no la memòria editorial. Si una edició curta
+ * expulsa temporalment Literatura o Filosofia, D1 permet recuperar-ne una peça
+ * encara vigent sense saltar-se mai la decisió humana o de l'ajudant.
+ */
+export async function approvedPublishedStories(env, { limit = 200 } = {}) {
+  const db = database(env)
+  if (!db) return []
+  try {
+    const { results } = await db
+      .prepare(
+        `SELECT payload_json FROM stories
+          WHERE editorial_status IN ('published', 'distributed', 'archived')
+            AND (human_decision = 'approve' OR auto_decision = 'approve')
+            AND (human_decision IS NULL OR human_decision <> 'reject')
+            AND withdrawal IS NULL
+          ORDER BY COALESCE(published_at, first_seen_at) DESC
+          LIMIT ?`,
+      )
+      .bind(Math.max(1, Math.min(500, Number(limit) || 200)))
+      .all()
+    return (results || [])
+      .map((row) => parsePayload(row.payload_json))
+      .filter((story) => story?.url && story?.title)
+  } catch (error) {
+    console.warn(
+      JSON.stringify({
+        event: 'review.approved-reserve.read-failed',
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    )
+    return []
+  }
+}
+
 /** Marca com a sincronitzades les peces que ja consten al lot públic. */
 export async function markStoriesLive(env, ids) {
   const db = database(env)
