@@ -21,6 +21,7 @@ import {
   storiesRequiringDetailPersistence,
   getLiveNewsPayload,
   balancePublicationMix,
+  prioritizeTopicCoverage,
   enforcePublicationInvariants,
   keepsEditorialClearance,
   isMaritimeRescue,
@@ -785,6 +786,49 @@ describe('capPerCategory — varietat temàtica', () => {
     expect(result.filter((story) => story.category === 'Cultura')).toHaveLength(3)
     expect(result.filter((story) => story.category === 'Verificació')).toHaveLength(2)
     expect(result.at(-1).id).toBe('s1')
+  })
+})
+
+describe('equilibri dels vuit temes editorials', () => {
+  const story = (topic, index) => ({
+    title: `${topic} ${index}`,
+    topic,
+    category: ['Filosofia', 'Literatura'].includes(topic) ? 'Cultura' : 'Ciència',
+    source: `${topic}-${index}`,
+    url: `https://example.com/${topic}/${index}`,
+  })
+
+  it('posa una candidata de cada tema davant del pressupost de la IA', () => {
+    const input = [
+      ...Array.from({ length: 70 }, (_, index) => story('Ciència', index)),
+      story('Literatura', 0),
+      story('Filosofia', 0),
+    ]
+
+    const prioritized = prioritizeTopicCoverage(input)
+
+    expect(prioritized.slice(0, 3).map((item) => item.topic)).toEqual([
+      'Ciència',
+      'Filosofia',
+      'Literatura',
+    ])
+    expect(prioritized).toHaveLength(input.length)
+    expect(new Set(prioritized.map((item) => item.url)).size).toBe(input.length)
+  })
+
+  it('conserva Filosofia i Literatura encara que comparteixin Cultura', () => {
+    const input = [
+      ...Array.from({ length: 8 }, (_, index) => story('Ciència', index)),
+      ...Array.from({ length: 4 }, (_, index) => story('Literatura', index)),
+      story('Filosofia', 0),
+    ]
+
+    const balanced = balancePublicationMix(input)
+
+    expect(balanced.some((item) => item.topic === 'Filosofia')).toBe(true)
+    expect(balanced.some((item) => item.topic === 'Literatura')).toBe(true)
+    expect(balanced.filter((item) => item.topic === 'Ciència')).toHaveLength(3)
+    expect(balanced.filter((item) => item.category === 'Cultura')).toHaveLength(3)
   })
 })
 

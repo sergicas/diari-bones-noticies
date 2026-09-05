@@ -2022,22 +2022,17 @@ export async function collectLivePositiveNews(env, { seenUrls } = {}) {
   // i rescata les bones neutres. Una positiva encara no jutjada es mostra provi-
   // sionalment (el filtre de paraules ja atrapa les dolentes òbvies; la IA va
   // revisant les subtils a cada refresc); una neutra no jutjada s'amaga.
-  const reviewed = await aiReview(env, recents)
+  // El pressupost de la IA és finit (60 candidates per passada). Sense posar
+  // primer una representant de cada TEMA, les fonts científiques —més
+  // nombroses i sovint amb més context— l'esgotaven abans d'arribar a Aeon,
+  // Psyche o Literary Hub. La resta conserva el seu ordre de qualitat i data.
+  const reviewed = await aiReview(env, prioritizeTopicCoverage(recents))
 
   // Abans de tallar el pool a collectionPoolSize, posem al davant la millor peça
   // de cada secció garantida (Local, Cultura, Ciència…). Si no, una notícia bona
   // però una mica més vella (p. ex. local del Maresme d'ahir) podria quedar fora
   // del tall i no aparèixer mai, encara que tingués lloc reservat.
-  const headUrls = new Set()
-  const head = []
-  for (const cat of guaranteedCategories) {
-    const best = reviewed.find((s) => s.category === cat && !headUrls.has(s.url))
-    if (best) {
-      head.push(best)
-      headUrls.add(best.url)
-    }
-  }
-  const ordered = [...head, ...reviewed.filter((s) => !headUrls.has(s.url))]
+  const ordered = prioritizeTopicCoverage(reviewed)
 
   const filtered = ordered
     .map((story) => {
@@ -2155,7 +2150,26 @@ export async function readEditorialStats(kv) {
 
 // Seccions editorials de poc volum que abans es quedaven seques perquè les
 // categories grans (Espanya, Societat…) s'enduien totes les places.
-const guaranteedCategories = ALLOWED_EDITORIAL_TOPICS
+const guaranteedTopics = ALLOWED_EDITORIAL_TOPICS
+
+// Avança la millor peça disponible de cada tema sense alterar l'ordre relatiu
+// de la resta. `topic`, no `category`, és la taxonomia editorial pública:
+// Filosofia i Literatura comparteixen la categoria d'ingesta Cultura.
+export function prioritizeTopicCoverage(stories) {
+  const input = Array.isArray(stories) ? stories : []
+  const headStories = new Set()
+  const head = []
+  for (const topic of guaranteedTopics) {
+    const best = input.find(
+      (story) => story.topic === topic && !headStories.has(story),
+    )
+    if (best) {
+      head.push(best)
+      headStories.add(best)
+    }
+  }
+  return [...head, ...input.filter((story) => !headStories.has(story))]
+}
 
 const categoryLimits = {
   Cultura: 3,
@@ -2179,27 +2193,31 @@ export function capPerCategory(stories, defaultLimit = 3) {
 // Garanteix que cada secció de la llista, si té alguna peça disponible al
 // conjunt, tingui com a mínim una notícia al lot final. Si cal fer lloc, treu
 // l'última peça d'una categoria sobre-representada (mai buida una secció).
-function ensureCategoryCoverage(capped, pool, limit) {
+function ensureTopicCoverage(capped, pool, limit) {
   const result = [...capped]
-  const present = new Set(result.map((s) => s.category))
-  for (const cat of guaranteedCategories) {
-    if (present.has(cat)) continue
+  const present = new Set(result.map((story) => story.topic))
+  for (const topic of guaranteedTopics) {
+    if (present.has(topic)) continue
     const candidate = pool.find(
-      (s) => s.category === cat && !result.some((r) => r.url === s.url),
+      (story) =>
+        story.topic === topic &&
+        !result.some((included) => included.url === story.url),
     )
     if (!candidate) continue
     if (result.length >= limit) {
       const counts = {}
-      result.forEach((s) => { counts[s.category] = (counts[s.category] || 0) + 1 })
+      result.forEach((story) => {
+        counts[story.topic] = (counts[story.topic] || 0) + 1
+      })
       let removeIdx = -1
       for (let i = result.length - 1; i >= 0; i--) {
-        if (counts[result[i].category] > 1) { removeIdx = i; break }
+        if (counts[result[i].topic] > 1) { removeIdx = i; break }
       }
       if (removeIdx === -1) continue
       result.splice(removeIdx, 1)
     }
     result.push(candidate)
-    present.add(cat)
+    present.add(topic)
   }
   return result
 }
@@ -2221,10 +2239,13 @@ export function balancePublicationMix(
     Array.isArray(stories) ? stories : [],
     maxStoriesPerLanguage,
   )
-  const categoryBalanced = capPerCategory(languageBalanced)
-  const storiesWithCoverage = ensureCategoryCoverage(
+  // Prioritzar abans del sostre de Cultura impedeix que tres peces de
+  // Literatura expulsin l'única de Filosofia (o a l'inrevés).
+  const topicPrioritized = prioritizeTopicCoverage(languageBalanced)
+  const categoryBalanced = capPerCategory(topicPrioritized)
+  const storiesWithCoverage = ensureTopicCoverage(
     applyDiversityCap(categoryBalanced, maxStoriesPerSource, limit),
-    categoryBalanced,
+    topicPrioritized,
     limit,
   )
   return applyDiversityCap(
