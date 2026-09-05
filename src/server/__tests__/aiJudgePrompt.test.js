@@ -51,6 +51,13 @@ describe('el filtre sap quin diari és', () => {
     }
   })
 
+  it('reconeix el valor editorial propi de Literatura i Filosofia', () => {
+    for (const forma of ['interpretació', 'assaig', 'entrevista', 'poema', 'ressenya']) {
+      expect(prompt, `falta la forma humanística "${forma}"`).toContain(forma)
+    }
+    expect(prompt).toContain('no cal que narri un succés')
+  })
+
   it('davant del dubte, no publica', () => {
     expect(prompt).toContain('En cas de DUBTE, respon NO')
   })
