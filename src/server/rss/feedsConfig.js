@@ -194,6 +194,10 @@ const catalegDeFonts = [
     circuit: 'B', sourceTopic: 'Literatura', reuseLicense: 'Pista: redacció original obligatòria', activation: { required: true, licenseConfirmed: true },
   },
   {
+    name: 'Electric Literature', url: 'https://electricliterature.com/feed/', language: 'en', outputLanguage: 'ca', defaultCategory: 'Cultura',
+    circuit: 'B', sourceTopic: 'Literatura', reuseLicense: 'Pista: redacció original obligatòria', activation: { required: true, licenseConfirmed: true },
+  },
+  {
     name: 'Public Domain Review', url: 'https://publicdomainreview.org/feed/', language: 'en', outputLanguage: 'ca', defaultCategory: 'Cultura',
     circuit: 'B', sourceTopic: 'Literatura', reuseLicense: 'Pista: redacció original obligatòria', activation: { required: true, licenseConfirmed: true },
   },
