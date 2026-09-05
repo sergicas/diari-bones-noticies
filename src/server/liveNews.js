@@ -1689,7 +1689,10 @@ export async function collectFeedStories(feed, options = {}) {
 // molt millor i amb els matisos. Gratis dins de la quota diària de Neurons de
 // Cloudflare; el consum és baix perquè només es jutgen les notícies noves.
 // El model de text el tria ara ./ai/textModel.js (Gemini o Cloudflare).
-const aiVerdictsKey = 'ai-verdicts-v3' // un sol registre KV amb TOTS els veredictes
+// v4: el criteri explicita que una obra o una lectura humanística també és una
+// IDEA publicable. La clau nova obliga a reavaluar els NO antics, que havien
+// jutjat Literatura com si necessités una troballa científica.
+const aiVerdictsKey = 'ai-verdicts-v4' // un sol registre KV amb TOTS els veredictes
 const aiVerdictTtlMs = 14 * 24 * 60 * 60 * 1000 // 14 dies
 // La IA jutja en LOTS: moltes notícies en una sola crida. Així, amb poques
 // subpeticions (límit del pla gratuït), arriba a revisar-ne ~aiBatchSize ×
@@ -1711,6 +1714,11 @@ const AI_SYSTEM_BATCH = [
   'Respon SI només si la peça explica una TROBALLA, un RESULTAT o una IDEA:',
   'alguna cosa que s’ha descobert, s’ha observat, s’ha demostrat, s’ha',
   'publicat en un estudi, o un pensament que es proposa i es defensa.',
+  'En Filosofia i Literatura, també és una IDEA una lectura, interpretació,',
+  'argument, assaig, entrevista, poema, obra o selecció editorial concreta',
+  'que aporti context propi; no cal que narri un succés ni un resultat',
+  'quantitatiu. No la rebutgis només perquè sigui crítica, ressenya, poesia',
+  'o ficció.',
   'Respon NO si només explica INTENCIONS o PROCÉS, encara que sigui d’un',
   'àmbit bo: converses, negociacions, reunions, plans, anuncis del que es',
   'farà, projectes que tot just comencen, empreses que busquen, inverteixen o',
