@@ -36,7 +36,7 @@ describe('rssFeeds catalog integrity', () => {
       expect(feed?.licenseProofUrl, name).toMatch(/^https:\/\//)
       expect(feed?.imageRights?.license, name).toBeTruthy()
     }
-    for (const name of ['Phys.org', 'Quanta Magazine', 'MIT Technology Review', 'Aeon', 'Psyche', 'Literary Hub', 'Public Domain Review', 'STAT']) {
+    for (const name of ['Phys.org', 'Quanta Magazine', 'MIT Technology Review', 'Aeon', 'Psyche', 'Daily Nous', 'Literary Hub', 'The Paris Review', 'Public Domain Review', 'STAT']) {
       expect(byName.get(name)?.circuit, name).toBe('B')
     }
     expect(byName.get('Europe PMC · Longevitat')).toMatchObject({
@@ -45,8 +45,10 @@ describe('rssFeeds catalog integrity', () => {
       format: 'europe-pmc-search',
     })
     expect(byName.get('Psyche')?.sourceTopic).toBe('Filosofia')
+    expect(byName.get('Daily Nous')?.sourceTopic).toBe('Filosofia')
     expect(byName.get('Aeon')?.sourceTopic).toBeUndefined()
     expect(byName.get('Literary Hub')?.sourceTopic).toBe('Literatura')
+    expect(byName.get('The Paris Review')?.sourceTopic).toBe('Literatura')
     expect(byName.get('Public Domain Review')?.sourceTopic).toBe('Literatura')
     expect(byName.get('NIH Research Matters')?.enabled).toBe(false)
     expect(byName.has('EurekAlert!')).toBe(false)
@@ -72,7 +74,7 @@ describe('rssFeeds catalog integrity', () => {
       expect(byName.get(name)?.enabled, name).not.toBe(false)
     }
 
-    expect(rssFeeds.filter((feed) => feed.enabled !== false)).toHaveLength(30)
+    expect(rssFeeds.filter((feed) => feed.enabled !== false)).toHaveLength(32)
   })
 
   // El sostre per llengua de la portada fa que només el català (sense límit) i
@@ -117,7 +119,7 @@ describe('rssFeeds catalog integrity', () => {
     for (const feed of enceses) {
       expect(noms, `falta ${feed.name}`).toContain(feed.name)
     }
-    expect(seleccio.length).toBeLessThanOrEqual(30)
+    expect(seleccio.length).toBeLessThanOrEqual(40)
     expect(noms.size).toBe(seleccio.length)
   })
 

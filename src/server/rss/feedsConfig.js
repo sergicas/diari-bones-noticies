@@ -182,7 +182,15 @@ const catalegDeFonts = [
     circuit: 'B', sourceTopic: 'Filosofia', reuseLicense: 'Pista: redacció original obligatòria', activation: { required: true, licenseConfirmed: true },
   },
   {
+    name: 'Daily Nous', url: 'https://dailynous.com/feed/', language: 'en', outputLanguage: 'ca', defaultCategory: 'Cultura',
+    circuit: 'B', sourceTopic: 'Filosofia', reuseLicense: 'Pista: redacció original obligatòria', activation: { required: true, licenseConfirmed: true },
+  },
+  {
     name: 'Literary Hub', url: 'https://lithub.com/feed/', language: 'en', outputLanguage: 'ca', defaultCategory: 'Cultura',
+    circuit: 'B', sourceTopic: 'Literatura', reuseLicense: 'Pista: redacció original obligatòria', activation: { required: true, licenseConfirmed: true },
+  },
+  {
+    name: 'The Paris Review', url: 'https://www.theparisreview.org/blog/feed/', language: 'en', outputLanguage: 'ca', defaultCategory: 'Cultura',
     circuit: 'B', sourceTopic: 'Literatura', reuseLicense: 'Pista: redacció original obligatòria', activation: { required: true, licenseConfirmed: true },
   },
   {
@@ -403,7 +411,11 @@ const fontsNoCore = (language) =>
 
 // Per sota d'aquest nombre de fonts enceses, consultar-les totes a cada passada
 // cap de sobres dins del sostre de subpeticions, i rotar només faria mal.
-const MAX_FONTS_SENSE_ROTACIO = 30
+// El projecte ja és al pla de pagament: 40 fonts encara queden molt per sota
+// del sostre de 1.000 subpeticions, i mantenir-les totes a cada passada evita
+// que afegir una font humanística torni a activar accidentalment la rotació
+// estreta de dues fonts angleses.
+const MAX_FONTS_SENSE_ROTACIO = 40
 const senseRotacio =
   rssFeeds.filter((feed) => feed.enabled !== false).length <= MAX_FONTS_SENSE_ROTACIO
 
@@ -416,7 +428,7 @@ export const rotatingPerLanguage = {
   // vuitanta fonts i calia repartir-les entre passades per no passar del sostre
   // de subpeticions del pla gratuït de Cloudflare (~50 per refresc).
   //
-  // Amb el gir, el catàleg encès ha passat de 80 fonts a 15, i totes són en
+  // Amb el gir, el catàleg encès ha passat de 80 fonts a poc més de 30, i totes són en
   // anglès. Amb els números vells, cada passada n'hauria consultat DUES: Europe
   // PMC (l'única font de Longevitat) s'hauria mirat un cop per setmana. Per
   // això, quan el catàleg encès és petit, no es rota res i es consulten totes.
