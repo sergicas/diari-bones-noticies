@@ -8,6 +8,14 @@ import {
 } from '../pipelineQueue.js'
 
 describe('editorial queue pipeline', () => {
+  it('deduplicates the new morning cron with the legacy cron during migration', () => {
+    const scheduledTime = Date.parse('2026-09-15T05:00:00.000Z')
+    const legacy = buildRefreshQueueMessage({ cron: '0 5 * * *', scheduledTime })
+    const grouped = buildRefreshQueueMessage({ cron: '0 5,13,21 * * *', scheduledTime })
+    expect(grouped.idempotencyKey).toBe(legacy.idempotencyKey)
+    expect(grouped.distribution).toBe('daily')
+  })
+
   it('creates stable morning messages from cron events', () => {
     const message = buildRefreshQueueMessage({
       cron: '0 5 * * *',

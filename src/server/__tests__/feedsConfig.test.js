@@ -3,6 +3,7 @@ import {
   rssFeeds,
   allowedSourceNames,
   selectFeedsForRun,
+  refreshIntervalMs,
 } from '../rss/feedsConfig.js'
 
 describe('rssFeeds catalog integrity', () => {
@@ -89,7 +90,6 @@ describe('rssFeeds catalog integrity', () => {
   // el francès, l'italià i el portuguès en 1. Per això aquestes dues llengües es
   // consulten SENCERES a cada passada i la resta segueix rotant.
   it('consulta totes les fonts en català i en castellà a cada passada', () => {
-    const dotzeHores = 12 * 60 * 60 * 1000
     // Només les ENCESES: des del gir editorial, les fonts generalistes es
     // queden al catàleg apagades (vegeu NOMES_FONTS_DEL_GIR a feedsConfig).
     const esperatCa = rssFeeds
@@ -100,7 +100,7 @@ describe('rssFeeds catalog integrity', () => {
       .map((f) => f.name)
 
     for (let finestra = 0; finestra < 4; finestra += 1) {
-      const noms = selectFeedsForRun(Date.now() + finestra * dotzeHores).map(
+      const noms = selectFeedsForRun(Date.now() + finestra * refreshIntervalMs).map(
         (f) => f.name,
       )
       for (const nom of [...esperatCa, ...esperatEs]) {

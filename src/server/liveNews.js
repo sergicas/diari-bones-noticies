@@ -2884,7 +2884,7 @@ export async function getLiveNewsPayload(
 }
 
 // --- Secció "En directe" (ticker) ------------------------------------------
-// A diferència de la portada (que es renova cada 12h amb titular, cos i
+// A diferència de la portada (que es renova cada 8h amb titular, cos i
 // il·lustració propis via IA), la tira "En directe" mostra els ÚLTIMS titulars
 // detectats i enllaça directament a la font, sense generar pàgina ni contingut
 // propi. Sí que passa pel MATEIX porter d'IA que la portada (aiReview) per triar

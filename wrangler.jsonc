@@ -113,16 +113,17 @@
   // Workers AI: segona capa del filtre editorial (jutja les notícies neutres).
   "ai": { "binding": "AI" },
   "triggers": {
-    // Portada principal: es renova cada 12h, amb un segon intent automàtic
+    // Portada principal: es renova cada 8h, amb un segon intent automàtic
     // quinze minuts després de cada edició. Els dos intents comparteixen clau
     // d'idempotència: el segon no duplica correus, avisos ni publicacions si el
     // primer ja ha acabat; només actua si el principal no ha arribat o ha fallat.
-    // 0 5 * * *  → edició de matí a les 07:00 CEST. Aquest cron també és el del
-    //             butlletí DIARI (refresca el radar i envia el correu del dia).
-    // 0 17 * * * → edició de tarda a les 19:00 CEST (només refresca el radar).
+    // 05:00 UTC → matí (07:00 CEST), també envia el butlletí DIARI.
+    // 13:00 UTC → tarda (15:00 CEST), sense enviaments addicionals.
+    // 21:00 UTC → vespre (23:00 CEST), manté la distribució social.
+    // Dos crons agrupats cobreixen les tres edicions i els tres reintents.
     // La secció "En directe" (/api/live-ticker) es refresca a part, a demanda,
     // amb una cache curta; no depèn d'aquests crons.
-    "crons": ["0 5 * * *", "15 5 * * *", "0 17 * * *", "15 17 * * *"]
+    "crons": ["0 5,13,21 * * *", "15 5,13,21 * * *"]
   },
   "env": {
     // Staging té dades i cues pròpies, i deliberadament no té cap cron.

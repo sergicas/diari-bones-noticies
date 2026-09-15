@@ -706,7 +706,7 @@ export async function countPendingCandidates(env) {
 /**
  * Afegeix una peça acabada d'aprovar al lot públic i li desa la pàgina de
  * detall. Sense això, aprovar-la no es notaria fins al pròxim refresc (fins a
- * dotze hores després) i la revisió semblaria que no fa res.
+ * vuit hores després) i la revisió semblaria que no fa res.
  */
 /**
  * Desa la còpia de detall de cada peça (la pàgina /noticia/:id).

@@ -18,7 +18,7 @@
 // que eren ajustos pensats per a un catàleg de vuitanta mitjans generalistes.
 export const NOMES_FONTS_DEL_GIR = true
 
-export const refreshIntervalMs = 12 * 60 * 60 * 1000
+export const refreshIntervalMs = 8 * 60 * 60 * 1000
 
 // La qualitat editorial passa davant del volum: una edició curta i completa és
 // preferible a una portada llarga de breus superficials.

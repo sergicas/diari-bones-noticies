@@ -3,7 +3,7 @@
 // - Tota la resta del trànsit el cobreix el binding ASSETS (SPA estàtica amb
 //   not_found_handling="single-page-application" → serveix index.html per a
 //   rutes client-side com /noticia/:id, /manifest, /hemeroteca, /sobre).
-// - El handler scheduled() refresca el radar dues vegades al dia via cron.
+// - El handler scheduled() refresca el radar tres vegades al dia via cron.
 
 import { getLiveNewsPayload, readEditorialStats, readFeedHealthStats, getLiveTicker, isFeedPaused } from './server/liveNews.js'
 import { rssFeeds } from './server/rss/feedsConfig.js'

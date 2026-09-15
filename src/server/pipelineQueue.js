@@ -29,11 +29,18 @@ const MESSAGE_VERSION = 1
 // Tots dos comparteixen la mateixa clau d'idempotència: si el principal ja ha
 // acabat, el segon s'ignora; si el principal no ha arribat o ha fallat, el
 // segon recupera exactament aquella mateixa edició sense duplicar enviaments.
-const REFRESH_CRON_WINDOWS = {
+// Compatibilitat durant la propagació dels antics crons a Cloudflare.
+const LEGACY_REFRESH_CRON_WINDOWS = {
   '0 5 * * *': { canonicalCron: '0 5 * * *', hour: 5, distribution: 'daily' },
   '15 5 * * *': { canonicalCron: '0 5 * * *', hour: 5, distribution: 'daily' },
   '0 17 * * *': { canonicalCron: '0 17 * * *', hour: 17, distribution: 'social' },
   '15 17 * * *': { canonicalCron: '0 17 * * *', hour: 17, distribution: 'social' },
+}
+const REFRESH_CRONS = new Set(['0 5,13,21 * * *', '15 5,13,21 * * *'])
+const REFRESH_WINDOWS_BY_HOUR = {
+  5: { canonicalCron: '0 5 * * *', hour: 5, distribution: 'daily', slot: 'morning' },
+  13: { canonicalCron: '0 13 * * *', hour: 13, distribution: 'none', slot: 'afternoon' },
+  21: { canonicalCron: '0 21 * * *', hour: 21, distribution: 'social', slot: 'evening' },
 }
 
 // Intents totals abans de donar una feina per perduda: el primer lliurament
@@ -60,7 +67,9 @@ function log(level, event, data = {}) {
 
 export function buildRefreshQueueMessage(event) {
   const requestedAt = isoFromScheduledTime(event?.scheduledTime)
-  const refreshWindow = REFRESH_CRON_WINDOWS[event?.cron]
+  const refreshWindow = REFRESH_CRONS.has(event?.cron)
+    ? REFRESH_WINDOWS_BY_HOUR[new Date(requestedAt).getUTCHours()]
+    : LEGACY_REFRESH_CRON_WINDOWS[event?.cron]
   const distribution =
     refreshWindow?.distribution ||
     (event?.cron === '0 5 * * *' ? 'daily' : 'social')
@@ -77,7 +86,7 @@ export function buildRefreshQueueMessage(event) {
     idempotencyKey: `refresh:${idempotencyCron}:${idempotencyTime.slice(0, 16)}`,
     requestedAt,
     cron: event?.cron || null,
-    slot: distribution === 'daily' ? 'morning' : 'evening',
+    slot: refreshWindow?.slot || (distribution === 'daily' ? 'morning' : 'evening'),
     distribution,
   }
 }
