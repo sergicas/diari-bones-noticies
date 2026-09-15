@@ -6,7 +6,7 @@
 //
 // Ús: npm run refresh
 //
-// El cron de Cloudflare ja ho fa automàticament cada 4 hores; aquest script és
+// El cron de Cloudflare ja ho fa automàticament cada 8 hores; aquest script és
 // per quan vols veure novetats abans de l'hora del cron.
 
 import { esperaFeina, esperaLotVisible } from './lib/esperaRefresc.mjs'
@@ -73,7 +73,7 @@ async function refresh() {
   console.log(`✓ Refresc completat en ${(elapsedMs / 1000).toFixed(1)} s`)
   console.log(`  Notícies al lot: ${(live.stories || []).length}`)
   console.log(`  Actualitzat: ${formatDate(live.updatedAt)}`)
-  console.log(`  Pròxim refresc automàtic (cron): ${formatDate(live.nextRefreshAt)}`)
+  console.log(`  Caducitat del lot (no és l'horari del cron): ${formatDate(live.nextRefreshAt)}`)
   if (feina?.result?.cache) {
     // Amb 'stale' o 'stale-incomplete' la feina ha anat bé però el radar no ha
     // pogut renovar res: la data d'abans es conserva a propòsit.

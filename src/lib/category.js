@@ -300,8 +300,14 @@ const ASTRONOMY_CIRCUIT_A_SOURCES = [
   /esa\/?webb/i,
 ]
 const HUMANITIES_CIRCUIT_B_SOURCES = [
-  { pattern: /\b(?:psyche|aeon)\b/i, topic: 'Filosofia' },
-  { pattern: /\b(?:literary hub|public domain review)\b/i, topic: 'Literatura' },
+  {
+    pattern: /\b(?:psyche|aeon|daily nous|philosophy now|blog of the apa|marginalian)\b/i,
+    topic: 'Filosofia',
+  },
+  {
+    pattern: /\b(?:literary hub|public domain review|paris review|electric literature|public books|words without borders)\b/i,
+    topic: 'Literatura',
+  },
 ]
 const STRICTLY_OUTSIDE_TOPIC_CATEGORIES = new Set([
   'Internacional',
@@ -390,14 +396,32 @@ export const EDITORIAL_TOPIC_TIEBREAK_ORDER = [
 // s'assignen per contingut si la peça ja ve d'un context humanístic.
 const TOPICS_ONLY_IN_HUMANITIES = new Set(['Filosofia', 'Literatura'])
 
-// Categories d'ingesta que sí que fan de context humanístic.
-const HUMANITIES_CATEGORIES = new Set(['Cultura', 'Idees', 'Literatura', 'Pensament'])
-
 function isHumanitiesContext(story) {
-  const category = String(story?.category || '').trim()
-  if (HUMANITIES_CATEGORIES.has(category)) return true
+  // Una categoria ampla com Cultura, tota sola, no demostra que una peça sigui
+  // filosofia o literatura. Això havia convertit una crítica de Beck i una
+  // notícia de Smithsonian en Filosofia. S'accepta una font especialitzada, un
+  // hint explícit o, per no perdre literatura catalana legítima, dos senyals
+  // literaris forts dins d'una peça cultural.
+  if (TOPICS_ONLY_IN_HUMANITIES.has(String(story?.sourceTopic || '').trim())) {
+    return true
+  }
   const source = sourceText(story)
-  return HUMANITIES_CIRCUIT_B_SOURCES.some((rule) => rule.pattern.test(source))
+  if (HUMANITIES_CIRCUIT_B_SOURCES.some((rule) => rule.pattern.test(source))) {
+    return true
+  }
+  const category = String(story?.category || '').trim()
+  if (['Literatura', 'Pensament', 'Idees'].includes(category)) return true
+  if (category !== 'Cultura') return false
+  const text = [story?.title, story?.summary, story?.sourceContext, story?.impact]
+    .filter(Boolean)
+    .join(' ')
+  if (/\b(?:filosof|philosoph|epistemolog|metaf[íi]sic|metaphysic|existencial|existential)\w*/iu.test(text)) {
+    return true
+  }
+  const literarySignals = text.match(
+    /\b(?:literatur\w*|novel·l?\w*|novel[ae]\w*|poes\w*|poetry|escriptor\w*|writer\w*|author\w*|llibreri\w*|bookstore\w*|bibliotec\w*)\b/giu,
+  ) || []
+  return new Set(literarySignals.map((signal) => signal.toLowerCase())).size >= 2
 }
 
 function isCircuitA(story) {

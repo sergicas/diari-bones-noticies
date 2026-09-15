@@ -66,6 +66,7 @@ describe('renderContentPage', () => {
     const res = await renderContentPage(req('/'), makeEnv())
     expect(res).not.toBeNull()
     expect(res.status).toBe(200)
+    expect(res.headers.get('cache-control')).toBe('no-cache, must-revalidate')
     const html = await res.text()
     expect(html).not.toContain('<div id="root"></div>')
     expect(html).toContain('<main class="ssr-content">')

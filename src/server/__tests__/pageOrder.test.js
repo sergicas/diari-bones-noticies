@@ -33,7 +33,7 @@ async function bodyOf(path) {
   return response ? await response.text() : ''
 }
 
-describe('les llistes s’ordenen per data', () => {
+describe('ordre editorial de les llistes', () => {
   it('hi ha peces del gir per comprovar', () => {
     expect(novesDelGir.length).toBeGreaterThan(0)
   })
@@ -57,6 +57,27 @@ describe('les llistes s’ordenen per data', () => {
     const posVella = html.indexOf(mesVella.title)
     expect(posNova).toBeGreaterThanOrEqual(0)
     if (posVella >= 0) expect(posNova).toBeLessThan(posVella)
+  })
+
+  it('la portada posa Literatura i Filosofia abans que la resta', async () => {
+    const html = await bodyOf('/')
+    const prioritaries = seedArticles.filter(
+      (peca) => peca.topic === 'Literatura' || peca.topic === 'Filosofia',
+    )
+    const altres = seedArticles.filter(
+      (peca) => peca.topic !== 'Literatura' && peca.topic !== 'Filosofia',
+    )
+    const primeraAltra = altres
+      .map((peca) => html.indexOf(peca.title))
+      .filter((posicio) => posicio >= 0)
+      .sort((a, b) => a - b)[0]
+
+    expect(prioritaries).toHaveLength(2)
+    for (const peca of prioritaries) {
+      const posicio = html.indexOf(peca.title)
+      expect(posicio).toBeGreaterThanOrEqual(0)
+      expect(posicio).toBeLessThan(primeraAltra)
+    }
   })
 
   it('l’hemeroteca compleix el que promet al lector', async () => {

@@ -52,7 +52,12 @@ function entorn(candidates, { mode = 'auto', abast = 'all', sostre } = {}) {
     ...(sostre === undefined ? {} : { ASSISTANT_MAX_PER_PASS: String(sostre) }),
     tocades,
     AI: {
-      run: vi.fn(async () => ({ response: 'VEREDICTE: publicar · MOTIU: troballa clara' })),
+      run: vi.fn(async () => ({
+        response: Array.from(
+          { length: 6 },
+          (_, i) => `${i + 1} · VEREDICTE: publicar · MOTIU: troballa clara`,
+        ).join('\n'),
+      })),
     },
     EDITORIAL_DB: {
       prepare(sql) {
@@ -107,6 +112,7 @@ describe('el sostre ajorna, no descarta', () => {
     const env = entorn(candidates, { sostre: 3 })
     const { aprovades } = await passadaDeLAjudant(env, candidates)
     expect(aprovades).toHaveLength(3)
+    expect(env.AI.run).toHaveBeenCalledTimes(1)
   })
 
   it('les que sobren no reben cap decisió: es tornaran a mirar', async () => {

@@ -1,4 +1,5 @@
 import { feedStoryId } from '../lib/story-id.js'
+import { LIVE_EDITORIAL_VERSION } from '../lib/editorial-version.js'
 import { getLiveNewsPayload } from './liveNews.js'
 import {
   backfillNewsletterSubscribers,
@@ -24,6 +25,24 @@ import {
 
 const MESSAGE_VERSION = 1
 
+// Cada edició té un cron principal i un segon intent quinze minuts després.
+// Tots dos comparteixen la mateixa clau d'idempotència: si el principal ja ha
+// acabat, el segon s'ignora; si el principal no ha arribat o ha fallat, el
+// segon recupera exactament aquella mateixa edició sense duplicar enviaments.
+// Compatibilitat durant la propagació dels antics crons a Cloudflare.
+const LEGACY_REFRESH_CRON_WINDOWS = {
+  '0 5 * * *': { canonicalCron: '0 5 * * *', hour: 5, distribution: 'daily' },
+  '15 5 * * *': { canonicalCron: '0 5 * * *', hour: 5, distribution: 'daily' },
+  '0 17 * * *': { canonicalCron: '0 17 * * *', hour: 17, distribution: 'social' },
+  '15 17 * * *': { canonicalCron: '0 17 * * *', hour: 17, distribution: 'social' },
+}
+const REFRESH_CRONS = new Set(['0 5,13,21 * * *', '15 5,13,21 * * *'])
+const REFRESH_WINDOWS_BY_HOUR = {
+  5: { canonicalCron: '0 5 * * *', hour: 5, distribution: 'daily', slot: 'morning' },
+  13: { canonicalCron: '0 13 * * *', hour: 13, distribution: 'none', slot: 'afternoon' },
+  21: { canonicalCron: '0 21 * * *', hour: 21, distribution: 'social', slot: 'evening' },
+}
+
 // Intents totals abans de donar una feina per perduda: el primer lliurament
 // més els `max_retries` de la cua. HA D'ANAR A L'UNA amb wrangler.jsonc
 // (`max_retries: 3` als consumidors bondiari-ingest i bondiari-ingest-staging).
@@ -48,14 +67,26 @@ function log(level, event, data = {}) {
 
 export function buildRefreshQueueMessage(event) {
   const requestedAt = isoFromScheduledTime(event?.scheduledTime)
-  const distribution = event?.cron === '0 5 * * *' ? 'daily' : 'social'
+  const refreshWindow = REFRESH_CRONS.has(event?.cron)
+    ? REFRESH_WINDOWS_BY_HOUR[new Date(requestedAt).getUTCHours()]
+    : LEGACY_REFRESH_CRON_WINDOWS[event?.cron]
+  const distribution =
+    refreshWindow?.distribution ||
+    (event?.cron === '0 5 * * *' ? 'daily' : 'social')
+  let idempotencyTime = requestedAt
+  if (refreshWindow) {
+    const canonicalTime = new Date(requestedAt)
+    canonicalTime.setUTCHours(refreshWindow.hour, 0, 0, 0)
+    idempotencyTime = canonicalTime.toISOString()
+  }
+  const idempotencyCron = refreshWindow?.canonicalCron || event?.cron || 'manual'
   return {
     version: MESSAGE_VERSION,
     type: 'refresh-edition',
-    idempotencyKey: `refresh:${event?.cron || 'manual'}:${requestedAt.slice(0, 16)}`,
+    idempotencyKey: `refresh:${idempotencyCron}:${idempotencyTime.slice(0, 16)}`,
     requestedAt,
     cron: event?.cron || null,
-    slot: distribution === 'daily' ? 'morning' : 'evening',
+    slot: refreshWindow?.slot || (distribution === 'daily' ? 'morning' : 'evening'),
     distribution,
   }
 }
@@ -75,6 +106,19 @@ export function buildManualRefreshQueueMessage({
     slot: 'manual',
     distribution,
   }
+}
+
+export function buildSelfHealingRefreshQueueMessage(payload, now = Date.now()) {
+  const scheduledRefresh = new Date(payload?.nextRefreshAt || '').getTime()
+  const keyDate = Number.isNaN(scheduledRefresh) ? now : scheduledRefresh
+  const refreshWindow = new Date(keyDate).toISOString().slice(0, 16)
+
+  return buildManualRefreshQueueMessage({
+    distribution: 'none',
+    // Una versió editorial nova ha de poder regenerar el mateix lot caducat
+    // encara que una versió anterior ja hagués completat una feina d'autocura.
+    idempotencyKey: `refresh:self-heal:v${LIVE_EDITORIAL_VERSION}:${refreshWindow}`,
+  })
 }
 
 export function dailyEditionNeedsRetry(message, payload) {

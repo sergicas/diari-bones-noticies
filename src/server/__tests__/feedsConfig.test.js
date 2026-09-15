@@ -3,6 +3,7 @@ import {
   rssFeeds,
   allowedSourceNames,
   selectFeedsForRun,
+  refreshIntervalMs,
 } from '../rss/feedsConfig.js'
 
 describe('rssFeeds catalog integrity', () => {
@@ -36,7 +37,7 @@ describe('rssFeeds catalog integrity', () => {
       expect(feed?.licenseProofUrl, name).toMatch(/^https:\/\//)
       expect(feed?.imageRights?.license, name).toBeTruthy()
     }
-    for (const name of ['Phys.org', 'Quanta Magazine', 'MIT Technology Review', 'Aeon', 'Psyche', 'Daily Nous', 'Literary Hub', 'The Paris Review', 'Electric Literature', 'Public Domain Review', 'STAT']) {
+    for (const name of ['Phys.org', 'Quanta Magazine', 'MIT Technology Review', 'Aeon', 'Psyche', 'Daily Nous', 'Literary Hub', 'The Paris Review', 'Electric Literature', 'Public Domain Review', 'Philosophy Now', 'Blog of the APA', 'The Marginalian', 'Public Books', 'Words Without Borders', 'STAT']) {
       expect(byName.get(name)?.circuit, name).toBe('B')
     }
     expect(byName.get('Europe PMC · Longevitat')).toMatchObject({
@@ -51,6 +52,12 @@ describe('rssFeeds catalog integrity', () => {
     expect(byName.get('The Paris Review')?.sourceTopic).toBe('Literatura')
     expect(byName.get('Electric Literature')?.sourceTopic).toBe('Literatura')
     expect(byName.get('Public Domain Review')?.sourceTopic).toBe('Literatura')
+    for (const name of ['Daily Nous', 'Philosophy Now', 'Blog of the APA', 'The Marginalian']) {
+      expect(byName.get(name)?.sourceTopic, name).toBe('Filosofia')
+    }
+    for (const name of ['Public Books', 'Electric Literature', 'Words Without Borders']) {
+      expect(byName.get(name)?.sourceTopic, name).toBe('Literatura')
+    }
     expect(byName.get('NIH Research Matters')?.enabled).toBe(false)
     expect(byName.has('EurekAlert!')).toBe(false)
     expect(byName.has('esa.int')).toBe(false)
@@ -75,7 +82,7 @@ describe('rssFeeds catalog integrity', () => {
       expect(byName.get(name)?.enabled, name).not.toBe(false)
     }
 
-    expect(rssFeeds.filter((feed) => feed.enabled !== false)).toHaveLength(33)
+    expect(rssFeeds.filter((feed) => feed.enabled !== false)).toHaveLength(38)
   })
 
   // El sostre per llengua de la portada fa que només el català (sense límit) i
@@ -83,7 +90,6 @@ describe('rssFeeds catalog integrity', () => {
   // el francès, l'italià i el portuguès en 1. Per això aquestes dues llengües es
   // consulten SENCERES a cada passada i la resta segueix rotant.
   it('consulta totes les fonts en català i en castellà a cada passada', () => {
-    const dotzeHores = 12 * 60 * 60 * 1000
     // Només les ENCESES: des del gir editorial, les fonts generalistes es
     // queden al catàleg apagades (vegeu NOMES_FONTS_DEL_GIR a feedsConfig).
     const esperatCa = rssFeeds
@@ -94,7 +100,7 @@ describe('rssFeeds catalog integrity', () => {
       .map((f) => f.name)
 
     for (let finestra = 0; finestra < 4; finestra += 1) {
-      const noms = selectFeedsForRun(Date.now() + finestra * dotzeHores).map(
+      const noms = selectFeedsForRun(Date.now() + finestra * refreshIntervalMs).map(
         (f) => f.name,
       )
       for (const nom of [...esperatCa, ...esperatEs]) {

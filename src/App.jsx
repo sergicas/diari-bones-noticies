@@ -37,6 +37,11 @@ import {
 } from './lib/category.js'
 import { formatDateTime } from './lib/viewHelpers.js'
 import { loadReaderPreferences, saveReaderPreferences } from './lib/readerPreferences.js'
+import {
+  isLeadHumanitiesStory,
+  prioritizeLiteratureAndPhilosophy,
+} from './lib/story-order.js'
+import { getScheduledRefreshDelay } from './lib/refresh-schedule.js'
 
 import PortadaView from './views/PortadaView.jsx'
 import StoryDetailView from './views/StoryDetailView.jsx'
@@ -65,6 +70,8 @@ const nextRefreshStorageKey = 'bon-diari-next-refresh-at-v4'
 const defaultStoryImage = DEFAULT_STORY_IMAGE
 const currentLiveEditorialVersion = LIVE_EDITORIAL_VERSION
 const autoRefreshIntervalMs = 1 * 60 * 60 * 1000
+const staleRefreshRetryMs = 1 * 60 * 1000
+const maxScheduledRefreshDelayMs = 24 * 60 * 60 * 1000
 const liveTickerIntervalMs = 2 * 60 * 1000
 // Portada: fins a 5 dies d'antiguitat i un màxim de 25 peces (25-07-2026).
 // La resta passa a l'Hemeroteca. Només els formats de servei (verificacions,
@@ -446,6 +453,10 @@ function sortByPublishedAtDesc(leftStory, rightStory) {
   return getStoryTimestamp(rightStory) - getStoryTimestamp(leftStory)
 }
 
+const sortPortadaStories = prioritizeLiteratureAndPhilosophy(
+  sortByPublishedAtDesc,
+)
+
 function normalizeStoryTitle(title) {
   return String(title || '')
     .toLowerCase()
@@ -545,7 +556,7 @@ function splitEditionStories(stories) {
   // poques peces recents, aquesta funció omplia fins a sis posicions amb
   // articles antics i una d'elles podia acabar com a destacada.
   const activeStories = [...candidates]
-    .sort(sortByPublishedAtDesc)
+    .sort(sortPortadaStories)
     .slice(0, activeEditionMaxStories)
 
   const recentIds = new Set(candidates.map((story) => story.id))
@@ -757,8 +768,29 @@ function waitForSwController() {
 
   useEffect(() => {
     let isCancelled = false
+    let staleRetryId = null
+    let scheduledRefreshId = null
+    let refreshInFlight = false
+    let lastTriggeredNextAt = null
+
+    function scheduleServerRefresh(nextAt) {
+      window.clearTimeout(scheduledRefreshId)
+      const delay = getScheduledRefreshDelay(nextAt)
+      if (delay === null) return
+      if (delay === 0 && nextAt === lastTriggeredNextAt) return
+
+      // setTimeout té un límit pràctic; el tall també fa de comprovació de
+      // seguretat si algun dia el servidor anuncia una data massa llunyana.
+      scheduledRefreshId = window.setTimeout(() => {
+        lastTriggeredNextAt = nextAt
+        updateFromRadar()
+      }, Math.min(delay, maxScheduledRefreshDelayMs))
+    }
 
     async function updateFromRadar() {
+      if (isCancelled || refreshInFlight) return
+      refreshInFlight = true
+
       try {
         const payload = await fetchLivePositiveNewsPayload()
 
@@ -778,18 +810,41 @@ function waitForSwController() {
         setLastRefreshAt(updatedAt)
         setNextRefreshAt(nextAt)
         saveRefreshMetadata(updatedAt, nextAt)
+        scheduleServerRefresh(nextAt)
+
+        if (
+          payload.cache === 'stale-readonly' ||
+          payload.cache === 'miss-readonly'
+        ) {
+          window.clearTimeout(staleRetryId)
+          staleRetryId = window.setTimeout(updateFromRadar, staleRefreshRetryMs)
+        }
       } catch (error) {
         console.warn('No s’ha pogut actualitzar automàticament el radar.', error)
+      } finally {
+        refreshInFlight = false
+      }
+    }
+
+    function updateWhenVisible() {
+      if (document.visibilityState === 'visible') {
+        updateFromRadar()
       }
     }
 
     updateFromRadar()
 
     const intervalId = window.setInterval(updateFromRadar, autoRefreshIntervalMs)
+    document.addEventListener('visibilitychange', updateWhenVisible)
+    window.addEventListener('online', updateFromRadar)
 
     return () => {
       isCancelled = true
       window.clearInterval(intervalId)
+      window.clearTimeout(staleRetryId)
+      window.clearTimeout(scheduledRefreshId)
+      document.removeEventListener('visibilitychange', updateWhenVisible)
+      window.removeEventListener('online', updateFromRadar)
     }
   }, [])
 
@@ -908,7 +963,7 @@ function waitForSwController() {
     normalizedQuery === '' &&
     !isServiceSection
   ) {
-    const general = [...activeStories].sort(sortByPublishedAtDesc)
+    const general = [...activeStories].sort(sortPortadaStories)
     if (general.length > 0) {
       filteredStories = general
       sectionShowingGeneral = true
@@ -927,9 +982,16 @@ function waitForSwController() {
   // proximitat tenia sentit, però en un diari especialitzat d'abast mundial
   // feia que una exposició a Mataró encapçalés la portada per damunt d'una
   // observació del telescopi Webb.
+  const leadHeadlineStories = headlineEligibleStories.filter(
+    isLeadHumanitiesStory,
+  )
+  const featuredCandidates =
+    leadHeadlineStories.length > 0
+      ? leadHeadlineStories
+      : headlineEligibleStories
   const featuredStory =
-    headlineEligibleStories.find((story) => story.featured) ??
-    headlineEligibleStories[0] ??
+    featuredCandidates.find((story) => story.featured) ??
+    featuredCandidates[0] ??
     null
 
   const shouldShowFeaturedInResults =
@@ -955,7 +1017,7 @@ function waitForSwController() {
   // en l'edició vella quan en realitat era ben ordenada... per un criteri que
   // ja no és el d'aquest diari.
   const portadaStories = [...remainingStories, ...geographicRescue].sort(
-    sortByPublishedAtDesc,
+    sortPortadaStories,
   )
   // Pàgina pròpia d'un tema (/tema/<slug>): una "portada petita" de l'àmbit.
   // Es nodreix de TOT (recent + hemeroteca) del tema perquè no quedi buida; la

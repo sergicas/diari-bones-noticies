@@ -1329,7 +1329,10 @@ export function normalizeFeedItem(block, feed) {
     ? feed.defaultCategory
     : extractPrimaryCategory(block, feed.defaultCategory)
 
-  if (!title || !link || !publishedAt || !imageUrl) return null
+  // Un RSS editorial no ha de quedar fora només perquè no publiqui miniatura.
+  // Les fonts de Circuit B sempre reben una il·lustració pròpia de Bondiari;
+  // les de Circuit A també hi poden recórrer si l'entrada no porta cap imatge.
+  if (!title || !link || !publishedAt) return null
 
   const summarySource = subtitle || description || contentEncoded || title
   const sourceContext = buildSourceContext(
@@ -1700,7 +1703,7 @@ const aiVerdictTtlMs = 14 * 24 * 60 * 60 * 1000 // 14 dies
 // maxAiCallsPerRun per passada i passa a ser el PORTER de debò, en lloc de
 // revisar-ne només 10 i deixar passar la resta per paraula clau.
 const aiBatchSize = 10
-const maxAiCallsPerRun = 6 // 6×10 = 60 jutjades/passada; 24 feeds + 6 = 30 subpeticions
+const maxAiCallsPerRun = 6 // 6×10 = 60 jutjades/passada; 37 feeds + serveis + 6 continuen dins del sostre.
 
 const AI_SYSTEM_BATCH = [
   "Ets el filtre d'El Bon Diari, un diari especialitzat en català que NOMÉS",
@@ -1885,14 +1888,29 @@ function sourceMaterialScore(story) {
   return tierScore + localScore + Math.min(5, Math.floor(contextWords / 40))
 }
 
-// D1 és la memòria editorial permanent. Una URL que ja hi consta —aprovada,
-// pendent o rebutjada— no pot tornar a ocupar el tall de candidates noves.
-//
-// La memòria curta de KV caduca al cap de catorze dies. Sense aquesta segona
-// barrera, les rebutjades tornaven a entrar de trenta en trenta, omplien tot el
-// pool abans d'arribar a les notícies del dia i deixaven la portada congelada.
+// D1 és la memòria editorial permanent. Les decisions finals no han de tornar
+// a gastar pressupost; una candidata només capturada, en canvi, encara necessita
+// una decisió i ha de continuar sent elegible per a l'ajudant.
+const terminalEditorialStatuses = new Set([
+  'published',
+  'distributed',
+  'archived',
+  'rejected',
+])
+
+export function hasTerminalEditorialDecision(decision) {
+  if (!decision) return false
+  if (terminalEditorialStatuses.has(decision.status)) return true
+  return (
+    ['approve', 'reject'].includes(decision.humanDecision) ||
+    ['approve', 'reject'].includes(decision.autoDecision)
+  )
+}
+
 export function excludePreviouslyProcessedStories(stories, decisions = new Map()) {
-  return (stories || []).filter((story) => !decisions.has(candidateId(story)))
+  return (stories || []).filter(
+    (story) => !hasTerminalEditorialDecision(decisions.get(candidateId(story))),
+  )
 }
 
 // `seenUrls`: notícies que ja s'han publicat alguna vegada (clau seen-urls, 14
@@ -2038,9 +2056,9 @@ export async function collectLivePositiveNews(env, { seenUrls } = {}) {
   const reviewed = await aiReview(env, prioritizeTopicCoverage(recents))
 
   // Abans de tallar el pool a collectionPoolSize, posem al davant la millor peça
-  // de cada secció garantida (Local, Cultura, Ciència…). Si no, una notícia bona
-  // però una mica més vella (p. ex. local del Maresme d'ahir) podria quedar fora
-  // del tall i no aparèixer mai, encara que tingués lloc reservat.
+  // de cada tema editorial. La categoria d'ingesta és massa ampla: Filosofia i
+  // Literatura arriben totes dues com a Cultura i, si es mirava `category`, no
+  // rebien mai la plaça que els corresponia.
   const ordered = prioritizeTopicCoverage(reviewed)
 
   const filtered = ordered
@@ -2077,10 +2095,10 @@ async function setCachedPayload(kv, stories) {
 
 // --- Memòria d'URLs ja servides (perquè cada dia hi hagi peces noves) -----
 
-// v5 recupera les candidates que v4 havia marcat com a processades abans que
-// poguessin rebre contingut propi. D1 continua impedint reprocessar qualsevol
-// decisió editorial o publicació ja persistent.
-const seenUrlsKey = 'seen-urls-v5'
+// v6 recupera les candidates que v5 havia marcat com a vistes mentre encara
+// estaven capturades i sense decisió. D1 evita que les aprovades o rebutjades
+// es processin de nou; les pendents poden tornar a l'ajudant.
+const seenUrlsKey = 'seen-urls-v6'
 const seenUrlsRetentionMs = 14 * 24 * 60 * 60 * 1000
 const minFreshStoriesForFullRefresh = 10
 
@@ -2159,7 +2177,17 @@ export async function readEditorialStats(kv) {
 
 // Seccions editorials de poc volum que abans es quedaven seques perquè les
 // categories grans (Espanya, Societat…) s'enduien totes les places.
-const guaranteedTopics = ALLOWED_EDITORIAL_TOPICS
+// Ordre editorial de prioritat: Filosofia i Literatura passen primer per tots
+// els pressupostos finits (porter d'IA, redacció i ajudant). Si es deixaven al
+// final de la llista canònica, el sostre gratuït de sis revisions les mantenia
+// sempre a les posicions 7 i 8 i no arribaven mai a publicar-se.
+const guaranteedTopics = [
+  'Filosofia',
+  'Literatura',
+  ...ALLOWED_EDITORIAL_TOPICS.filter(
+    (topic) => !['Filosofia', 'Literatura'].includes(topic),
+  ),
+]
 
 // Avança la millor peça disponible de cada tema sense alterar l'ordre relatiu
 // de la resta. `topic`, no `category`, és la taxonomia editorial pública:
@@ -2199,28 +2227,28 @@ export function capPerCategory(stories, defaultLimit = 3) {
   })
 }
 
-// Garanteix que cada secció de la llista, si té alguna peça disponible al
-// conjunt, tingui com a mínim una notícia al lot final. Si cal fer lloc, treu
-// l'última peça d'una categoria sobre-representada (mai buida una secció).
+// Garanteix que cada tema editorial, si té alguna peça disponible al conjunt,
+// tingui com a mínim una notícia al lot final. `category` no serveix aquí:
+// Filosofia i Literatura comparteixen la categoria d'ingesta Cultura.
 function ensureTopicCoverage(capped, pool, limit) {
   const result = [...capped]
-  const present = new Set(result.map((story) => story.topic))
+  const present = new Set(result.map((s) => s.topic).filter(Boolean))
   for (const topic of guaranteedTopics) {
     if (present.has(topic)) continue
     const candidate = pool.find(
-      (story) =>
-        story.topic === topic &&
-        !result.some((included) => included.url === story.url),
+      (s) => s.topic === topic && !result.some((r) => r.url === s.url),
     )
     if (!candidate) continue
     if (result.length >= limit) {
       const counts = {}
-      result.forEach((story) => {
-        counts[story.topic] = (counts[story.topic] || 0) + 1
+      result.forEach((s) => {
+        const key = s.topic || s.category
+        counts[key] = (counts[key] || 0) + 1
       })
       let removeIdx = -1
       for (let i = result.length - 1; i >= 0; i--) {
-        if (counts[result[i].topic] > 1) { removeIdx = i; break }
+        const key = result[i].topic || result[i].category
+        if (counts[key] > 1) { removeIdx = i; break }
       }
       if (removeIdx === -1) continue
       result.splice(removeIdx, 1)
@@ -2260,6 +2288,31 @@ export function balancePublicationMix(
   return applyDiversityCap(
     storiesWithCoverage,
     maxStoriesPerSource,
+    limit,
+  )
+}
+
+// La meitat de les places es reserva a peces ja aprovades i l'altra meitat
+// queda disponible per a candidates noves. Si les candidates van totes al
+// davant, expulsen les publicades abans de passar per l'ajudant i cada refresc
+// substitueix la portada sencera per l'única peça que acaba aprovant. Si
+// reservéssim totes les places a l'arrossegament, en arribar a dotze la portada
+// no es renovaria mai. Aquest repartiment permet acumular i renovar alhora.
+export function composeReviewPool(
+  freshStories,
+  carryoverStories,
+  limit = targetStoryLimit,
+) {
+  const carryoverLimit = Math.max(1, Math.floor(limit / 2))
+  const retainedCarryover = balancePublicationMix(
+    Array.isArray(carryoverStories) ? carryoverStories : [],
+    carryoverLimit,
+  )
+  return balancePublicationMix(
+    [
+      ...retainedCarryover,
+      ...(Array.isArray(freshStories) ? freshStories : []),
+    ],
     limit,
   )
 }
@@ -2527,11 +2580,11 @@ export async function getLiveNewsPayload(
       ...rest,
       editorialVersion: liveEditorialVersion,
     }))
-  const preDiversity = [...freshStories, ...carryover]
   // Acotem les llengües foranes ABANS de la diversitat per font, perquè el
   // català i el castellà mai no quedin fora encara que un dia hi hagi allau de
-  // notícies europees.
-  const finalStories = balancePublicationMix(preDiversity)
+  // notícies europees. Alhora, conservem una reserva de peces ja aprovades i
+  // deixem prou lloc a candidates noves perquè l'edició continuï renovant-se.
+  const finalStories = composeReviewPool(freshStories, carryover)
 
   // BLINDATGE DE DRETS D'AUTOR: sigui quin sigui l'origen de la peça (fresca
   // d'aquest refresc o arrossegada d'un lot anterior amb el codi antic),
@@ -2586,31 +2639,6 @@ export async function getLiveNewsPayload(
         qualityRejectedByIssue,
       }
     }
-  }
-
-  // Foto real amb porta de drets fail-closed: primer es preserven les imatges
-  // institucionals ja verificades; després es prova NASA per temes espacials i
-  // Commons per llocs o temes explícitament admesos. Si qualsevol proveïdor
-  // falla, el radar conserva la il·lustració i continua publicant.
-  try {
-    const found = await attachRealPhotos(publishedStories)
-    console.log(
-      JSON.stringify({
-        event: 'photo.enrichment.completed',
-        stories: publishedStories.length,
-        found,
-        verifiedPhotos: publishedStories.filter(
-          (story) => story.imageRights?.verified === true,
-        ).length,
-      }),
-    )
-  } catch (error) {
-    console.warn(
-      JSON.stringify({
-        event: 'photo.enrichment.failed',
-        error: error instanceof Error ? error.message : String(error),
-      }),
-    )
   }
 
   // Marquem com a "vistes" NOMÉS les noves que de debò entren al lot. Una
@@ -2670,14 +2698,55 @@ export async function getLiveNewsPayload(
   // aquí dins només es podia exercitar muntant el radar sencer, i el tros de
   // codi que decideix si una peça es publica sola no pot ser el menys provat.
   const passada = await passadaDeLAjudant(env, pendingStories)
-  approvedStories.push(...passada.aprovades)
+  // Les acabades d'aprovar van davant de l'arrossegament: quan el lot arribi
+  // al sostre, les noves substitueixen les més antigues en lloc de quedar fora.
+  approvedStories.unshift(...passada.aprovades)
   perSincronitzar.push(...passada.aprovades)
 
-  // Una candidata que ja ha completat aquesta passada no pot tornar a ocupar
-  // el pool: això inclou explícitament les rebutjades. Abans només es recordaven
-  // aprovades i pendents; trenta descartades quedaven reciclant-se per sempre i
-  // no deixaven arribar les notícies del dia.
-  const processedFreshUrls = [...new Set(freshStories.map((story) => story.url))]
+  // La foto externa va DESPRÉS de la decisió: abans es feien fins a vuit
+  // cerques per peces que acabarien pendents, s'esgotaven les 50 subpeticions
+  // del pla gratuït i l'ajudant no podia revisar-les. Només dues cerques per
+  // passada; totes les altres conserven la il·lustració pròpia de Bondiari.
+  try {
+    const found = await attachRealPhotos(approvedStories, { maxLookups: 2 })
+    console.log(
+      JSON.stringify({
+        event: 'photo.enrichment.completed',
+        stories: approvedStories.length,
+        found,
+        verifiedPhotos: approvedStories.filter(
+          (story) => story.imageRights?.verified === true,
+        ).length,
+      }),
+    )
+  } catch (error) {
+    console.warn(
+      JSON.stringify({
+        event: 'photo.enrichment.failed',
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    )
+  }
+
+  // Només es marca com a vista una candidata amb una decisió TERMINAL desada.
+  // Les capturades o dubtoses han de tornar a l'ajudant a la passada següent;
+  // marcar-les totes aquí era el que mantenia desenes de peces pendents fora
+  // del pipeline durant catorze dies i congelava la portada.
+  const decisionsDespresDeLAjudant = await readDecisions(
+    env,
+    freshStories.map(candidateId),
+  )
+  const processedFreshUrls = [
+    ...new Set(
+      freshStories
+        .filter((story) =>
+          hasTerminalEditorialDecision(
+            decisionsDespresDeLAjudant.get(candidateId(story)),
+          ),
+        )
+        .map((story) => story.url),
+    ),
+  ]
   if (processedFreshUrls.length > 0) {
     const now = Date.now()
     const updatedSeen = [
@@ -2815,7 +2884,7 @@ export async function getLiveNewsPayload(
 }
 
 // --- Secció "En directe" (ticker) ------------------------------------------
-// A diferència de la portada (que es renova cada 12h amb titular, cos i
+// A diferència de la portada (que es renova cada 8h amb titular, cos i
 // il·lustració propis via IA), la tira "En directe" mostra els ÚLTIMS titulars
 // detectats i enllaça directament a la font, sense generar pàgina ni contingut
 // propi. Sí que passa pel MATEIX porter d'IA que la portada (aiReview) per triar
