@@ -410,6 +410,35 @@ describe('reescriptura editorial amb context factual', () => {
     expect(evaluateEditorialQuality(story).issues).toContain('body-too-short')
   })
 
+  it('torna a redactar una resposta curta recuperada del cau', async () => {
+    const run = vi.fn().mockResolvedValue({
+      response: [
+        '1 titular: Una cooperativa recupera el mercat municipal i crea activitat local',
+        `1 cos: ${validBody}`,
+        '1 impacte: El projecte recupera un equipament públic i obre oportunitats per al comerç local.',
+        '1 imatge: reopened neighborhood market with local produce stalls',
+      ].join('\n'),
+    })
+    const cached = {
+      title: 'Una cooperativa recupera el mercat municipal del barri',
+      body: 'La cooperativa ha reobert el mercat i hi treballen divuit persones.',
+      impact: 'El projecte recupera un equipament públic per al comerç de proximitat.',
+      brief: 'reopened neighborhood market',
+    }
+
+    const [story] = await applyOwnContent([sourceStory], {
+      AI: { run },
+      LIVE_NEWS_KV: {
+        get: vi.fn().mockResolvedValue(JSON.stringify(cached)),
+        put: vi.fn(),
+      },
+    })
+
+    expect(run).toHaveBeenCalledOnce()
+    expect(story.body.join(' ')).toContain('dotze parades')
+    expect(isPublishableStory(story)).toBe(true)
+  })
+
   it('descarta el text de plantilla en generar-lo, no per la llargada', async () => {
     const run = vi.fn().mockResolvedValue({
       response: [

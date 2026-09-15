@@ -201,6 +201,29 @@ const catalegDeFonts = [
     name: 'Public Domain Review', url: 'https://publicdomainreview.org/feed/', language: 'en', outputLanguage: 'ca', defaultCategory: 'Cultura',
     circuit: 'B', sourceTopic: 'Literatura', reuseLicense: 'Pista: redacció original obligatòria', activation: { required: true, licenseConfirmed: true },
   },
+  // Humanitats: canals oficials comprovats l'11-09-2026. Són Circuit B:
+  // només aporten la pista i els fets; Bondiari escriu una peça nova en català
+  // i genera una il·lustració pròpia.
+  {
+    name: 'Philosophy Now', url: 'https://philosophynow.org/rss', language: 'en', outputLanguage: 'ca', defaultCategory: 'Cultura',
+    circuit: 'B', sourceTopic: 'Filosofia', reuseLicense: 'Pista: redacció original obligatòria', activation: { required: true, licenseConfirmed: true },
+  },
+  {
+    name: 'Blog of the APA', url: 'https://blog.apaonline.org/feed/', language: 'en', outputLanguage: 'ca', defaultCategory: 'Cultura',
+    circuit: 'B', sourceTopic: 'Filosofia', reuseLicense: 'Pista: redacció original obligatòria', activation: { required: true, licenseConfirmed: true },
+  },
+  {
+    name: 'The Marginalian', url: 'https://www.themarginalian.org/feed/', language: 'en', outputLanguage: 'ca', defaultCategory: 'Cultura',
+    circuit: 'B', sourceTopic: 'Filosofia', reuseLicense: 'Pista: redacció original obligatòria', activation: { required: true, licenseConfirmed: true },
+  },
+  {
+    name: 'Public Books', url: 'https://www.publicbooks.org/feed/', language: 'en', outputLanguage: 'ca', defaultCategory: 'Cultura',
+    circuit: 'B', sourceTopic: 'Literatura', reuseLicense: 'Pista: redacció original obligatòria', activation: { required: true, licenseConfirmed: true },
+  },
+  {
+    name: 'Words Without Borders', url: 'https://wordswithoutborders.org/feed/', language: 'en', outputLanguage: 'ca', defaultCategory: 'Cultura',
+    circuit: 'B', sourceTopic: 'Literatura', reuseLicense: 'Pista: redacció original obligatòria', activation: { required: true, licenseConfirmed: true },
+  },
   // Mentrestant NIH és fora: Longevitat només té pistes Circuit B. El model
   // redacta una peça original i no reutilitza text ni imatge de STAT.
   {

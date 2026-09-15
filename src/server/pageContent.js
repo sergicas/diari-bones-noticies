@@ -19,6 +19,7 @@ import {
   classifyAllowedEditorialTopic,
 } from '../lib/category.js'
 import { readEditorialStoryCatalog } from './editorialStore.js'
+import { prioritizeLiteratureAndPhilosophy } from '../lib/story-order.js'
 
 const siteName = 'El Bon Diari'
 const siteIntro =
@@ -93,6 +94,13 @@ function byNewestFirst(stories) {
   return [...stories].sort((left, right) => storyTime(right) - storyTime(left))
 }
 
+const compareNewestFirst = (left, right) => storyTime(right) - storyTime(left)
+const compareHomeStories = prioritizeLiteratureAndPhilosophy(compareNewestFirst)
+
+function withLeadHumanitiesFirst(stories) {
+  return [...stories].sort(compareHomeStories)
+}
+
 function storyListItem(story) {
   const href = `/noticia/${encodeURIComponent(storyLinkId(story))}`
   const title = escapeHtml(story.title)
@@ -151,7 +159,9 @@ async function archiveStories(env) {
 
 async function buildHome(env) {
   const live = await liveStories(env)
-  const stories = byNewestFirst(dedupeStories([...live, ...seedArticles])).slice(0, 40)
+  const stories = withLeadHumanitiesFirst(
+    byNewestFirst(dedupeStories([...live, ...seedArticles])).slice(0, 40),
+  )
   return buildListBody({
     heading: `${siteName} · Periodisme constructiu`,
     intro: siteIntro,
@@ -332,7 +342,11 @@ export async function renderContentPage(request, env) {
     status: 200,
     headers: {
       'content-type': 'text/html; charset=utf-8',
-      'cache-control': 'public, max-age=300, stale-while-revalidate=3600',
+      // L'HTML referencia assets amb hash. Si es conserva una versió vella
+      // després d'un deploy, apunta a un JS que ja no existeix i només queda
+      // visible el cos SSR sense format. Es pot desar, però s'ha de revalidar
+      // abans de reutilitzar-lo; els assets immutables es cachegen a part.
+      'cache-control': 'no-cache, must-revalidate',
     },
   })
 }

@@ -48,7 +48,19 @@ const AMB_REINTENTS = [
 // distribució (butlletí, push, xarxes) no el toca i pot anar en paral·lel.
 const AMB_CONSUMIDOR_UNIC = ['bondiari-ingest', 'bondiari-ingest-staging']
 
+const CRONS_DE_REFRESC = [
+  '0 5 * * *',
+  '15 5 * * *',
+  '0 17 * * *',
+  '15 17 * * *',
+]
+
 describe('la configuració de les cues i el codi diuen el mateix', () => {
+  it('programa dues edicions separades 12 h i un reintent per a cadascuna', () => {
+    expect(config.triggers?.crons).toEqual(CRONS_DE_REFRESC)
+    expect(config.env?.staging?.triggers?.crons).toEqual([])
+  })
+
   for (const cua of AMB_REINTENTS) {
     it(`${cua}: MAX_INTENTS = max_retries + 1`, () => {
       const c = consumidor(cua)

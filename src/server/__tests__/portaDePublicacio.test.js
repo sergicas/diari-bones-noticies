@@ -252,7 +252,14 @@ describe('el mode de l’ajudant falla tancat', () => {
 
   it('en ombra desa un veredicte de cada candidata, dubtes inclosos', async () => {
     const base = d1()
-    const ai = { run: vi.fn(async () => ({ response: 'VEREDICTE: publicar · MOTIU: bona' })) }
+    const ai = {
+      run: vi.fn(async () => ({
+        response: [
+          '1 · VEREDICTE: publicar · MOTIU: bona',
+          '2 · VEREDICTE: publicar · MOTIU: bona',
+        ].join('\n'),
+      })),
+    }
 
     await passadaDeLAjudant({ EDITORIAL_DB: base, AI: ai, ASSISTANT_MODE: 'shadow' }, [
       peca('neta', { reviewSourceContext: 'A source about the sky.' }),
@@ -272,7 +279,14 @@ describe('el mode de l’ajudant falla tancat', () => {
     // La peça que l'UPDATE no toca (changes = 0) no entra al lot: una persona
     // pot haver-la rebutjat un segon abans.
     const base = d1({ canvisPerId: { acceptada: 1, refusada: 0 } })
-    const ai = { run: vi.fn(async () => ({ response: 'VEREDICTE: publicar · MOTIU: bona' })) }
+    const ai = {
+      run: vi.fn(async () => ({
+        response: [
+          '1 · VEREDICTE: publicar · MOTIU: bona',
+          '2 · VEREDICTE: publicar · MOTIU: bona',
+        ].join('\n'),
+      })),
+    }
 
     const out = await passadaDeLAjudant({ EDITORIAL_DB: base, AI: ai, ASSISTANT_MODE: 'auto' }, [
       peca('acceptada', { reviewSourceContext: 'A source about the sky.' }),

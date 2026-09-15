@@ -34,6 +34,7 @@ import {
 import {
   buildManualRefreshQueueMessage,
   buildRefreshQueueMessage,
+  buildSelfHealingRefreshQueueMessage,
   handlePipelineBatch,
 } from './server/pipelineQueue.js'
 import { buildOperationalHealth } from './server/operationsHealth.js'
@@ -137,7 +138,42 @@ function withSecurityHeaders(response) {
   })
 }
 
-async function handleLiveNews(request, env) {
+const SELF_HEAL_LOCK_TTL_SECONDS = 15 * 60
+
+export async function queueSelfHealingRefresh(payload, env) {
+  if (
+    !['stale-readonly', 'miss-readonly'].includes(payload?.cache) ||
+    !env.INGEST_QUEUE ||
+    !env.LIVE_NEWS_KV
+  ) {
+    return { skipped: 'not-needed' }
+  }
+
+  const message = buildSelfHealingRefreshQueueMessage(payload)
+  const lockKey = `pipeline:${message.idempotencyKey}`
+  const alreadyQueued = await env.LIVE_NEWS_KV.get(lockKey)
+  if (alreadyQueued) return { skipped: 'recently-queued' }
+
+  await env.INGEST_QUEUE.send(message, { contentType: 'json' })
+  await env.LIVE_NEWS_KV.put(
+    lockKey,
+    JSON.stringify({
+      queuedAt: new Date().toISOString(),
+      idempotencyKey: message.idempotencyKey,
+    }),
+    { expirationTtl: SELF_HEAL_LOCK_TTL_SECONDS },
+  )
+  console.log(
+    JSON.stringify({
+      event: 'live-news.self-heal.queued',
+      cache: payload.cache,
+      idempotencyKey: message.idempotencyKey,
+    }),
+  )
+  return { queued: true, idempotencyKey: message.idempotencyKey }
+}
+
+async function handleLiveNews(request, env, ctx) {
   if (request.method !== 'GET' && request.method !== 'HEAD') {
     return methodNotAllowed('GET, HEAD')
   }
@@ -146,6 +182,18 @@ async function handleLiveNews(request, env) {
       env,
       allowRefresh: false,
     })
+    if (request.method === 'GET' && typeof ctx?.waitUntil === 'function') {
+      ctx.waitUntil(
+        queueSelfHealingRefresh(payload, env).catch((error) => {
+          console.error(
+            JSON.stringify({
+              event: 'live-news.self-heal.failed',
+              error: error instanceof Error ? error.message : String(error),
+            }),
+          )
+        }),
+      )
+    }
     return new Response(JSON.stringify(payload), {
       status: 200,
       headers: {
@@ -624,7 +672,7 @@ async function route(request, env, ctx) {
   // Substitueix les fotos de premsa de tercers: cap risc de drets d'autor.
   if (path.startsWith('/api/story-image/')) return handleStoryImage(request, env, ctx)
 
-  if (path === '/api/live-news') return handleLiveNews(request, env)
+  if (path === '/api/live-news') return handleLiveNews(request, env, ctx)
   if (path === '/api/archive') return handleArchive(request, env)
   if (path === '/api/archive-backfill') {
     return handleArchiveBackfill(request, env)

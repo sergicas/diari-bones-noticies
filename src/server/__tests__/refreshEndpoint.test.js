@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import worker from '../../worker.js'
+import { describe, expect, it, vi } from 'vitest'
+import worker, { queueSelfHealingRefresh } from '../../worker.js'
 
 // EL REFRESC MANUAL PASSA PER LA CUA.
 //
@@ -99,6 +99,71 @@ describe('/api/refresh-news', () => {
     )
     expect(res.status).toBe(405)
     expect(env.enviats).toHaveLength(0)
+  })
+})
+
+describe('/api/live-news: autorecuperació', () => {
+  it('encua una regeneració sense repartiment quan el lot és vell', async () => {
+    const store = new Map([
+      [
+        'latest',
+        {
+          updatedAt: '2026-09-10T05:01:13.772Z',
+          nextRefreshAt: '2026-09-10T17:01:13.772Z',
+          stories: [{ id: 'antiga', editorialVersion: 1 }],
+        },
+      ],
+    ])
+    const sent = []
+    const env = {
+      LIVE_NEWS_KV: {
+        async get(key) {
+          return store.get(key) || null
+        },
+        async put(key, value) {
+          store.set(key, value)
+        },
+      },
+      INGEST_QUEUE: {
+        async send(message, options) {
+          sent.push({ message, options })
+        },
+      },
+    }
+    const payload = {
+      cache: 'stale-readonly',
+      nextRefreshAt: '2026-09-10T17:01:13.772Z',
+    }
+
+    await expect(queueSelfHealingRefresh(payload, env)).resolves.toMatchObject({
+      queued: true,
+    })
+    await expect(queueSelfHealingRefresh(payload, env)).resolves.toEqual({
+      skipped: 'recently-queued',
+    })
+    expect(sent).toHaveLength(1)
+    expect(sent[0]).toEqual({
+      message: expect.objectContaining({
+        type: 'refresh-edition',
+        distribution: 'none',
+        idempotencyKey: 'refresh:self-heal:v23:2026-09-10T17:01',
+      }),
+      options: { contentType: 'json' },
+    })
+  })
+
+  it('no encua res si el lot encara és vigent', async () => {
+    const send = vi.fn()
+    await expect(
+      queueSelfHealingRefresh(
+        { cache: 'hit' },
+        {
+          LIVE_NEWS_KV: { get: vi.fn(), put: vi.fn() },
+          INGEST_QUEUE: { send },
+        },
+      ),
+    ).resolves.toEqual({ skipped: 'not-needed' })
+    expect(send).not.toHaveBeenCalled()
   })
 })
 

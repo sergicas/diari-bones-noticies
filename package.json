@@ -55,12 +55,12 @@
     "globals": "^17.4.0",
     "vite": "^8.0.4",
     "vitest": "^4.1.8",
-    "wrangler": "^4.125.0"
+    "wrangler": "^4.131.2"
   },
   "overrides": {
     "@capacitor/assets": {
       "@capacitor/cli": "$@capacitor/cli",
-      "sharp": "0.35.3"
+      "sharp": "0.35.4"
     },
     "xcode": {
       "uuid": "11.1.1"
