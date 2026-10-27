@@ -44,7 +44,7 @@ export const DUBTE = 'dubte'
 // Versió del criteri. Es desa amb cada veredicte d'ombra perquè, quan es
 // comparin amb les decisions humanes, se sàpiga quin ajudant les va emetre.
 // Puja-la sempre que canviï el prompt o les llistes.
-export const SHADOW_VERSION = 'ajudant-2026-08-17.1'
+export const SHADOW_VERSION = 'ajudant-2026-09-15.1'
 
 // QUÈ ES POT AUTOMATITZAR: llista POSITIVA, no de prohibicions.
 //
@@ -246,6 +246,10 @@ const SISTEMA = [
   'projectes que comencen, moviments d’empreses, finançament i tendències de',
   'mercat. Si en llegir el titular el lector només sap què pensa fer algú, és',
   'descartar.',
+  'En Filosofia i Literatura, també és una idea publicable una lectura, una',
+  'interpretació, un argument, un assaig, una entrevista, un poema, una obra o',
+  'una selecció editorial concreta amb context propi. No cal que sigui una',
+  'troballa quantitativa ni l’anunci d’un succés.',
   '2. Ha de pertànyer clarament a un dels vuit àmbits.',
   '3. Ha d’estar ben escrita en català, amb la font atribuïda i sense',
   'apropiar-se del treball de camp d’un altre mitjà.',
@@ -298,12 +302,7 @@ function llegeixVeredicte(text) {
   }
 }
 
-/**
- * El veredicte per a una peça. Les guàrdies manen sobre l'IA.
- */
-export async function revisaCandidata(env, story, { exemples = [], abast = 'guarded' } = {}) {
-  // SENSE FONT NO ES DECIDEIX. Que no hi hagi material amb què comparar no és
-  // un permís: és precisament el cas en què no es pot comprovar res.
+function resolGuardies(story, { abast = 'guarded' } = {}) {
   if (!materialDeFont(story)) {
     return {
       veredicte: DUBTE,
@@ -319,8 +318,6 @@ export async function revisaCandidata(env, story, { exemples = [], abast = 'guar
       guardia: 'fets',
     }
   }
-  // Va DESPRÉS de la guàrdia de fets i ABANS de qualsevol criteri editorial:
-  // canviar el nom d'una malaltia no és una qüestió de gust editorial.
   const clinics = termesClinicsSenseSuport(story)
   if (clinics.length > 0) {
     return {
@@ -333,6 +330,93 @@ export async function revisaCandidata(env, story, { exemples = [], abast = 'guar
   if (!permes.pot) {
     return { veredicte: DUBTE, motiu: permes.motiu, guardia: 'sensible' }
   }
+  return null
+}
+
+function llegeixLotDeVeredictes(text, count) {
+  const perIndex = new Map()
+  for (const line of String(text || '').split('\n')) {
+    const match = /^\s*(\d+)\s*[.)·|:-]*\s*VEREDICTE\s*:\s*(publicar|descartar|dubte)\s*(?:[·|;-]\s*)?MOTIU\s*:\s*(.+)$/i.exec(
+      line.trim(),
+    )
+    if (!match) continue
+    perIndex.set(Number(match[1]) - 1, {
+      veredicte: match[2].toLowerCase(),
+      motiu: match[3].trim().slice(0, 200) || 'sense motiu',
+    })
+  }
+  // Compatibilitat amb una sola peça i amb els dobles de prova antics.
+  if (count === 1 && perIndex.size === 0) perIndex.set(0, llegeixVeredicte(text))
+  return Array.from({ length: count }, (_, index) =>
+    perIndex.get(index) || {
+      veredicte: DUBTE,
+      motiu: 'no s’ha entès el veredicte del lot',
+    },
+  )
+}
+
+/**
+ * Revisa un lot amb UNA sola crida de model. Les guàrdies continuen aplicant-se
+ * peça per peça abans de la crida; només s'agrupa el criteri editorial. Això
+ * permet que la passada sencera càpiga dins les 50 subpeticions del pla gratis.
+ */
+export async function revisaCandidates(
+  env,
+  stories = [],
+  { exemples = [], abast = 'guarded' } = {},
+) {
+  const results = Array(stories.length).fill(null)
+  const perRevisar = []
+  stories.forEach((story, index) => {
+    const guardia = resolGuardies(story, { abast })
+    if (guardia) results[index] = guardia
+    else perRevisar.push({ story, index })
+  })
+  if (perRevisar.length === 0) return results
+
+  try {
+    const out = await runTextModel(env, {
+      system: `${SISTEMA}${exemplesComText(exemples)} Respon una línia per peça, en el mateix ordre, amb: N · VEREDICTE: publicar|descartar|dubte · MOTIU: <frase curta en català>.`,
+      user: perRevisar
+        .map(
+          ({ story }, index) =>
+            `PEÇA ${index + 1}\n${retallaPerAlPrompt(story)}`,
+        )
+        .join('\n\n'),
+      maxTokens: Math.max(240, perRevisar.length * 120),
+    })
+    const parsed = llegeixLotDeVeredictes(out?.response, perRevisar.length)
+    perRevisar.forEach(({ index }, batchIndex) => {
+      results[index] = {
+        ...parsed[batchIndex],
+        guardia: null,
+        model: out?.provider ? `${out.provider}:${out.model}` : null,
+      }
+    })
+  } catch (error) {
+    console.warn(
+      JSON.stringify({
+        event: 'assistant.batch.failed',
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    )
+    perRevisar.forEach(({ index }) => {
+      results[index] = {
+        veredicte: DUBTE,
+        motiu: 'l’ajudant no ha pogut revisar el lot',
+        guardia: null,
+      }
+    })
+  }
+  return results
+}
+
+/**
+ * El veredicte per a una peça. Les guàrdies manen sobre l'IA.
+ */
+export async function revisaCandidata(env, story, { exemples = [], abast = 'guarded' } = {}) {
+  const guardia = resolGuardies(story, { abast })
+  if (guardia) return guardia
   try {
     const out = await runTextModel(env, {
       system: SISTEMA + exemplesComText(exemples),

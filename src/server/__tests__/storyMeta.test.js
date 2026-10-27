@@ -45,6 +45,7 @@ describe('renderStoryPage', () => {
     const id = feedStoryId('https://exemple.cat/peca-real')
     const res = await renderStoryPage(req(`/noticia/${id}`), makeEnv({ latest }))
     expect(res.status).toBe(200)
+    expect(res.headers.get('cache-control')).toBe('no-cache, must-revalidate')
     const html = await res.text()
     expect(html).toContain('Una notícia real')
     expect(html).not.toContain('noindex')
@@ -53,6 +54,7 @@ describe('renderStoryPage', () => {
   it('respon amb un 404 real (no la portada disfressada) quan l’id no existeix', async () => {
     const res = await renderStoryPage(req('/noticia/feed-inexistent'), makeEnv())
     expect(res.status).toBe(404)
+    expect(res.headers.get('cache-control')).toBe('no-cache, must-revalidate')
     const html = await res.text()
     expect(html).toContain('Aquesta pàgina no existeix dins del diari.')
     expect(html).toContain('noindex')

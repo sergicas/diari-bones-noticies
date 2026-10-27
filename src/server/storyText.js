@@ -19,6 +19,7 @@ import { runTextModel } from './ai/textModel.js'
 import {
   evaluateEditorialQuality,
   hasTruncatedEnding,
+  isPublishableStory,
   isUsableRewrite,
 } from './editorialQuality.js'
 
@@ -485,11 +486,12 @@ export async function applyOwnContent(stories, env) {
         : null
     const own =
       existingOwn &&
-      isUsableRewrite({
+      isPublishableStory({
         ...s,
         title: existingOwn.title,
         body: [existingOwn.body],
         impact: existingOwn.impact,
+        ownContent: true,
       })
         ? existingOwn
         : null
@@ -521,11 +523,16 @@ export async function applyOwnContent(stories, env) {
             outputLanguage,
           ),
         }
-        e.own = isUsableRewrite({
+        // Una redacció curta es conserva durant la passada que l'ha generada
+        // perquè una sola porta en decideixi la publicació. En una passada
+        // posterior, però, no pot quedar immortalitzada al cau: si encara no
+        // supera el llistó complet, s'ignora i es torna a redactar.
+        e.own = isPublishableStory({
           ...e.story,
           title: candidate?.title,
           body: candidate?.body ? [candidate.body] : [],
           impact: candidate?.impact,
+          ownContent: true,
         })
           ? candidate
           : null

@@ -1,4 +1,8 @@
-import { revisaCandidata, SHADOW_VERSION } from './editorAssistant.js'
+import {
+  revisaCandidata,
+  revisaCandidates,
+  SHADOW_VERSION,
+} from './editorAssistant.js'
 import {
   candidateId,
   humanDecisionExamples,
@@ -92,9 +96,25 @@ export async function passadaDeLAjudant(env, candidates = []) {
   try {
     const exemples = await humanDecisionExamples(env)
     const abast = resolAbast(env)
+    const sostre = resolSostre(env)
+    // Al pla gratuït, la passada sencera comparteix un màxim de 50
+    // subpeticions amb les 38 fonts. Revisar totes les candidates abans
+    // d'aplicar el sostre consumia el marge i només la primera rebia veredicte.
+    // Les sobrants queden intactes i tornen a la passada següent.
+    const candidatesDAquestaPassada = candidates.slice(0, sostre)
+    const revisionsEnLot =
+      mode === 'auto'
+        ? await revisaCandidates(env, candidatesDAquestaPassada, { exemples, abast })
+        : null
     const tots = []
-    for (const story of candidates) {
-      const r = await revisaCandidata(env, story, { exemples, abast })
+    for (let index = 0; index < candidatesDAquestaPassada.length; index += 1) {
+      const story = candidatesDAquestaPassada[index]
+      // En mode ombra es conserva el veredicte individual: és el que permet
+      // auditar canvis de proveïdor peça per peça. Producció automàtica usa un
+      // sol lot per no superar el límit gratuït de Cloudflare.
+      const r =
+        revisionsEnLot?.[index] ||
+        (await revisaCandidata(env, story, { exemples, abast }))
       const decision =
         r.veredicte === 'publicar' ? 'approve' : r.veredicte === 'descartar' ? 'reject' : 'doubt'
       tots.push({
@@ -135,17 +155,17 @@ export async function passadaDeLAjudant(env, candidates = []) {
     // SOSTRE. Les que sobren NO es descarten ni es marquen de cap manera: es
     // queden tal com estaven i es tornaran a mirar a la passada següent. Un
     // límit que descartés convertiria un tallafoc en una censura silenciosa.
-    const sostre = resolSostre(env)
     const aprovacions = tots.filter((v) => v.decision === 'approve')
     const ajornades = aprovacions.slice(sostre)
-    if (ajornades.length > 0) {
+    const senseRevisar = Math.max(0, candidates.length - candidatesDAquestaPassada.length)
+    if (ajornades.length > 0 || senseRevisar > 0) {
       // Mai un límit en silenci: ha de constar què s'ha deixat per després.
       console.log(
         JSON.stringify({
           event: 'assistant.capped',
           sostre,
-          publicades: sostre,
-          ajornades: ajornades.length,
+          publicades: Math.min(sostre, aprovacions.length),
+          ajornades: ajornades.length + senseRevisar,
         }),
       )
     }
@@ -158,14 +178,20 @@ export async function passadaDeLAjudant(env, candidates = []) {
     const aprovades = decidides
       .filter((v) => v.decision === 'approve' && acceptades.has(v.id))
       .map((v) => v.story)
-    console.log(
-      JSON.stringify({
-        event: 'assistant.decided',
-        aprovades: outcome.approved,
-        descartades: outcome.rejected,
-        enDubte: tots.filter((v) => v.decision === 'doubt').length,
-      }),
-    )
+      console.log(
+        JSON.stringify({
+          event: 'assistant.decided',
+          aprovades: outcome.approved,
+          descartades: outcome.rejected,
+          enDubte: tots.filter((v) => v.decision === 'doubt').length,
+          resultats: tots.map((v) => ({
+            id: v.id,
+            tema: v.story?.topic || null,
+            decisio: v.decision,
+            motiu: v.reason,
+          })),
+        }),
+      )
     return { mode, aprovades }
   } catch (error) {
     // Si l'ajudant falla, no passa res greu: les peces es queden esperant una

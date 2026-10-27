@@ -247,7 +247,7 @@ async function renderStoryNotFound(request, url, env) {
     status: 404,
     headers: {
       'content-type': 'text/html; charset=utf-8',
-      'cache-control': 'public, max-age=300, stale-while-revalidate=3600',
+      'cache-control': 'no-cache, must-revalidate',
     },
   })
 }
@@ -297,7 +297,9 @@ export async function renderStoryPage(request, env) {
     status: 200,
     headers: {
       'content-type': 'text/html; charset=utf-8',
-      'cache-control': 'public, max-age=300, stale-while-revalidate=3600',
+      // Els documents HTML han de revalidar-se a cada navegació: contenen el
+      // nom del bundle amb hash i no poden sobreviure a un desplegament nou.
+      'cache-control': 'no-cache, must-revalidate',
     },
   })
 }

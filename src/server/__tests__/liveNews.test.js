@@ -21,6 +21,7 @@ import {
   storiesRequiringDetailPersistence,
   getLiveNewsPayload,
   balancePublicationMix,
+  composeReviewPool,
   prioritizeTopicCoverage,
   enforcePublicationInvariants,
   keepsEditorialClearance,
@@ -122,7 +123,7 @@ describe('quota KV — escriptures acotades', () => {
 })
 
 describe('edició diària — cap candidata processada no bloqueja les noves', () => {
-  it('exclou abans del tall tot el que ja consta a D1', () => {
+  it('exclou les decisions finals però recupera les candidates pendents', () => {
     const stories = [
       { id: 'rebutjada', url: 'https://example.com/rebutjada' },
       { id: 'pendent', url: 'https://example.com/pendent' },
@@ -136,6 +137,7 @@ describe('edició diària — cap candidata processada no bloqueja les noves', (
     ])
 
     expect(excludePreviouslyProcessedStories(stories, decisions)).toEqual([
+      stories[1],
       stories[3],
     ])
   })
@@ -246,6 +248,34 @@ describe('resultats d’empresa — comptes, no bones notícies', () => {
 
     expect(story.title).toBe('La Fageda estima el valor social que genera')
     expect(story.title).not.toContain('￼')
+  })
+})
+
+describe('fonts editorials sense miniatura', () => {
+  it('genera una il·lustració pròpia en lloc de descartar la peça', () => {
+    const story = normalizeFeedItem(
+      `
+        <title>How Different Are Philosophers?</title>
+        <link>https://dailynous.com/how-different</link>
+        <description>New research examines how philosophers approach thought experiments.</description>
+        <pubDate>Thu, 10 Sep 2026 13:39:43 +0000</pubDate>
+      `,
+      {
+        name: 'Daily Nous',
+        language: 'en',
+        outputLanguage: 'ca',
+        defaultCategory: 'Cultura',
+        circuit: 'B',
+        sourceTopic: 'Filosofia',
+      },
+    )
+
+    expect(story).toMatchObject({
+      source: 'Daily Nous',
+      sourceTopic: 'Filosofia',
+      imageCredit: 'El Bon Diari (il·lustració IA)',
+    })
+    expect(story.imageUrl).toMatch(/^\/api\/story-image\//)
   })
 })
 
@@ -442,12 +472,14 @@ describe('línia temàtica — només els vuit àmbits autoritzats', () => {
     expect(
       assignEditorialTopic({
         category: 'Cultura',
+        sourceTopic: 'Filosofia',
         title: 'La sorpresa ordinària, una idea de la filosofia contemporània',
       }),
     ).toBe('Filosofia')
     expect(
       assignEditorialTopic({
         category: 'Cultura',
+        sourceTopic: 'Literatura',
         title: 'Un llibre recupera les mecanògrafes invisibles de la història editorial',
       }),
     ).toBe('Literatura')
@@ -493,6 +525,27 @@ describe('línia temàtica — només els vuit àmbits autoritzats', () => {
     expect(assignEditorialTopic({
       circuit: 'B', source: 'Public Domain Review', category: 'Cultura', title: 'Ars Notoria',
     })).toBe('Literatura')
+    expect(assignEditorialTopic({
+      circuit: 'B', source: 'The Marginalian', category: 'Cultura', title: 'A life of ideas',
+    })).toBe('Filosofia')
+    expect(assignEditorialTopic({
+      circuit: 'B', source: 'Electric Literature', category: 'Cultura', title: 'A new voice',
+    })).toBe('Literatura')
+  })
+
+  it('no confon cultura general amb Filosofia o Literatura', () => {
+    expect(assignEditorialTopic({
+      circuit: 'B',
+      source: 'Guardian Culture',
+      category: 'Cultura',
+      title: 'Beck closes a trilogy of breakup songs with a thoughtful album',
+    })).toBeNull()
+    expect(assignEditorialTopic({
+      circuit: 'B',
+      source: 'Smithsonian',
+      category: 'Cultura',
+      title: 'A museum opens a room for reflection and indigenous thought',
+    })).toBeNull()
   })
 
   it('fixa els desempats: longevitat preval sobre biotecnologia', () => {
@@ -808,9 +861,9 @@ describe('equilibri dels vuit temes editorials', () => {
     const prioritized = prioritizeTopicCoverage(input)
 
     expect(prioritized.slice(0, 3).map((item) => item.topic)).toEqual([
-      'Ciència',
       'Filosofia',
       'Literatura',
+      'Ciència',
     ])
     expect(prioritized).toHaveLength(input.length)
     expect(new Set(prioritized.map((item) => item.url)).size).toBe(input.length)
@@ -829,6 +882,25 @@ describe('equilibri dels vuit temes editorials', () => {
     expect(balanced.some((item) => item.topic === 'Literatura')).toBe(true)
     expect(balanced.filter((item) => item.topic === 'Ciència')).toHaveLength(3)
     expect(balanced.filter((item) => item.category === 'Cultura')).toHaveLength(3)
+  })
+
+  it('combina arrossegament aprovat i candidates noves sense congelar el lot', () => {
+    const carryover = Array.from({ length: 12 }, (_, index) =>
+      story(index % 2 ? 'Literatura' : 'Filosofia', `old-${index}`),
+    )
+    const fresh = Array.from({ length: 12 }, (_, index) =>
+      story('Ciència', `new-${index}`),
+    )
+
+    const combined = composeReviewPool(fresh, carryover, 12)
+
+    expect(combined).toHaveLength(6)
+    expect(combined.some((item) => item.url.includes('/old-'))).toBe(true)
+    expect(combined.some((item) => item.url.includes('/new-'))).toBe(true)
+    expect(combined.slice(0, 2).map((item) => item.topic)).toEqual([
+      'Filosofia',
+      'Literatura',
+    ])
   })
 })
 
@@ -1288,6 +1360,37 @@ describe('applyDiversityCap — sostre per font', () => {
     expect(balancePublicationMix(rawCandidates)).toEqual(rawCandidates)
     // La porta final continua fallant tancada mentre encara no hi ha cos propi.
     expect(enforcePublicationInvariants(rawCandidates)).toEqual([])
+  })
+
+  it('reserva lloc per a Filosofia i Literatura quan hi ha candidates', () => {
+    const candidates = [
+      ...Array.from({ length: 5 }, (_, index) => ({
+        url: `https://example.com/filosofia-${index}`,
+        source: `Filosofia ${index}`,
+        category: 'Cultura',
+        topic: 'Filosofia',
+        language: 'en',
+      })),
+      {
+        url: 'https://example.com/literatura',
+        source: 'Literatura',
+        category: 'Cultura',
+        topic: 'Literatura',
+        language: 'en',
+      },
+      {
+        url: 'https://example.com/ciencia',
+        source: 'Ciència',
+        category: 'Ciència',
+        topic: 'Ciència',
+        language: 'en',
+      },
+    ]
+
+    const result = balancePublicationMix(candidates, 4)
+
+    expect(result.some((story) => story.topic === 'Filosofia')).toBe(true)
+    expect(result.some((story) => story.topic === 'Literatura')).toBe(true)
   })
 })
 
